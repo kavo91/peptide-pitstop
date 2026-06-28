@@ -156,7 +156,48 @@ npm run typecheck
 
 ## 🐳 Deploy (self-hosted)
 
-Two compose variants ship in this repo:
+### Easiest — prebuilt image (recommended, no building)
+
+You only need **Docker**: install [Docker Desktop](https://www.docker.com/products/docker-desktop/) on Mac/Windows (a normal point-and-click installer) or Docker Engine on Linux. Then:
+
+1. **Make a folder** for the app (e.g. `peptide-pitstop`) and open a terminal in it.
+2. **Generate the two required secrets** — run each command and copy the output:
+   ```bash
+   # macOS / Linux / Git Bash — run twice
+   openssl rand -base64 32
+   ```
+   ```powershell
+   # Windows PowerShell — run twice
+   $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
+   ```
+3. **Create a file named `docker-compose.yml`** in that folder, pasting your two secrets in:
+   ```yaml
+   services:
+     app:
+       image: ghcr.io/kavo91/peptide-pitstop:latest
+       container_name: peptide-pitstop
+       restart: unless-stopped
+       ports:
+         - "3000:3000"
+       volumes:
+         - ./data:/data        # your database lives here — back this folder up
+       environment:
+         - PT_FIELD_KEY=paste-your-first-secret-here
+         - AUTH_SECRET=paste-your-second-secret-here
+   ```
+4. **Start it:**
+   ```bash
+   docker compose up -d
+   ```
+5. **Open [http://localhost:3000](http://localhost:3000)** — the first visit runs a `/setup` wizard (set a password + scan a QR code into an authenticator app).
+
+Update later with `docker compose pull && docker compose up -d`. ⚠️ Keep `PT_FIELD_KEY` safe — if you lose it, encrypted fields can't be recovered.
+
+> Want it reachable from your phone outside home? Add the optional Cloudflare Tunnel (see [Cloudflare Tunnel + Access](#cloudflare-tunnel--access) below) instead of forwarding ports.
+
+### Build from source
+
+Prefer to build it yourself? Two compose variants ship in this repo:
 
 **1. Simple** (the default `docker-compose.yml`) — just the Next.js app:
 
