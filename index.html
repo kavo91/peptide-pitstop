@@ -8,6 +8,10 @@
 <meta property="og:title" content="Peptide Pitstop" />
 <meta property="og:description" content="Self-hosted peptide therapy tracking — your data, your server." />
 <meta property="og:type" content="website" />
+<meta property="og:image" content="https://peptidepitstop.com/public/icons/icon-pitstop-512.png" />
+<link rel="icon" type="image/svg+xml" href="public/icons/icon-pitstop.svg" />
+<link rel="icon" type="image/png" sizes="192x192" href="public/icons/icon-pitstop-192.png" />
+<link rel="apple-touch-icon" href="public/icons/apple-touch-icon-pitstop.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Teko:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -35,8 +39,7 @@
     background:rgba(18,18,17,.72); border-bottom:1px solid var(--line)}
   .nav .wrap{display:flex; align-items:center; gap:14px; height:60px}
   .logo{display:flex; align-items:center; gap:10px; font-family:Teko; font-size:26px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; color:var(--ink)}
-  .logo .dot{width:26px;height:26px;border-radius:50%;background:conic-gradient(from 220deg,var(--accent),#b8390c);display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
-  .logo .dot::after{content:"";width:9px;height:9px;border-radius:50%;background:var(--bg)}
+  .logo .mark{width:28px;height:28px;border-radius:7px;flex:0 0 auto;display:block}
   .nav .spacer{flex:1}
   .nav a.navlink{color:var(--muted); font-size:14px; font-weight:500}
   .nav a.navlink:hover{color:var(--ink); text-decoration:none}
@@ -90,7 +93,7 @@
 <body>
 
 <header class="nav"><div class="wrap">
-  <span class="logo"><span class="dot"></span>Peptide&nbsp;Pitstop</span>
+  <span class="logo"><img class="mark" src="public/icons/icon-pitstop.svg" alt="Peptide Pitstop logo" width="28" height="28" />Peptide&nbsp;Pitstop</span>
   <span class="spacer"></span>
   <a class="navlink" href="#features">Features</a>
   <a class="navlink" href="#screens">Screens</a>
