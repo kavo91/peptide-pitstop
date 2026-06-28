@@ -12,7 +12,7 @@
 
 > **Your data never leaves your server.** Handing your weight, hormone, and dosing history to someone else's startup is a leap of faith — Peptide Pitstop removes the leap. No accounts in someone else's cloud. No telemetry. No third party between you and your health record. You host it, you back it up, you export it, you delete it — on your terms.
 
-Peptide Pitstop is a private, phone-first web app for managing peptide and GLP-1 therapy — reconstitution math, dose logging, prescriptions, bloodwork, and plasma-level modelling — installable as an offline PWA and living entirely on infrastructure you own. The dosing engine, the highest-stakes part, is exhaustively tested (600+ tests, pure decimal math, no floating-point drift).
+Peptide Pitstop is a private, self-hosted web app for managing peptide and GLP-1 therapy — reconstitution math, dose logging, prescriptions, bloodwork, and plasma-level modelling — installable as an offline PWA on your phone and living entirely on infrastructure you own. The dosing engine, the highest-stakes part, is exhaustively tested (600+ tests, pure decimal math, no floating-point drift).
 
 > ℹ️ Single-user today, with the data model already scoped for multi-user.
 
@@ -70,7 +70,7 @@ If you stop using Peptide Pitstop tomorrow, you walk away with a complete, reada
 
 ### Light theme & mobile
 
-The motorsport "pit-wall" dark theme ships alongside a clean light theme, and the whole app is phone-first.
+The motorsport "pit-wall" dark theme ships alongside a clean light theme, and the whole app is self-hosted on your hardware — and on your phone.
 
 | Light theme (Gulf) | On your phone |
 | --- | --- |
@@ -84,7 +84,7 @@ The motorsport "pit-wall" dark theme ships alongside a clean light theme, and th
 ### Dosing — the safety-critical core
 - **Reconstitution engine.** Concentration, draw volume, and syringe markings computed with `decimal.js` — pure decimal maths, no floating-point drift. Handles reconstituted *and* premixed vials.
 - **Exhaustively tested.** The dosing and schedule logic is covered by a large vitest suite (600+ tests across the codebase) including property tests, real-world cases, unit-equivalence checks, and syringe-bound guardrails.
-- **Phone-first logging.** Log a dose in seconds with a visual syringe picker and injection-site body map. Supports injections, oral peptides, and ad-hoc doses.
+- **Quick logging.** Log a dose in seconds — on your phone — with a visual syringe picker and injection-site body map. Supports injections, oral peptides, and ad-hoc doses.
 
 ### Protocols, prescriptions & inventory
 - **Protocols with titration & stacks.** Multi-peptide schedules, ramping/titration steps, and stacked protocols with human-readable cadence and half-life shown inline.
@@ -96,7 +96,7 @@ The motorsport "pit-wall" dark theme ships alongside a clean light theme, and th
 - **Doses timeline.** Week swimlanes, a month calendar, and day detail — with schedule rebasing (log off-schedule and snap the rest of the week back into line).
 - **Bloodwork.** Biomarker panels with trends and a comparison matrix, backed by a curated biomarker library.
 - **Analytics & insights.** Adherence tracking, streaks, heatmaps, and derived insights.
-- **Plasma modelling.** Single-compartment, first-order-elimination plasma-level projections from your dose history and each peptide's half-life (relative units — clearly labelled, not clinical serum levels).
+- **Plasma modelling.** Single-compartment, first-order-elimination plasma-level projections — quiet telemetry for your own regimen — from your dose history and each peptide's half-life (relative units — clearly labelled, not clinical serum levels).
 - **Journal & wellness.** Free-text journal plus wellness logging, charted over time.
 
 ### Integrations
