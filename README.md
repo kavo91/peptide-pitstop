@@ -221,7 +221,7 @@ Peptide Pitstop is an actively developed, single-owner self-hosted project. Issu
 
 ## ☕ Support
 
-Peptide Pitstop is built and maintained by one person, for people who'd rather keep their health data on their own hardware than hand it to someone else's cloud (Yes, slightly hypocritical with the garmin pull). It's free, open source, and always will be.
+Peptide Pitstop is built and maintained by one person, for people who'd rather keep their health data on their own hardware than hand it to someone else's cloud (Yes, slightly hypocritical with the garmin pull).
 
 If it's saved you from a spreadsheet — or from a subscription that wanted your bloodwork — a coffee goes a long way toward keeping an indie, self-hosted health tool alive and improving.
 
