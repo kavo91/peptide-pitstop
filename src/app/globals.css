@@ -1,0 +1,547 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens — neon-futuristic palette.
+ *
+ * Cascade order (highest specificity wins):
+ *   1. [data-theme="dark"]  — explicit dark
+ *   2. [data-theme="light"] — NOT NEEDED: :root default IS light; no block required
+ *   3. @media (prefers-color-scheme: dark) scoped to [data-theme="system"] — OS dark
+ *   4. :root — light fallback (also the explicit light baseline)
+ *
+ * The inline script in layout.tsx stamps data-theme before first paint
+ * (default "dark"), so there is no flash.
+ */
+
+/* Light (default / explicit "light") */
+:root {
+  --bg:            238 243 245;   /* #EEF3F5 */
+  --surface:       255 255 255;
+  --ink:           14 26 32;      /* #0E1A20 */
+  --muted:         90 107 114;
+  --accent:        15 181 160;    /* #0FB5A0 — fills/buttons only */
+  --accent-2:      14 158 140;    /* #0E9E8C — secondary cyan fills only */
+  --accent-2-strong: 10 110 122;  /* #0A6E7A — secondary-cyan TEXT, >=4.5:1 on white */
+  --accent-strong: 10 122 110;    /* #0A7A6E — text/links/icons, >=4.5:1 on white */
+  --on-accent:     4 34 30;       /* #04221E — text ON accent fills */
+  --line:          14 26 32;      /* hairline border at low alpha (~0.10) */
+  --ok:            10 122 90;     /* #0A7A5E — >=4.5:1 on white */
+  --warn:          154 90 6;
+  --danger:        200 40 40;
+  --env:           217 119 6;     /* #D97706 amber — DEV/env badge (distinct from --warn) */
+  --font-mono:     ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+}
+
+/* Explicit dark */
+:root[data-theme="dark"] {
+  --bg:            11 15 20;      /* #0B0F14 near-black canvas */
+  --surface:       22 33 43;      /* #16212B */
+  --ink:           224 242 245;
+  --muted:         138 153 162;
+  --accent:        45 226 200;    /* #2DE2C8 neon teal — fills only */
+  --accent-2:      34 211 238;    /* #22D3EE secondary cyan */
+  --accent-2-strong: 34 211 238;  /* = accent-2 in dark (canvas dark enough for text) */
+  --accent-strong: 45 226 200;    /* same as accent in dark (canvas is dark enough) */
+  --on-accent:     11 15 20;      /* near-black text ON neon fill */
+  --line:          45 226 200;    /* neon teal hairline at low alpha (~0.14) */
+  --ok:            62 232 168;
+  --warn:          251 169 76;
+  --danger:        255 99 99;
+  --env:           251 169 76;    /* orange — DEV/env badge */
+}
+
+/* System dark (OS dark preference + data-theme="system") */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --bg:            11 15 20;
+    --surface:       22 33 43;
+    --ink:           224 242 245;
+    --muted:         138 153 162;
+    --accent:        45 226 200;
+    --accent-2:      34 211 238;
+    --accent-2-strong: 34 211 238;
+    --accent-strong: 45 226 200;
+    --on-accent:     11 15 20;
+    --line:          45 226 200;
+    --ok:            62 232 168;
+    --warn:          251 169 76;
+    --danger:        255 99 99;
+    --env:           251 169 76;    /* orange — DEV/env badge */
+  }
+}
+
+html, body {
+  background: rgb(var(--bg));
+  color: rgb(var(--ink));
+  font-variant-numeric: tabular-nums; /* dose digits align */
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Respect iOS safe areas for the installed PWA. */
+body {
+  padding:
+    env(safe-area-inset-top)
+    env(safe-area-inset-right)
+    env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+}
+
+/* ── Phone density (≤640px ONLY) ───────────────────────────────────────────
+   Tighten the vertical rhythm on phones so key screens fit without scrolling.
+   STRICTLY scoped to max-width:640px → tablets (≥640), laptops, desktop and the
+   ultra-wide layout are never matched and stay byte-identical. These plain
+   selectors sit after `@tailwind utilities`, so they override the utility
+   padding without !important; the `lg:` utilities (≥1024) are out of this query. */
+@media (max-width: 640px) {
+  /* !important is needed to beat Tailwind's higher-specificity utility classes
+     (.py-8 etc.); the @media query keeps this strictly phone-only regardless. */
+  main {
+    padding-top: 0.6rem !important;
+    padding-bottom: 0.6rem !important;
+  }
+  /* page title block: smaller heading + less gap to the content below it */
+  main > header,
+  main > div:has(> h1) {
+    margin-bottom: 0.55rem !important;
+  }
+  main h1 {
+    font-size: 1.55rem !important;
+    line-height: 1.9rem !important;
+  }
+  .rounded-card {
+    padding: 0.6rem !important;
+  }
+}
+
+/* Expand-on-tap cards (A3-3): on mobile the native <details> collapses the
+   body (UA CSS hides non-summary children when not [open]) so cards show only
+   their header. At ≥1024px (desktop) we force the body back open and hide the
+   "Details" toggle so the layout stays byte-identical to before. Design-agnostic
+   structural rule — no pitstop styling. */
+@media (min-width: 1024px) {
+  details[data-expand-mobile] > summary { display: none; }
+  details[data-expand-mobile] > :not(summary) { display: block; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PEPTIDE PITSTOP — runtime design pack ("Pit Wall + Apex")
+   ────────────────────────────────────────────────────────────────────────────
+   Activated when DESIGN=pitstop → layout.tsx stamps data-design="pitstop" on
+   <html>. EVERY rule below is scoped under that attribute, so when DESIGN is
+   unset (data-design="current") nothing here matches and the neon-teal default
+   is byte-identical. The base token blocks above are NOT modified.
+
+   Tokens are space-separated RGB triples consumed as rgb(var(--token)/<alpha>).
+   This block is appended last, so for equal specificity (e.g. it ties with
+   :root[data-theme="dark"] at 0,2,0) source order makes pitstop win regardless
+   of the active theme. ═══════════════════════════════════════════════════════ */
+:root[data-design="pitstop"] {
+  --bg:              14 15 18;    /* #0E0F12 carbon HUD base */
+  --surface:         22 24 28;    /* #16181C panel */
+  --ink:            237 239 242;  /* #EDEFF2 */
+  --muted:          138 146 155; /* #8A929B — 5.64:1 on --surface #16181C, clears WCAG AA (UI review C1) */
+  --accent:         255 91 20;    /* #FF5B14 race-orange — primary fills/CTA */
+  --accent-2:         0 229 255;  /* #00E5FF cyan — secondary data series */
+  --accent-strong:  255 91 20;    /* race-orange — active text/icons */
+  --accent-2-strong:  0 229 255;
+  --on-accent:       14 15 18;    /* carbon text ON orange fills */
+  --line:           237 239 242;  /* hairline (used at low alpha) */
+  --ok:              46 209 106;  /* #2ED16A in-range / improving */
+  --warn:           232 255 58;   /* #E8FF3A hi-viz */
+  --danger:         255 77 77;    /* #FF4D4D redline */
+  --gauge-slip:     255 91 20;    /* #FF5B14 race-orange — gauge "slipping" mid grade; dark keeps the original (vs hi-viz --warn) */
+  --env:            232 255 58;   /* #E8FF3A hi-viz yellow — DEV/env badge */
+  --radius-card:    10px;
+  --radius-control: 6px;
+  /* Mapped to the self-hosted next/font faces (variables set on <html> in
+     layout.tsx). No runtime Google Fonts request. */
+  --font-sans:    var(--ff-inter), 'Inter';
+  --font-display: var(--ff-teko), 'Teko';
+  --font-mono:    var(--ff-plex-mono), 'IBM Plex Mono';
+  --font-label:   var(--ff-rajdhani), 'Rajdhani';
+}
+
+/* ── Pitstop LIGHT ("Gulf racing livery") token overrides ───────────────────
+   A light variant of the pitstop design: Gulf-blue + orange on a near-white
+   paper. Token-only overrides; fonts + radii carried over IDENTICAL to the
+   dark-carbon block above so the typography/geometry is unchanged. Specificity
+   0,3,0 (data-design + data-theme + nothing) beats the 0,2,0 dark block, and
+   later source order wins ties. The neon base and dark pitstop block are
+   untouched. */
+:root[data-design="pitstop"][data-theme="light"] {
+  --bg:              245 248 250;  /* #F5F8FA paper */
+  --surface:         255 255 255;  /* #FFFFFF panel */
+  --ink:              20 39 51;    /* #142733 Gulf ink */
+  --muted:            86 107 120;  /* #566B78 */
+  --accent:           74 107 148;  /* #4A6B94 Gulf blue — primary fills/CTA */
+  --accent-2:        245 130 32;   /* #F58220 orange — secondary data series */
+  --accent-strong:    27 94 122;   /* #1B5E7A — active text/icons */
+  --accent-2-strong: 176 83 26;    /* #B0531A */
+  --on-accent:       255 255 255;  /* white text ON blue fills */
+  --line:             20 39 51;    /* hairline (used at low alpha) */
+  --ok:               18 124 58;   /* #127C3A in-range / improving */
+  --warn:            180 83 9;     /* #B45309 */
+  --danger:          200 50 63;    /* #C8323F redline */
+  --gauge-slip:      176 83 26;    /* #B0531A — AA amber on white (5.12:1); LIGHT counterpart of the dark race-orange */
+  --env:             245 130 32;   /* #F58220 Gulf orange — DEV/env badge */
+  --radius-card:    10px;
+  --radius-control: 6px;
+  --font-sans:    var(--ff-inter), 'Inter';
+  --font-display: var(--ff-teko), 'Teko';
+  --font-mono:    var(--ff-plex-mono), 'IBM Plex Mono';
+  --font-label:   var(--ff-rajdhani), 'Rajdhani';
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-design="pitstop"][data-theme="system"] {
+    --bg:              245 248 250;
+    --surface:         255 255 255;
+    --ink:              20 39 51;
+    --muted:            86 107 120;
+    --accent:           74 107 148;
+    --accent-2:        245 130 32;
+    --accent-strong:    27 94 122;
+    --accent-2-strong: 176 83 26;
+    --on-accent:       255 255 255;
+    --line:             20 39 51;
+    --ok:               18 124 58;
+    --warn:            180 83 9;
+    --danger:          200 50 63;
+    --gauge-slip:      176 83 26;    /* #B0531A — AA amber on white */
+    --env:             245 130 32;   /* #F58220 Gulf orange — DEV/env badge */
+    --radius-card:    10px;
+    --radius-control: 6px;
+    --font-sans:    var(--ff-inter), 'Inter';
+    --font-display: var(--ff-teko), 'Teko';
+    --font-mono:    var(--ff-plex-mono), 'IBM Plex Mono';
+    --font-label:   var(--ff-rajdhani), 'Rajdhani';
+  }
+}
+
+/* Body sets the Inter base; everything inherits unless it opts into another face. */
+[data-design="pitstop"] body {
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Headings → Teko condensed. Tight leading suits the tall/condensed face. */
+[data-design="pitstop"] h1,
+[data-design="pitstop"] h2,
+[data-design="pitstop"] h3 {
+  font-family: var(--font-display), sans-serif;
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+}
+/* Teko reads ~15% shorter than the sans at the same px, so bump the heading
+   sizes the app actually uses. Done per-utility (not a blanket font-size) so
+   the Tailwind type scale is preserved instead of flattened. */
+[data-design="pitstop"] :is(h1, h2, h3).text-3xl { font-size: 2.16rem; }
+[data-design="pitstop"] :is(h1, h2, h3).text-2xl { font-size: 1.72rem; }
+[data-design="pitstop"] :is(h1, h2, h3).text-xl  { font-size: 1.44rem; }
+[data-design="pitstop"] :is(h1, h2, h3).text-lg  { font-size: 1.30rem; }
+
+/* Telemetry numerals are the hero — tabular figures render in mono. */
+[data-design="pitstop"] .tabular-nums {
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+/* Nav labels + eyebrows take the condensed label face. */
+[data-design="pitstop"] nav,
+[data-design="pitstop"] .uppercase {
+  font-family: var(--font-label), var(--font-sans), sans-serif;
+}
+
+/* ── Logo swap ─────────────────────────────────────────────────────────────
+   Both marks/wordmarks are always in the DOM; show the pitstop pair. */
+[data-design="pitstop"] .logo-mark-current,
+[data-design="pitstop"] .logo-word-current { display: none; }
+[data-design="pitstop"] .logo-mark-pitstop { display: inline-block; }
+[data-design="pitstop"] .logo-word-pitstop {
+  display: inline;
+  font-family: var(--font-display), sans-serif;
+}
+
+/* ── Bottom-nav active indicator ───────────────────────────────────────────
+   Orange lean-slash under the active tab (Apex livery). The marker carries
+   Tailwind `hidden` by default; this un-hides + positions it. */
+[data-design="pitstop"] nav[data-bottom-nav] a { position: relative; }
+[data-design="pitstop"] .pitstop-nav-sector {
+  display: block;
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  width: 22px;
+  height: 3px;
+  margin-left: -11px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgb(var(--accent-strong)) 70%, rgb(var(--accent-2-strong)));
+  transform: skewX(-24deg);
+}
+
+/* ── Split page headings + ghost race numbers ──────────────────────────────
+   PitstopHeading emits this structure ONLY when DESIGN=pitstop; the current
+   design falls back to a plain <h1>, so these rules never match there. The h1
+   keeps its original utility classes (text-3xl etc.) so the Teko size bump and
+   page spacing still apply; the title text inherits the Teko face from the
+   h1/h2/h3 rule above. */
+[data-design="pitstop"] .pitstop-heading {
+  position: relative;
+  display: inline-block;
+}
+[data-design="pitstop"] .pitstop-heading__ghost {
+  position: absolute;
+  right: -2px;
+  top: -0.42em;
+  z-index: 0;
+  font-family: var(--font-display), sans-serif;
+  font-weight: 700;
+  font-size: 2.05em; /* relative to the (bumped) h1 size */
+  line-height: 0.66;
+  letter-spacing: -0.04em;
+  color: rgb(var(--ink) / 0.07);
+  pointer-events: none;
+}
+/* On phones the ghost numeral sat behind the mobile Back row (BackButton sits
+   above the heading); shrink it and pull it down so it clears that row while
+   staying visible. Pitstop-only; unchanged ≥641px. */
+@media (max-width: 640px) {
+  [data-design="pitstop"] .pitstop-heading__ghost {
+    font-size: 1.5em;
+    top: -0.18em;
+  }
+}
+[data-design="pitstop"] .pitstop-heading__title {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  text-transform: uppercase;
+}
+[data-design="pitstop"] .pitstop-heading__slash {
+  color: rgb(var(--accent-strong));
+}
+
+/* ── Timing-board dose dots (Schedule → Month) ─────────────────────────────
+   The dot COLOURS already come from the recoloured pitstop tokens (taken=green,
+   shifted=cyan, off-schedule=hi-viz, missed=redline, planned/due=race-orange
+   outline). This only adds a subtle LED glow on the carbon grid so the month
+   reads like a pit timing board. Scoped to `.pitstop-cal`, a hook class
+   DosesMonth adds to the grid for pitstop alone (current keeps the same DOM). */
+[data-design="pitstop"] .pitstop-cal .bg-ok        { box-shadow: 0 0 6px -1px rgb(var(--ok) / 0.75); }
+[data-design="pitstop"] .pitstop-cal .bg-accent2   { box-shadow: 0 0 6px -1px rgb(var(--accent-2) / 0.75); }
+[data-design="pitstop"] .pitstop-cal .bg-warn      { box-shadow: 0 0 6px -1px rgb(var(--warn) / 0.75); }
+[data-design="pitstop"] .pitstop-cal .bg-danger    { box-shadow: 0 0 6px -1px rgb(var(--danger) / 0.75); }
+[data-design="pitstop"] .pitstop-cal .border-accent { box-shadow: 0 0 7px -1px rgb(var(--accent) / 0.7); }
+
+/* ── Carbon / asphalt livery ───────────────────────────────────────────────
+   Faint carbon-weave + asphalt micro-texture + a diagonal race-orange wash on
+   the canvas. Alpha is tiny (<0.025) so legibility is untouched; attachment is
+   fixed so it doesn't scroll with content. Higher specificity than the base
+   `html, body` rule, so it layers the texture over the same --bg colour. */
+[data-design="pitstop"] body {
+  background-color: rgb(var(--bg));
+  background-image:
+    repeating-linear-gradient(106deg, transparent 0 30px, rgba(255, 91, 20, 0.018) 30px 31px),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.014) 0 2px, transparent 2px 8px),
+    radial-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    radial-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: auto, auto, 7px 7px, 11px 11px;
+  background-position: 0 0, 0 0, 0 0, 3px 5px;
+  background-attachment: fixed;
+}
+
+/* Carbon-weave fix for the LIGHT Gulf bg: the dark rule paints a WHITE speckle/
+   weave, which vanishes on the near-white paper. Swap those layers to a dark
+   Gulf-ink low-alpha tint so the texture still reads. Same selector + the
+   data-theme=light and system-light cases. The orange diagonal line layer is
+   kept (slightly raised alpha for the lighter ground). */
+:root[data-design="pitstop"][data-theme="light"] body {
+  background-image:
+    repeating-linear-gradient(106deg, transparent 0 30px, rgba(245, 130, 32, 0.04) 30px 31px),
+    repeating-linear-gradient(45deg, rgb(var(--ink) / 0.035) 0 2px, transparent 2px 8px),
+    radial-gradient(rgb(var(--ink) / 0.045) 1px, transparent 1px),
+    radial-gradient(rgb(var(--ink) / 0.035) 1px, transparent 1px);
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-design="pitstop"][data-theme="system"] body {
+    background-image:
+      repeating-linear-gradient(106deg, transparent 0 30px, rgba(245, 130, 32, 0.04) 30px 31px),
+      repeating-linear-gradient(45deg, rgb(var(--ink) / 0.035) 0 2px, transparent 2px 8px),
+      radial-gradient(rgb(var(--ink) / 0.045) 1px, transparent 1px),
+      radial-gradient(rgb(var(--ink) / 0.035) 1px, transparent 1px);
+  }
+}
+
+/* ── Section-header livery tick ────────────────────────────────────────────
+   A small skewed race-orange dash before in-page section headers (the Apex
+   eyebrow tick). Inline-block ::before, no positioning context change → zero
+   layout risk for cards/content. */
+[data-design="pitstop"] main h2::before {
+  content: "";
+  display: inline-block;
+  width: 13px;
+  height: 3px;
+  margin-right: 8px;
+  vertical-align: middle;
+  background: rgb(var(--accent));
+  transform: skewX(-22deg);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Concept-2 "across the app" component livery (DESIGN=pitstop ONLY).
+   Every rule is scoped under [data-design="pitstop"] so the current design
+   stays byte-identical. Concept literals are mapped to pitstop tokens; the
+   sector-best purple has no token → literal #B14EFF where needed.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Orange livery edge on key cards (concept .slash-edge). */
+[data-design="pitstop"] .pitstop-slash-edge { position: relative; }
+[data-design="pitstop"] .pitstop-slash-edge::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: rgb(var(--accent));
+  border-top-left-radius: inherit;
+  border-bottom-left-radius: inherit;
+}
+
+/* Bottom-nav centre Log pill — rounded-square, skewed, glowing, raised
+   (concept .bn-log .pill). [data-design][class] beats the Tailwind utilities
+   (h-12/w-12/rounded-full/-mt-4/shadow-md) on the span, pitstop-only. */
+[data-design="pitstop"] .pitstop-log-pill {
+  width: 52px; height: 52px;
+  border-radius: 16px;
+  transform: skewX(-8deg);
+  box-shadow: 0 8px 22px -6px rgb(var(--accent) / 0.7);
+  border: 3px solid rgb(var(--bg));
+  margin-top: -22px;
+}
+[data-design="pitstop"] .pitstop-log-pill svg { transform: skewX(8deg); }
+
+/* Active bottom-nav icon LED glow (concept .bn.active i). aria-current is
+   already on the active tab, so no JSX change is required. */
+[data-design="pitstop"] nav[data-bottom-nav] a[aria-current="page"] svg {
+  filter: drop-shadow(0 0 6px rgb(var(--accent) / 0.5));
+}
+
+/* Planned/"due" dose dots → solid filled (concept .dot.due). The app renders
+   planned as an orange OUTLINE ring; fill it under pitstop only. The glow is
+   already added by the .pitstop-cal .border-accent rule above. */
+[data-design="pitstop"] .pitstop-cal .border-accent {
+  background: rgb(var(--accent));
+  border-color: transparent;
+}
+
+/* Big dose readout (concept .dosebox) — skewed orange wash + Plex/Teko faces. */
+[data-design="pitstop"] .pitstop-dosebox {
+  display: flex; align-items: baseline; justify-content: center; gap: 10px;
+  padding: 8px 0 2px; position: relative; overflow: hidden;
+}
+[data-design="pitstop"] .pitstop-dosebox::before {
+  content: ""; position: absolute; left: -30px; top: 0; height: 100%; width: 80px;
+  background: rgb(var(--accent) / 0.12); transform: skewX(-18deg);
+}
+[data-design="pitstop"] .pitstop-dosebox__num {
+  font-family: var(--font-mono), monospace; font-weight: 700; font-size: 56px;
+  line-height: 0.9; color: rgb(var(--ink)); position: relative;
+}
+[data-design="pitstop"] .pitstop-dosebox__unit {
+  font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 28px;
+  letter-spacing: 0.06em; text-transform: uppercase; color: rgb(var(--accent)); position: relative;
+}
+
+/* Primary "Save Dose" CTA (concept .savebtn) — Teko uppercase + diagonal sheen
+   + orange glow. Added as an EXTRA class on the existing bg-accent button; no
+   ::after chevron (the app button keeps its lucide icon, which a chevron would
+   clash with). */
+[data-design="pitstop"] .pitstop-savebtn {
+  font-family: var(--font-display), sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 1.35rem;
+  box-shadow: 0 8px 24px -8px rgb(var(--accent) / 0.6);
+  position: relative;
+  overflow: hidden;
+}
+[data-design="pitstop"] .pitstop-savebtn::before {
+  content: ""; position: absolute; left: -30px; top: 0; height: 100%; width: 70px;
+  background: rgb(255 255 255 / 0.16); transform: skewX(-18deg);
+  pointer-events: none;
+}
+/* A3 mobile sticky CTA: the .pitstop-savebtn rule above sets position:relative (for the
+   ::before shimmer), which outranks Tailwind's .sticky utility (0,2,0 > 0,1,0). Restore
+   sticky on phones only — desktop keeps relative so the decoration's containing block
+   is preserved. The default/neon button has no .pitstop-savebtn class, so it already
+   gets .sticky directly and needs no override. */
+@media (max-width: 639px) {
+  [data-design="pitstop"] .pitstop-savebtn.sticky { position: sticky; bottom: 64px; }
+}
+
+/* Bloodwork last-3-panels comparison matrix (concept table.bw). */
+[data-design="pitstop"] table.pitstop-bw {
+  width: 100%; border-collapse: collapse;
+  font-family: var(--font-mono), monospace; font-size: 11px;
+}
+[data-design="pitstop"] table.pitstop-bw th {
+  font-family: var(--font-label), sans-serif; font-weight: 600; font-size: 9px;
+  letter-spacing: 0.12em; text-transform: uppercase; color: rgb(var(--muted));
+  padding: 8px 4px; text-align: right; border-bottom: 1px solid rgb(var(--ink) / 0.2);
+}
+[data-design="pitstop"] table.pitstop-bw th.l,
+[data-design="pitstop"] table.pitstop-bw td.l { text-align: left; }
+[data-design="pitstop"] table.pitstop-bw td {
+  padding: 9px 4px; text-align: right; border-bottom: 1px solid rgb(var(--line) / 0.1);
+  color: rgb(var(--ink) / 0.82);
+}
+[data-design="pitstop"] table.pitstop-bw td .analyte {
+  font-family: var(--font-label), sans-serif; font-weight: 600; font-size: 12px;
+  letter-spacing: 0.03em; color: rgb(var(--ink)); text-transform: none;
+}
+[data-design="pitstop"] table.pitstop-bw td.ref { color: rgb(var(--muted)); font-size: 10px; }
+[data-design="pitstop"] table.pitstop-bw .bw-hi,
+[data-design="pitstop"] table.pitstop-bw .bw-lo { color: rgb(var(--danger)); font-weight: 600; }
+[data-design="pitstop"] table.pitstop-bw .bw-imp { color: rgb(var(--ok)); font-weight: 600; }
+[data-design="pitstop"] table.pitstop-bw .bw-flag { font-size: 9px; color: rgb(var(--danger)); font-weight: 700; }
+[data-design="pitstop"] table.pitstop-bw .latest-col { color: rgb(var(--accent)); }
+[data-design="pitstop"] table.pitstop-bw .latest-cell { background: rgb(var(--accent) / 0.07); }
+[data-design="pitstop"] table.pitstop-bw .bw-trend { display: inline-block; margin-left: 3px; font-size: 9px; }
+
+/* ── Follow-up items (DESIGN=pitstop only) ─────────────────────────────────
+   Shared classes for the header dose-status badge dot (pulse) and the log
+   peptide quick-pick pills (skew + counter-skew). Everything else for the
+   follow-up items uses Tailwind utilities / inline SVG in the components. */
+
+/* Header status badge — a pulsing dot (colour set by the component: ok/danger). */
+@keyframes pt-blip { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+[data-design="pitstop"] .pitstop-status-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 9999px;
+  animation: pt-blip 1.4s ease-in-out infinite;
+}
+
+/* Log peptide quick-pick pills (concept .peptide / .peptide.on). The active pill
+   is skewed; wrap its label in a <span> to counter-skew the text upright. */
+[data-design="pitstop"] .pitstop-peptide-chip {
+  font-family: var(--font-label), sans-serif; font-weight: 700; font-size: 12px;
+  letter-spacing: 0.08em; text-transform: uppercase; padding: 8px 13px;
+  border-radius: 9px; border: 1px solid rgb(var(--ink) / 0.12);
+  color: rgb(var(--ink) / 0.7); background: rgb(var(--surface));
+}
+[data-design="pitstop"] .pitstop-peptide-chip.on {
+  border-color: rgb(var(--accent)); color: #fff; background: rgb(var(--accent));
+  transform: skewX(-7deg); box-shadow: 0 6px 16px -6px rgb(var(--accent) / 0.6);
+}
+[data-design="pitstop"] .pitstop-peptide-chip.on > span { display: inline-block; transform: skewX(7deg); }
+
+/* ── Gauge track (Apex-Line radial rings) ──────────────────────────────────
+   GaugeRing + AdherenceTacho ship the track circle with a literal white@0.08
+   SVG stroke attribute so DARK/neon pitstop stay byte-identical to the original.
+   That white is invisible on the LIGHT Gulf paper, so override the track stroke
+   to a low-alpha Gulf-ink line for light + system-light ONLY (an author CSS rule
+   outranks the SVG presentation attribute; the .pitstop-gauge-track hook class is
+   on every track circle). */
+:root[data-design="pitstop"][data-theme="light"] .pitstop-gauge-track { stroke: rgb(var(--line) / 0.2); }
+@media (prefers-color-scheme: light) {
+  :root[data-design="pitstop"][data-theme="system"] .pitstop-gauge-track { stroke: rgb(var(--line) / 0.2); }
+}

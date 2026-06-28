@@ -1,0 +1,22 @@
+# Litestream — continuous SQLite backup for Peptide Tracker.
+# Replicates the live DB to a local Unraid path (no cloud needed). An S3/B2
+# replica can be added later by appending another entry under `replicas`.
+#
+# Restore (point-in-time):
+#   litestream restore -o /data/peptides.db file:///backup/peptides
+#
+# Runs as the `litestream` compose sidecar sharing the app's /data volume (read)
+# and a /backup volume (write). Requires the DB in WAL mode (set by the app on
+# startup — see src/lib/db.ts ensureWalMode). Litestream is the only process that
+# should manage WAL checkpoints, so the app must not run manual VACUUM/checkpoint.
+dbs:
+  - path: /data/peptides.db
+    # WAL poll cadence (default 1s — chatty in logs). 10s keeps an excellent
+    # backup RPO for a low-write personal app and quiets the per-second sync line.
+    monitor-interval: 10s
+    replicas:
+      - type: file
+        path: /backup/peptides
+        # keep ~30 days of point-in-time history
+        retention: 720h
+        snapshot-interval: 24h

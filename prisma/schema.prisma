@@ -1,0 +1,398 @@
+// Peptide Tracker — data model (Phase 0).
+// SQLite for single-user MVP; swap `provider`/datasource for Postgres later.
+// SQLite has no native enums → enum-like fields are String with documented values.
+// Fields tagged "ENCRYPTED" are wrapped by lib/crypto/fieldEncryption at the app
+// layer (stored as ciphertext strings); keep them out of WHERE clauses.
+
+generator client {
+  provider = "prisma-client-js"
+  // native = local dev (darwin); linux-musl-openssl-3.0.x = the Alpine container
+  // (node:22-alpine ships OpenSSL 3.x → libssl.so.3, NOT the 1.1 the plain
+  // linux-musl engine links against — otherwise every query 500s in prod).
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  totpSecret   String? // ENCRYPTED
+  role         String   @default("owner") // owner | member  (local accounts only)
+  createdAt    DateTime @default(now())
+  reorderLeadTimeDays Int? @default(14) // global fallback lead time
+  reorderBufferDays   Int? @default(3)  // safety margin added to lead time
+  tokenVersion Int  @default(0) // bump to revoke all existing sessions (auth hardening)
+  lastTotpStep Int? // last accepted TOTP time-step — rejects replay within the window
+  hydrationTargetMl Int?    // daily water-intake goal (mL); null = no target
+  symptomList       String? // JSON array of custom side-effect symptoms; null = curated default
+
+  peptides      Peptide[]
+  prescriptions Prescription[]
+  vials         Vial[]
+  syringes      Syringe[]
+  protocols     Protocol[]
+  plannedDoses  PlannedDose[]
+  doseLogs      DoseLog[]
+  journal       JournalEntry[]
+  labPanels     LabPanel[]
+  documents     Document[]
+  auditLogs     AuditLog[]
+  wearableDaily WearableDaily[]
+  stacks        Stack[]
+}
+
+model Peptide {
+  id                  String  @id @default(cuid())
+  userId              String?
+  user                User?   @relation(fields: [userId], references: [id])
+  name                String
+  aliases             String? // JSON array
+  category            String?
+  substanceClass      String  @default("mass") // mass | IU  (never auto-convert between)
+  defaultStrengthMg   Decimal?
+  halfLifeHours       Decimal?
+  minIntervalHours    Decimal?
+  missedDosePolicy    String  @default("prompt") // skip | take_now | prompt
+  storageNotes        String?
+  route               String  @default("injection") // injection | oral  (oral skips recon/syringe/site)
+
+  prescriptions Prescription[]
+  vials         Vial[]
+  protocols     Protocol[]
+}
+
+model Prescription {
+  id                String    @id @default(cuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id])
+  // A prescription is EITHER per-peptide (peptideId set) OR per-stack (stackId
+  // set, peptideId null) — a grouped script covering all the stack's compounds.
+  peptideId         String?
+  peptide           Peptide?  @relation(fields: [peptideId], references: [id])
+  stackId           String?
+  stack             Stack?    @relation(fields: [stackId], references: [id])
+  prescriber        String? // ENCRYPTED
+  pharmacy          String? // ENCRYPTED
+  source            String?
+  cost              Decimal?
+  currency          String?   @default("AUD")
+  quantity          Int?
+  refillsAuthorized Int?
+  refillsRemaining  Int?
+  dateWritten       DateTime?
+  nextRefill        DateTime?
+  expiration        DateTime?
+  doseInstructions  String? // ENCRYPTED
+  leadTimeDays      Int? // days from ordering to in-hand for this source
+  sourceDocumentId  String?
+  sourceDocument    Document? @relation(fields: [sourceDocumentId], references: [id])
+  status            String    @default("active") // active | expired | cancelled
+
+  vials     Vial[]
+  protocols Protocol[]
+}
+
+model Vial {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  peptideId       String
+  peptide         Peptide   @relation(fields: [peptideId], references: [id])
+  prescriptionId  String?
+  prescription    Prescription? @relation(fields: [prescriptionId], references: [id])
+  labelStrengthMg Decimal   // total peptide mass in the vial — numerator of all math
+  lot             String?
+  expiry          DateTime?
+  status          String    @default("sealed") // sealed | in_use | finished | discarded
+  storageLocation String?
+  openedAt        DateTime?
+  finishedAt      DateTime?
+
+  preparations Preparation[]
+}
+
+// "Reconstitution / Preparation" — supports both dry-reconstituted and premixed vials.
+model Preparation {
+  id                  String   @id @default(cuid())
+  vialId              String
+  vial                Vial     @relation(fields: [vialId], references: [id])
+  prepType            String   // reconstituted | premixed
+  bacWaterMl          Decimal? // null if premixed
+  totalMg             Decimal  // strength snapshot at prep time
+  concentrationMcgPerMl Decimal // computed (reconstituted) or entered (premixed)
+  reconstitutedAt     DateTime @default(now())
+  beyondUseDate       DateTime?
+  remainingMl         Decimal
+  active              Boolean  @default(true)
+  notes               String? // ENCRYPTED
+
+  doseLogs DoseLog[]
+}
+
+model Syringe {
+  id             String  @id @default(cuid())
+  userId         String?
+  user           User?   @relation(fields: [userId], references: [id])
+  name           String
+  graduationType String  // units | ml
+  unitsPerMl     Int     @default(100)
+  capacityMl     Decimal
+  capacityUnits  Int
+  increment      Decimal
+
+  doseLogs DoseLog[]
+}
+
+model Protocol {
+  id                   String    @id @default(cuid())
+  userId               String
+  user                 User      @relation(fields: [userId], references: [id])
+  peptideId            String
+  peptide              Peptide   @relation(fields: [peptideId], references: [id])
+  prescriptionId       String?
+  prescription         Prescription? @relation(fields: [prescriptionId], references: [id])
+  stackId              String?
+  stack                Stack?    @relation(fields: [stackId], references: [id])
+  vialId               String? // pinned stack vial (soft ref, no @relation); null = legacy/non-stack, resolve by peptideId
+  name                 String
+  source               String    @default("manual") // manual | prescription
+  scheduleType         String    @default("fixed_times") // fixed_times | interval | titration
+  scheduleRule         String? // RRULE-like / JSON
+  rebaseMode           String    @default("fixed_anchor") // fixed_anchor | rolling
+  adherenceWindowMin   Int       @default(120)
+  defaultSyringeId     String?
+  targetDose           Decimal?
+  doseInputUnit        String    @default("mcg") // mcg | mg | ml | units
+  doseBasis            String    @default("per_injection") // per_injection | per_week
+  startDate            DateTime?
+  endDate              DateTime?
+  status               String    @default("active") // active | paused | completed
+
+  steps        ProtocolStep[]
+  plannedDoses PlannedDose[]
+  doseLogs     DoseLog[]
+}
+
+// A peptide "stack": a named group over real, separately-tracked protocols (each
+// its own peptide + vial + premixed preparation). Thin grouping — dosing/inventory
+// logic is unchanged; the stack adds combined entry, display and one-tap logging.
+model Stack {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  notes     String?
+  createdAt DateTime @default(now())
+
+  protocols     Protocol[]
+  prescriptions Prescription[]
+}
+
+model ProtocolStep {
+  id            String   @id @default(cuid())
+  protocolId    String
+  protocol      Protocol @relation(fields: [protocolId], references: [id])
+  stepIndex     Int
+  dose          Decimal
+  doseInputUnit String
+  durationDays  Int?
+  notes         String?
+}
+
+model PlannedDose {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  protocolId      String
+  protocol        Protocol @relation(fields: [protocolId], references: [id])
+  scheduledAt     DateTime
+  targetDose      Decimal?
+  doseInputUnit   String?
+  status          String   @default("planned") // planned | taken | missed | skipped
+  generatedFromStep Int?
+  reminderSentAt  DateTime?
+
+  doseLog DoseLog?
+
+  @@unique([protocolId, scheduledAt])
+}
+
+model DoseLog {
+  id              String      @id @default(cuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  clientUuid      String      @unique // offline-sync dedup
+  preparationId   String?     // null for oral / non-injection doses
+  preparation     Preparation? @relation(fields: [preparationId], references: [id])
+  protocolId      String?
+  protocol        Protocol?   @relation(fields: [protocolId], references: [id])
+  plannedDoseId   String?     @unique
+  plannedDose     PlannedDose? @relation(fields: [plannedDoseId], references: [id])
+  takenAt         DateTime
+  scheduledAt     DateTime?
+  deltaMinutes    Int?
+  doseMcg         Decimal     // canonical mass
+  doseInputUnit   String
+  volumeMl        Decimal
+  syringeUnits    Decimal?
+  syringeId       String?
+  syringe         Syringe?    @relation(fields: [syringeId], references: [id])
+  injectionSite   String?
+  route           String?     // injection | oral  (snapshot; null = legacy injection)
+  source          String      @default("app") // app | ha_action | import
+  notes           String? // ENCRYPTED
+  createdAt       DateTime    @default(now())
+}
+
+model JournalEntry {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  date        DateTime
+  weight      Decimal?
+  weightUnit  String?
+  mood        Int?
+  energy      Int?
+  sleep       Decimal?
+  calories    Int?     // daily energy intake (kcal)
+  proteinG    Decimal? // daily protein (grams)
+  waterMl     Int?     // daily water intake (mL)
+  sideEffects String? // ENCRYPTED (JSON: array of {symptom, severity} or legacy string[])
+  doseLogId   String?
+  notes       String? // ENCRYPTED
+}
+
+model Document {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id])
+  kind               String   // prescription | lab_report | other
+  filePath           String
+  mime               String?
+  uploadedAt         DateTime @default(now())
+  extractionStatus   String   @default("pending") // pending | extracted | confirmed | failed
+  extractionConfidence Decimal?
+
+  prescriptions Prescription[]
+  labPanels     LabPanel[]
+}
+
+model Biomarker {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  defaultUnit String?
+  category    String?
+  optimalLow  Decimal?
+  optimalHigh Decimal?
+
+  results LabResult[]
+}
+
+model LabPanel {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  collectedDate DateTime
+  labSource     String?
+  documentId    String?
+  document      Document? @relation(fields: [documentId], references: [id])
+  notes         String? // ENCRYPTED
+
+  results LabResult[]
+}
+
+model LabResult {
+  id           String    @id @default(cuid())
+  labPanelId   String
+  labPanel     LabPanel  @relation(fields: [labPanelId], references: [id])
+  biomarkerId  String
+  biomarker    Biomarker @relation(fields: [biomarkerId], references: [id])
+  value        String // ENCRYPTED (string to allow "<3", ">90", numeric)
+  unit         String?
+  referenceLow Decimal?
+  referenceHigh Decimal?
+  flag         String?   // low | normal | high | borderline
+}
+
+// Curated peptide enrichment override (reference-only, attributed to
+// peptidedosages.com). ADDITIVE table — the weekly refresh upserts one row per
+// peptide; the read helper (getEnrichment) prefers these rows over the committed
+// seed JSON. On a per-peptide scrape failure the refresh keeps the last-good row
+// (never wipes). `dataJson` is the full EnrichmentEntry serialised as JSON.
+model PeptideReference {
+  id          String   @id @default(cuid())
+  peptideName String   @unique
+  dataJson    String // serialised EnrichmentEntry
+  source      String // source page URL
+  fetchedAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  entityType String
+  entityId   String
+  changedAt  DateTime @default(now())
+  field      String
+  oldValue   String?
+  newValue   String?
+}
+
+// Daily wellness snapshot imported from a wearable (Garmin). One row per
+// (user, day, source); re-syncs upsert idempotently. Numeric metrics are
+// plaintext so they're chartable/aggregatable; only `raw` (the full payload)
+// is ENCRYPTED at the app layer.
+model WearableDaily {
+  id     String   @id @default(cuid())
+  userId String
+  user   User     @relation(fields: [userId], references: [id])
+  date   DateTime // local-midnight of the wellness day
+  source String   // "garmin"
+
+  // sleep
+  sleepSeconds      Int?
+  sleepDeepSeconds  Int?
+  sleepLightSeconds Int?
+  sleepRemSeconds   Int?
+  sleepAwakeSeconds Int?
+  sleepScore        Int?
+
+  // recovery
+  restingHr       Int?
+  hrvMs           Decimal?
+  hrvStatus       String? // balanced | unbalanced | low | poor
+  bodyBatteryHigh Int?
+  bodyBatteryLow  Int?
+  stressAvg       Int?
+
+  // body composition
+  weightKg   Decimal?
+  bmi        Decimal?
+  bodyFatPct Decimal?
+
+  // activity
+  steps            Int?
+  caloriesActive   Int?
+  vo2max           Decimal?
+  intensityMinutes Int?
+
+  // misc
+  spo2Avg        Int?
+  respirationAvg Decimal?
+
+  // logged activities (deliberate workouts; distinct from passive steps/intensity) — plaintext (read on month/wellness paths)
+  activityCount  Int?
+  activitiesJson String?
+
+  raw            String? // ENCRYPTED — full normalised JSON payload (future-proofing)
+
+  syncedAt DateTime @default(now())
+
+  @@unique([userId, date, source])
+}

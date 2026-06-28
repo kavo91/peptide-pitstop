@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.env
+coverage
+Dockerfile
+docker-compose.yml
+# DB artifacts — recursive so prisma/*.db, _proddb.db, WAL/SHM never enter the
+# build context (a copied prod DB here would otherwise be baked into the image).
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.db-journal
+# macOS metadata
+**/._*
+**/.DS_Store
+.DS_Store

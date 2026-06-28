@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Peptide Tracker">
+  <defs><radialGradient id="bg" cx="50%" cy="36%" r="80%">
+  <stop offset="0" stop-color="#16212B"/><stop offset="1" stop-color="#0B0F14"/></radialGradient></defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect x="7" y="7" width="498" height="498" rx="105" fill="none" stroke="#2DE2C8" stroke-opacity="0.16" stroke-width="3"/>
+  
+  <line x1="100" y1="374" x2="412" y2="374" stroke="#2DE2C8" stroke-opacity="0.28" stroke-width="6" stroke-linecap="round"/>
+  <g fill="none" stroke-linecap="round">
+    <path d="M100 356 C 156 356 178 214 238 200 C 300 186 330 306 412 318" stroke="#22D3EE" stroke-opacity="0.18" stroke-width="42"/>
+    <path d="M100 356 C 156 356 178 214 238 200 C 300 186 330 306 412 318" stroke="#22D3EE" stroke-width="18"/>
+  </g>
+  <circle cx="238" cy="200" r="40" fill="#2DE2C8" opacity="0.20"/>
+  <circle cx="238" cy="200" r="22" fill="#0B0F14" stroke="#2DE2C8" stroke-width="14"/>
+</svg>

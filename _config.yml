@@ -1,0 +1,29 @@
+title: Peptide Pitstop
+description: A self-hosted peptide-therapy tracker — your data, your server.
+theme: jekyll-theme-cayman
+show_downloads: false
+repository: kavo91/peptide-pitstop
+
+exclude:
+  - src
+  - prisma
+  - public
+  - deploy
+  - garmin-sync
+  - scripts
+  - node_modules
+  - package.json
+  - package-lock.json
+  - tsconfig.json
+  - next.config.mjs
+  - postcss.config.mjs
+  - tailwind.config.ts
+  - vitest.config.ts
+  - next-env.d.ts
+  - Dockerfile
+  - docker-compose.yml
+  - litestream.yml
+  - .eslintrc.json
+  - .github
+  - .dockerignore
+  - cloudflared

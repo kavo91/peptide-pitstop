@@ -1,0 +1,49 @@
+# BUNDLED PROD deployment — ONE container runs ALL FOUR services:
+#   Next.js app + Cloudflare tunnel + Litestream backup + Garmin wellness sidecar.
+# Drop-in replacement for the 4-service prod compose.
+#
+# Key trick: `extra_hosts: app:127.0.0.1` makes the name "app" resolve to this
+# container, so the remotely-managed named tunnel's existing origin
+# (http://app:3000) keeps working with NO Cloudflare dashboard change. In-container
+# the app, garmin /sync (:8080), and cloudflared all talk over localhost.
+#
+# Cutover: deploy/bundled/cutover.sh. Rollback: restore docker-compose.sidecar.yml.bak.
+# NOTE: garmin-tokens dir must be chown 1001:1001 (container runs as nextjs uid 1001).
+services:
+  app:
+    build:
+      context: /mnt/user/appdata/peptide-tracker/app-src
+      dockerfile: deploy/bundled/Dockerfile
+    image: peptide-tracker:bundled
+    container_name: peptide-tracker
+    restart: unless-stopped
+    extra_hosts:
+      - "app:127.0.0.1"
+    labels:
+      - net.unraid.docker.icon=https://peptides.example.com/icons/icon-512.png
+      - net.unraid.docker.webui=https://peptides.example.com
+    environment:
+      - TZ=Australia/Brisbane
+      - DATABASE_URL=file:/data/peptides.db
+      - PT_FIELD_KEY=${PT_FIELD_KEY}
+      - AUTH_SECRET=${AUTH_SECRET}
+      - HA_WEBHOOK_URL=${HA_WEBHOOK_URL}
+      - WELLNESS_IMPORT_TOKEN=${WELLNESS_IMPORT_TOKEN}
+      - PRISMA_QUERY_ENGINE_LIBRARY=/app/node_modules/.prisma/client/libquery_engine-linux-musl-openssl-3.0.x.so.node
+      # cloudflared (in-container) — the named tunnel token.
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+      # garmin-sync (in-container) — talks to the app + serves /sync over localhost.
+      - GARMIN_EMAIL=${GARMIN_EMAIL}
+      - GARMIN_PASSWORD=${GARMIN_PASSWORD}
+      - APP_IMPORT_URL=http://localhost:3000/api/wellness/garmin
+      - GARMIN_SYNC_URL=http://localhost:8080/sync
+      - BACKFILL_DAYS=3
+      - SYNC_INTERVAL_SECONDS=21600
+      - TOKENS_DIR=/tokens
+    volumes:
+      - /mnt/user/appdata/peptide-tracker/data:/data
+      - /mnt/user/appdata/peptide-tracker/garmin-tokens:/tokens
+      - /mnt/user/Backups/peptide-tracker:/backup
+    expose:
+      - "3000"
+networks: {}

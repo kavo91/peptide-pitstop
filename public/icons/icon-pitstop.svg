@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Peptide Pitstop">
+  <defs><linearGradient id="apex" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0" stop-color="#FF7A3D"/><stop offset="1" stop-color="#FF5B14"/></linearGradient></defs>
+  <rect width="512" height="512" rx="112" fill="#0E0F12"/>
+  <rect x="7" y="7" width="498" height="498" rx="105" fill="none" stroke="#FF5B14" stroke-opacity="0.18" stroke-width="3"/>
+
+  <!-- brake disc outer ring — bold so it reads at 16px -->
+  <circle cx="256" cy="256" r="150" fill="none" stroke="url(#apex)" stroke-width="40"/>
+  <!-- inner hub ring -->
+  <circle cx="256" cy="256" r="58" fill="none" stroke="#F2F3F5" stroke-opacity="0.30" stroke-width="16"/>
+  <!-- lean-angle / apex slash through the disc (the racing line) -->
+  <path d="M151 366 L361 146" stroke="#F2F3F5" stroke-width="28" stroke-linecap="round"/>
+  <path d="M151 366 L361 146" stroke="#00E5FF" stroke-width="13" stroke-linecap="round"/>
+</svg>

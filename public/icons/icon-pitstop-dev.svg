@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Peptide Pitstop DEV">
+  <defs>
+    <linearGradient id="apex" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF7A3D"/><stop offset="1" stop-color="#FF5B14"/>
+    </linearGradient>
+    <clipPath id="card"><rect width="512" height="512" rx="112"/></clipPath>
+  </defs>
+  <g clip-path="url(#card)">
+    <rect width="512" height="512" fill="#0E0F12"/>
+    <rect x="7" y="7" width="498" height="498" rx="105" fill="none" stroke="#FF5B14" stroke-opacity="0.18" stroke-width="3"/>
+    <!-- brake disc (shifted up to clear the DEV banner) -->
+    <circle cx="256" cy="232" r="140" fill="none" stroke="url(#apex)" stroke-width="38"/>
+    <circle cx="256" cy="232" r="54" fill="none" stroke="#F2F3F5" stroke-opacity="0.30" stroke-width="15"/>
+    <path d="M158 330 L354 134" stroke="#F2F3F5" stroke-width="26" stroke-linecap="round"/>
+    <path d="M158 330 L354 134" stroke="#00E5FF" stroke-width="12" stroke-linecap="round"/>
+    <!-- DEV banner -->
+    <rect x="0" y="398" width="512" height="6" fill="#0E0F12"/>
+    <rect x="0" y="404" width="512" height="108" fill="#FFB020"/>
+    <text x="256" y="486" font-family="Arial, Helvetica, sans-serif" font-size="84" font-weight="900" fill="#0E0F12" text-anchor="middle" letter-spacing="12">DEV</text>
+  </g>
+</svg>

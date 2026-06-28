@@ -1,0 +1,51 @@
+{
+  "date": "2026-06-20",
+  "sleep": {
+    "dailySleepDTO": {
+      "calendarDate": "2026-06-20",
+      "sleepTimeSeconds": 27000,
+      "deepSleepSeconds": 5400,
+      "lightSleepSeconds": 16200,
+      "remSleepSeconds": 4500,
+      "awakeSleepSeconds": 900,
+      "averageSpO2Value": 94,
+      "averageRespirationValue": 14.2,
+      "sleepScores": {
+        "overall": { "value": 82, "qualifierKey": "GOOD" }
+      }
+    }
+  },
+  "summary": {
+    "calendarDate": "2026-06-20",
+    "totalSteps": 8423,
+    "restingHeartRate": 52,
+    "averageStressLevel": 33,
+    "bodyBatteryHighestValue": 88,
+    "bodyBatteryLowestValue": 19,
+    "activeKilocalories": 640,
+    "moderateIntensityMinutes": 25,
+    "vigorousIntensityMinutes": 10,
+    "averageSpo2": 95,
+    "avgWakingRespirationValue": 13.8
+  },
+  "hrv": {
+    "hrvSummary": {
+      "calendarDate": "2026-06-20",
+      "lastNightAvg": 62,
+      "weeklyAvg": 58,
+      "status": "BALANCED"
+    }
+  },
+  "weight": {
+    "totalAverage": {
+      "weight": 81700,
+      "bmi": 24.1,
+      "bodyFat": 18.4
+    }
+  },
+  "vo2max": {
+    "generic": {
+      "vo2MaxValue": 48.0
+    }
+  }
+}

@@ -1,0 +1,27 @@
+# Unraid deployment: the app + a Cloudflare Tunnel sidecar.
+# No ports are published to the host — cloudflared reaches the app over the
+# internal compose network and exposes it at peptides.example.com.
+services:
+  app:
+    build: .
+    container_name: peptide-tracker
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=file:/data/peptides.db
+      - PT_FIELD_KEY=${PT_FIELD_KEY}
+      - AUTH_SECRET=${AUTH_SECRET}
+      - HA_WEBHOOK_URL=${HA_WEBHOOK_URL}
+    volumes:
+      - /mnt/user/appdata/peptide-tracker:/data   # Unraid appdata (full-disk encrypted)
+    expose:
+      - "3000"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: peptide-tunnel
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - app

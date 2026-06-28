@@ -1,0 +1,9 @@
+# Garmin Connect SSO + raw Connect API access.
+# Migrated off `garth` (2026-06-21): garth is deprecated and its mobile-app auth
+# path is dead — new logins 403 at the OAuth1 `preauthorized` exchange because
+# Garmin's Cloudflare now blocks plain-`requests` TLS fingerprints. python-
+# garminconnect dropped garth for curl_cffi (real-browser TLS impersonation) +
+# ua-generator, which authenticates new logins. Same `.connectapi(path)` raw call.
+# 0.3.x is the curl_cffi line; 0.2.x still bundled garth (dead auth). Pin >=0.3.6.
+garminconnect==0.3.6
+requests==2.32.3

@@ -1,0 +1,27 @@
+node_modules/
+.next/
+out/
+build/
+.env
+.env.local
+*.db
+*.db-journal
+prisma/*.db
+prisma/migrations/dev*
+.DS_Store
+coverage/
+
+# Local Claude Code preview config
+.claude/
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+.superpowers/
+.playwright-mcp/
+
+# scratch / sqlite sidecar artifacts
+*.db-shm
+*.db-wal
+*.db.bak-*
+prisma/prisma/
+prisma/scratch*.db
+.env.designdev

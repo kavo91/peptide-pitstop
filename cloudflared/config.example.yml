@@ -1,0 +1,18 @@
+# Reference for a credentials-file (non-token) tunnel, if you prefer it over
+# TUNNEL_TOKEN in docker-compose. Create the tunnel in the Cloudflare Zero Trust
+# dashboard, then add a public hostname:
+#
+#   peptides.example.com  ->  http://app:3000
+#
+# Put a Cloudflare Access policy on that hostname:
+#   - Application: peptides.example.com
+#   - Policy (humans): allow your email via one-time PIN or your IdP
+#   - Policy (iOS/PWA service calls, if needed later): a service token
+#
+tunnel: <TUNNEL_UUID>
+credentials-file: /etc/cloudflared/<TUNNEL_UUID>.json
+
+ingress:
+  - hostname: peptides.example.com
+    service: http://app:3000
+  - service: http_status:404
