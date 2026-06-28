@@ -68,6 +68,15 @@ If you stop using Peptide Pitstop tomorrow, you walk away with a complete, reada
 **Bloodwork** — biomarker panels, an in-range summary, and the comparison matrix
 ![Bloodwork](docs/screenshots/bloodwork.png)
 
+### Light theme & mobile
+
+The motorsport "pit-wall" dark theme ships alongside a clean light theme, and the whole app is phone-first.
+
+| Light theme (Gulf) | On your phone |
+| --- | --- |
+| ![Today — light](docs/screenshots/today-light.png) | ![Today — mobile](docs/screenshots/today-mobile.png) |
+| ![Analytics — light](docs/screenshots/analytics-light.png) | ![Analytics — mobile](docs/screenshots/analytics-mobile.png) |
+
 ---
 
 ## ✨ Features
