@@ -1,7 +1,7 @@
 /**
  * App-level field encryption for sensitive columns (AES-256-GCM).
  *
- * Locked decision: full-disk encryption on Unraid PLUS field encryption on
+ * Defence in depth: full-disk encryption on the host PLUS field encryption on
  * identifying free-text and lab values, so even a DB exfiltration is unreadable.
  *
  * Rules:

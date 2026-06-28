@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "standalone", // small Docker image for Unraid
+  output: "standalone", // small standalone Docker image
   reactStrictMode: true,
   // ESLint is a standalone step (`npm run lint`), not a build gate. Now that an
   // eslint config exists, `next build` would otherwise run lint and fail on the
