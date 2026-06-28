@@ -3,15 +3,95 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Peptide Pitstop — self-hosted peptide therapy tracking, on your hardware</title>
-<meta name="description" content="A private, phone-first, self-hosted web app for peptide & GLP-1 therapy: reconstitution math, dose logging, protocols, bloodwork, and plasma-level modelling. Your data never leaves your server." />
-<meta property="og:title" content="Peptide Pitstop" />
-<meta property="og:description" content="Self-hosted peptide therapy tracking — your data, your server." />
+<title>Self-Hosted Peptide Tracker, Open Source · Peptide Pitstop</title>
+<meta name="description" content="Free, open-source, self-hosted peptide & GLP-1 tracker. Reconstitution math, dose logging, titration stacks, bloodwork, plasma modelling. One Docker container, no telemetry." />
+<meta property="og:title" content="Peptide Pitstop — Free, self-hosted peptide & GLP-1 tracker" />
+<meta property="og:description" content="Open-source, self-hosted tracker for peptide & GLP-1 therapy. Reconstitution math, titration stacks, bloodwork trends, plasma modelling. Docker, PWA, AES-256, no telemetry." />
 <meta property="og:type" content="website" />
 <meta property="og:image" content="https://peptidepitstop.com/public/icons/icon-pitstop-512.png" />
 <link rel="icon" type="image/svg+xml" href="public/icons/icon-pitstop.svg" />
 <link rel="icon" type="image/png" sizes="192x192" href="public/icons/icon-pitstop-192.png" />
 <link rel="apple-touch-icon" href="public/icons/apple-touch-icon-pitstop.png" />
+<link rel="canonical" href="https://peptidepitstop.com/" />
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+<meta name="theme-color" content="#121211" />
+<meta property="og:site_name" content="Peptide Pitstop" />
+<meta property="og:url" content="https://peptidepitstop.com/" />
+<meta property="og:locale" content="en_US" />
+<meta property="og:image:alt" content="Peptide Pitstop self-hosted dashboard showing the dose log and adherence heatmap" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Peptide Pitstop — Free, self-hosted peptide & GLP-1 tracker" />
+<meta name="twitter:description" content="Open-source, self-hosted tracker for peptide & GLP-1 therapy. Reconstitution math, titration stacks, bloodwork trends, plasma modelling. Docker, PWA, AES-256, no telemetry." />
+<meta name="twitter:image" content="https://peptidepitstop.com/public/icons/icon-pitstop-512.png" />
+<meta name="twitter:image:alt" content="Peptide Pitstop self-hosted dashboard showing the dose log and adherence heatmap" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": ["SoftwareApplication", "WebApplication"],
+  "name": "Peptide Pitstop",
+  "url": "https://peptidepitstop.com/",
+  "description": "Free, open-source, self-hosted web app for tracking peptide and GLP-1 therapy: reconstitution and draw-volume math, dose logging, titration stacks, bloodwork trends, single-compartment plasma-level modelling and an adherence heatmap. Deploys as one Docker container, installs as a PWA, encrypts data with AES-256-GCM, and sends no telemetry.",
+  "image": "https://peptidepitstop.com/public/icons/icon-pitstop-512.png",
+  "applicationCategory": "HealthApplication",
+  "applicationSubCategory": "Self-hosted peptide & GLP-1 therapy tracker",
+  "operatingSystem": "Web browser (Chrome, Firefox, Safari, Edge); self-hosted via Docker on Linux, Windows, macOS",
+  "browserRequirements": "Requires JavaScript. Modern browser. Installable as a PWA.",
+  "softwareVersion": "1.0",
+  "isAccessibleForFree": true,
+  "license": "https://github.com/kavo91/peptide-pitstop/blob/main/LICENSE",
+  "downloadUrl": "https://github.com/kavo91/peptide-pitstop",
+  "softwareHelp": "https://github.com/kavo91/peptide-pitstop#readme",
+  "featureList": [
+    "Reconstitution & draw-volume calculator",
+    "Dose logging",
+    "Titration & multi-peptide stacks / protocols",
+    "Bloodwork / biomarker trends",
+    "Single-compartment plasma-level modelling",
+    "Adherence heatmap",
+    "CSV / PDF export",
+    "Installable PWA, offline, dark & light themes",
+    "AES-256-GCM field encryption",
+    "No telemetry",
+    "Home Assistant dose reminders",
+    "Garmin wellness sync"
+  ],
+  "offers": { "@type": "Offer", "price": 0, "priceCurrency": "USD" },
+  "author": {
+    "@type": "Organization",
+    "name": "Peptide Pitstop",
+    "url": "https://github.com/kavo91/peptide-pitstop"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Peptide Pitstop",
+  "url": "https://peptidepitstop.com/",
+  "logo": "https://peptidepitstop.com/public/icons/icon-pitstop-512.png",
+  "description": "Free, open-source, self-hosted peptide & GLP-1 therapy tracker.",
+  "foundingDate": "2026-06-28",
+  "sameAs": [
+    "https://github.com/kavo91/peptide-pitstop",
+    "https://buymeacoffee.com/peptidepitstop"
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "Is there a self-hosted peptide tracker?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Peptide Pitstop is a self-hosted peptide and GLP-1 tracker that runs entirely on your own hardware as a single Docker container. There is no cloud account and no managed backend — you host it, back it up, and control it yourself." } },
+    { "@type": "Question", "name": "Is Peptide Pitstop free and open source?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Peptide Pitstop is 100% free and open source under the AGPL-3.0 licence. There are no subscriptions, accounts, or paywalls — you can read, audit, and fork the full source code on GitHub." } },
+    { "@type": "Question", "name": "How do I deploy it with Docker?", "acceptedAnswer": { "@type": "Answer", "text": "Deployment is a single Docker container. Pull the image, point it at a database file, and open it in any modern browser; full Docker, environment-variable, and demo-seed instructions are in the GitHub README. It also installs as a PWA for offline use." } },
+    { "@type": "Question", "name": "Is my peptide and GLP-1 data private?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Your data never leaves your server. Identifying free-text and lab values are encrypted with AES-256-GCM before they touch disk, there is no telemetry or analytics SDK, and fonts are self-hosted — nothing is sent to a third party." } },
+    { "@type": "Question", "name": "Can it do peptide reconstitution and draw-volume math?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. The built-in reconstitution engine computes concentration, draw volume, and syringe markings using exact decimal math (no floating-point drift), for both reconstituted and premixed vials." } },
+    { "@type": "Question", "name": "What can I track with Peptide Pitstop?", "acceptedAnswer": { "@type": "Answer", "text": "Reconstitution and draw-volume math, dose logs, titration and multi-peptide stacks, bloodwork and biomarker trends, single-compartment plasma-level modelling, and an adherence heatmap. Everything exports to CSV or PDF." } }
+  ]
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Teko:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -102,21 +182,21 @@
 </div></header>
 
 <div class="hero wrap">
-  <span class="kicker">Self-hosted · phone-first · open source</span>
+  <span class="kicker">Self-hosted · open source · Docker · no telemetry</span>
   <h1 class="teko">Peptide<span class="slash">/</span>Pitstop</h1>
-  <p class="lede"><strong>Peptide therapy tracking that runs on your hardware, under your control.</strong> Reconstitution math, dose logging, protocols, bloodwork, and plasma-level modelling — installable as an offline PWA, living entirely on infrastructure you own.</p>
+  <p class="lede"><strong>The free, open-source, self-hosted peptide &amp; GLP-1 tracker.</strong> Reconstitution and draw-volume math, dose logging, titration stacks, bloodwork, and plasma-level modelling — one Docker container, installable as an offline PWA, living entirely on infrastructure you own.</p>
   <div class="cta">
     <a class="btn primary" href="https://github.com/kavo91/peptide-pitstop">View on GitHub →</a>
     <a class="btn" href="https://github.com/kavo91/peptide-pitstop#-deploy-self-hosted">Self-host it</a>
     <a class="btn coffee" href="https://buymeacoffee.com/peptidepitstop">☕ Buy me a coffee</a>
   </div>
-  <div class="heroshot"><img src="docs/screenshots/today.png" alt="Peptide Pitstop — Today dashboard (demo data)" loading="lazy" /></div>
+  <div class="heroshot"><img src="docs/screenshots/today.png" alt="Peptide Pitstop self-hosted peptide tracker — Today dashboard with dose log and adherence heatmap (demo data)" loading="lazy" /></div>
 </div>
 
 <div class="band"><section class="wrap" style="padding-top:44px">
   <p class="eyebrow">Own your own data</p>
   <h2 class="title teko">Your data never leaves your&nbsp;server</h2>
-  <p class="sub">No cloud account. No telemetry. No third party between you and your health record. You host it, back it up, export it, and delete it — on your terms.</p>
+  <p class="sub">A private, self-hosted, encrypted peptide tracker: no cloud account, no telemetry, no third party between you and your health record. You host it, back it up, export it, and delete it — on your terms.</p>
   <div class="privacy">
     <div><h3>Runs on your machine</h3><p>A single Docker container on your own server. No SaaS, no managed backend that can change terms or get breached.</p></div>
     <div><h3>Encrypted in depth</h3><p>Identifying free-text and lab values are encrypted with AES-256-GCM before they ever touch disk.</p></div>
@@ -128,7 +208,7 @@
 <section class="wrap" id="features">
   <p class="eyebrow">What it does</p>
   <h2 class="title teko">Built for the&nbsp;bench</h2>
-  <p class="sub">The dosing engine — the highest-stakes part — is exhaustively tested (600+ tests, pure decimal math, no floating-point drift).</p>
+  <p class="sub">Everything a self-hosted peptide tracker needs — and the dosing engine, the highest-stakes part, is exhaustively tested (600+ tests, pure decimal math, no floating-point drift).</p>
   <div class="grid">
     <div class="card"><div class="tag">Dosing</div><h3>Reconstitution engine</h3><p>Concentration, draw volume, and syringe markings computed with decimal math. Handles reconstituted and premixed vials.</p></div>
     <div class="card"><div class="tag">Protocols</div><h3>Titration &amp; stacks</h3><p>Multi-peptide schedules with ramping/titration steps and a live calc-chart showing exactly how each phase is computed.</p></div>
@@ -144,19 +224,19 @@
   <h2 class="title teko">Dark &amp; light. Desk &amp; phone.</h2>
   <p class="sub">A motorsport-inspired “pit-wall” design — carbon and race-orange — with a clean light theme. All screenshots use demo data only.</p>
   <div class="pair">
-    <div class="shot"><img src="docs/screenshots/analytics.png" alt="Analytics — dark theme" loading="lazy" /><div class="cap">Analytics &amp; plasma — dark</div></div>
-    <div class="shot"><img src="docs/screenshots/analytics-light.png" alt="Analytics — light theme" loading="lazy" /><div class="cap">Analytics &amp; plasma — light</div></div>
+    <div class="shot"><img src="docs/screenshots/analytics.png" alt="Analytics and single-compartment plasma-level modelling chart in the dark carbon theme (demo data)" loading="lazy" /><div class="cap">Analytics &amp; plasma — dark</div></div>
+    <div class="shot"><img src="docs/screenshots/analytics-light.png" alt="Analytics and plasma-level modelling chart in the light theme (demo data)" loading="lazy" /><div class="cap">Analytics &amp; plasma — light</div></div>
   </div>
   <div class="pair" style="margin-top:18px">
-    <div class="shot"><img src="docs/screenshots/bloodwork.png" alt="Bloodwork — dark theme" loading="lazy" /><div class="cap">Bloodwork — dark</div></div>
-    <div class="shot"><img src="docs/screenshots/dosing-light.png" alt="Log a dose — light theme" loading="lazy" /><div class="cap">Log a dose — light</div></div>
+    <div class="shot"><img src="docs/screenshots/bloodwork.png" alt="Bloodwork and biomarker trend tracking over time, dark theme (demo data)" loading="lazy" /><div class="cap">Bloodwork — dark</div></div>
+    <div class="shot"><img src="docs/screenshots/dosing-light.png" alt="Peptide reconstitution and draw-volume dose calculator, light theme (demo data)" loading="lazy" /><div class="cap">Log a dose — light</div></div>
   </div>
   <p class="eyebrow" style="margin-top:34px">On your phone</p>
   <div class="mobiles">
-    <div class="shot"><img src="docs/screenshots/today-mobile.png" alt="Today on mobile" loading="lazy" /></div>
-    <div class="shot"><img src="docs/screenshots/dosing-mobile.png" alt="Log a dose on mobile" loading="lazy" /></div>
-    <div class="shot"><img src="docs/screenshots/analytics-mobile.png" alt="Analytics on mobile" loading="lazy" /></div>
-    <div class="shot"><img src="docs/screenshots/bloodwork-mobile-light.png" alt="Bloodwork on mobile (light)" loading="lazy" /></div>
+    <div class="shot"><img src="docs/screenshots/today-mobile.png" alt="Peptide Pitstop installable PWA — Today screen on mobile (demo data)" loading="lazy" /></div>
+    <div class="shot"><img src="docs/screenshots/dosing-mobile.png" alt="Logging a peptide dose on mobile with reconstitution math (demo data)" loading="lazy" /></div>
+    <div class="shot"><img src="docs/screenshots/analytics-mobile.png" alt="Adherence heatmap and plasma-level analytics on mobile (demo data)" loading="lazy" /></div>
+    <div class="shot"><img src="docs/screenshots/bloodwork-mobile-light.png" alt="Bloodwork and biomarker trends on mobile in the light theme (demo data)" loading="lazy" /></div>
   </div>
 </section></div>
 
@@ -168,6 +248,38 @@
     <a class="btn coffee" href="https://buymeacoffee.com/peptidepitstop">☕ Support development</a>
   </div>
 </section>
+
+<div class="band"><section class="wrap" id="faq">
+  <p class="eyebrow">Common questions</p>
+  <h2 class="title teko">Self-hosted, open source, yours</h2>
+  <p class="sub">Straight answers for self-hosters comparing a free, open-source, Docker-deployable peptide &amp; GLP-1 tracker.</p>
+  <div class="privacy">
+    <div>
+      <h3>Is there a self-hosted peptide tracker?</h3>
+      <p>Yes — Peptide Pitstop is a self-hosted peptide &amp; GLP-1 tracker that runs entirely on your own hardware as a single Docker container. No cloud account, no managed backend: you host it, back it up, and control it yourself.</p>
+    </div>
+    <div>
+      <h3>Is it free and open source?</h3>
+      <p>100% free and open source under AGPL-3.0. No subscriptions, accounts, or paywalls — read, audit, and fork the full source on <a href="https://github.com/kavo91/peptide-pitstop">GitHub</a>.</p>
+    </div>
+    <div>
+      <h3>How do I deploy it with Docker?</h3>
+      <p>Deployment is a single Docker container. Pull the image, point it at a database file, and open it in any browser — full Docker, env-var, and demo-seed steps are in the README. Installs as a PWA for offline use too.</p>
+    </div>
+    <div>
+      <h3>Is my peptide &amp; GLP-1 data private?</h3>
+      <p>Your data never leaves your server. Identifying free-text and lab values are encrypted with AES-256-GCM before they touch disk, there is no telemetry, and fonts are self-hosted — nothing reaches a third party.</p>
+    </div>
+    <div>
+      <h3>Can it do reconstitution math?</h3>
+      <p>Yes — the reconstitution engine computes concentration, draw volume, and syringe markings with exact decimal math (no floating-point drift), for both reconstituted and premixed vials.</p>
+    </div>
+    <div>
+      <h3>What can I track?</h3>
+      <p>Reconstitution and draw-volume math, dose logs, titration and multi-peptide stacks, bloodwork and biomarker trends, single-compartment plasma-level modelling, and an adherence heatmap. Everything exports to CSV or PDF.</p>
+    </div>
+  </div>
+</section></div>
 
 <footer><div class="wrap">
   <span>© Peptide Pitstop · <a href="https://github.com/kavo91/peptide-pitstop">GitHub</a> · <a href="https://github.com/kavo91/peptide-pitstop/blob/main/LICENSE">AGPL-3.0</a> · <a href="https://buymeacoffee.com/peptidepitstop">Buy me a coffee</a></span>
