@@ -40,9 +40,9 @@ Peptide Pitstop is a private, phone-first web app for managing peptide and GLP-1
 
 This is the whole point. Health data this sensitive shouldn't live in a vendor's database you can't see.
 
-- **Runs on your own machine.** A single Docker container on your own server (built and tested on Unraid). No SaaS, no managed backend, no account on a service that can change its terms, get breached, or shut down.
+- **Runs on your own machine.** A single Docker container on your own server (any Docker host — Linux, NAS, Raspberry Pi, etc.). No SaaS, no managed backend, no account on a service that can change its terms, get breached, or shut down.
 - **Local-only accounts.** There is no public sign-up. The owner provisions the account locally; first run forces a `/setup` flow to set a password and enrol TOTP. Login requires **password + TOTP**, with signed httpOnly session cookies.
-- **Encryption in depth.** Identifying free-text and lab values are encrypted at the application layer with **AES-256-GCM** before they ever touch disk; the database file itself sits on your encrypted pool. Encrypted columns are opaque — they're never used in query filters.
+- **Encryption in depth.** Identifying free-text and lab values are encrypted at the application layer with **AES-256-GCM** before they ever touch disk; ideally the database file itself sits on an encrypted disk too. Encrypted columns are opaque — they're never used in query filters.
 - **No tracking, no analytics SDKs, no CDN.** There is no Google Analytics, Sentry, PostHog, or any usage telemetry — nothing reports your behaviour to anyone. The app's analytics are computed locally from your database, and fonts are **self-hosted** (served from your own server, not Google Fonts or any CDN). The only outbound traffic is the services *you* configure — your Cloudflare Tunnel, your Home Assistant webhook, your Garmin sync — plus an optional dosage-reference lookup that runs **only when you explicitly trigger it**.
 - **You hold the backups.** Continuous SQLite replication via [Litestream](https://litestream.io/) to a backup location you own — plus your normal server backup routine.
 - **Export everything, any time.** One-click CSV export for doses, lab panels, journal entries, and wearable data, plus a formatted PDF report. Your record is portable by design — never locked in.
@@ -158,18 +158,25 @@ npm run typecheck
 
 Two compose variants ship in this repo:
 
-**1. App + tunnel** (the default `docker-compose.yml`) — the Next.js app plus a Cloudflare tunnel:
+**1. Simple** (the default `docker-compose.yml`) — just the Next.js app:
 
 ```bash
 # On your server, in this directory, with a populated .env:
 docker compose up -d --build
 ```
 
-- The app runs internally only — **no host ports are published**.
-- `cloudflared` exposes it via your own Cloudflare Tunnel token.
-- Your SQLite database lives on a volume you control (keep it on an encrypted pool).
+- Serves on **http://localhost:3000** by default.
+- An optional Cloudflare Tunnel sidecar is included (commented out) to expose it publicly with no open ports — uncomment it and set `CLOUDFLARE_TUNNEL_TOKEN`.
+- Your SQLite database lives in the `./data` volume you control (back it up; ideally keep it on an encrypted disk).
 
-**2. Bundled production** (`deploy/bundled/`) — one container running all four services: the app, the Cloudflare tunnel, **Litestream backup**, and the **Garmin sync** sidecar, talking to each other over localhost. This is the full-featured production setup; Litestream replication and Garmin sync live here, not in the minimal variant above. See `deploy/bundled/cutover.sh`.
+**2. All-in-one** (`deploy/bundled/`) — one "batteries-included" container running every service: the app, the Cloudflare tunnel, **Litestream backup**, and the **Garmin sync** sidecar, talking to each other over localhost. A supervisor starts them; the app is the critical process and the optional services (tunnel, Garmin) start only when their env is configured.
+
+```bash
+# Build + run the bundled image:
+docker compose -f deploy/bundled/docker-compose.yml up -d --build
+```
+
+Set your timezone with `TZ` (e.g. `TZ=America/New_York`) so local-midnight schedules read correctly. If you use Garmin sync, make sure `./garmin-tokens` is owned by uid 1001 (the in-container user).
 
 ### Cloudflare Tunnel + Access
 
@@ -183,7 +190,7 @@ docker compose up -d --build
 |---|---|
 | `PT_FIELD_KEY` | 32-byte base64 key for AES-256-GCM field encryption |
 | `AUTH_SECRET` | Session signing secret |
-| `DATABASE_URL` | SQLite path (maps to your appdata volume) |
+| `DATABASE_URL` | SQLite path (maps to the `/data` volume) |
 | `HA_WEBHOOK_URL` | Home Assistant webhook for dose reminders |
 | `WELLNESS_IMPORT_TOKEN` | Bearer token the Garmin sidecar presents (fails closed if unset) |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Your Cloudflare Tunnel token |

@@ -1,10 +1,11 @@
-# Unraid deployment: the app + a Cloudflare Tunnel sidecar.
-# No ports are published to the host — cloudflared reaches the app over the
-# internal compose network and exposes it at peptides.example.com.
+# Docker Compose for self-hosting Peptide Pitstop.
+# By default the app is served on http://localhost:3000.
+# An optional Cloudflare Tunnel sidecar (commented out below) can expose it
+# publicly with no open ports — see the README for setup.
 services:
   app:
     build: .
-    container_name: peptide-tracker
+    container_name: peptide-pitstop
     restart: unless-stopped
     environment:
       - DATABASE_URL=file:/data/peptides.db
@@ -12,16 +13,19 @@ services:
       - AUTH_SECRET=${AUTH_SECRET}
       - HA_WEBHOOK_URL=${HA_WEBHOOK_URL}
     volumes:
-      - /mnt/user/appdata/peptide-tracker:/data   # Unraid appdata (full-disk encrypted)
-    expose:
-      - "3000"
+      - ./data:/data            # SQLite database + app data — back this directory up
+    ports:
+      - "3000:3000"
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: peptide-tunnel
-    restart: unless-stopped
-    command: tunnel run
-    environment:
-      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
-    depends_on:
-      - app
+  # ── Optional: expose the app over a Cloudflare Tunnel (no inbound ports) ──
+  # Uncomment this service and set CLOUDFLARE_TUNNEL_TOKEN in your .env, then
+  # change the `app` service above from `ports:` to `expose: ["3000"]`.
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: peptide-tunnel
+  #   restart: unless-stopped
+  #   command: tunnel run
+  #   environment:
+  #     - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+  #   depends_on:
+  #     - app

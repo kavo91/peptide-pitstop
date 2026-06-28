@@ -1,5 +1,5 @@
 # Litestream — continuous SQLite backup for Peptide Tracker.
-# Replicates the live DB to a local Unraid path (no cloud needed). An S3/B2
+# Replicates the live DB to a local path (no cloud needed). An S3/B2
 # replica can be added later by appending another entry under `replicas`.
 #
 # Restore (point-in-time):

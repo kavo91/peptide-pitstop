@@ -1,38 +1,38 @@
-# BUNDLED PROD deployment — ONE container runs ALL FOUR services:
-#   Next.js app + Cloudflare tunnel + Litestream backup + Garmin wellness sidecar.
-# Drop-in replacement for the 4-service prod compose.
+# All-in-one ("batteries-included") deployment — ONE container runs every service:
+#   Next.js app + Cloudflare Tunnel + Litestream backup + Garmin wellness sidecar.
+# A supervisor entrypoint starts them; the app is the critical process and the
+# optional services (tunnel, garmin) only start when their env is configured.
+# This is an alternative to the simple root docker-compose.yml (app only).
 #
 # Key trick: `extra_hosts: app:127.0.0.1` makes the name "app" resolve to this
-# container, so the remotely-managed named tunnel's existing origin
-# (http://app:3000) keeps working with NO Cloudflare dashboard change. In-container
-# the app, garmin /sync (:8080), and cloudflared all talk over localhost.
+# container, so a named Cloudflare Tunnel whose origin is http://app:3000 keeps
+# working with no dashboard change. In-container the app, garmin /sync (:8080),
+# and cloudflared all talk over localhost.
 #
-# Cutover: deploy/bundled/cutover.sh. Rollback: restore docker-compose.sidecar.yml.bak.
-# NOTE: garmin-tokens dir must be chown 1001:1001 (container runs as nextjs uid 1001).
+# Set the secrets below in a .env file next to this compose.
+# NOTE: if you use Garmin sync, the ./garmin-tokens dir must be owned by uid 1001
+# (the in-container 'nextjs' user): `mkdir -p garmin-tokens && sudo chown 1001:1001 garmin-tokens`.
 services:
   app:
     build:
-      context: /mnt/user/appdata/peptide-tracker/app-src
+      context: ../..
       dockerfile: deploy/bundled/Dockerfile
-    image: peptide-tracker:bundled
-    container_name: peptide-tracker
+    image: peptide-pitstop:bundled
+    container_name: peptide-pitstop
     restart: unless-stopped
     extra_hosts:
       - "app:127.0.0.1"
-    labels:
-      - net.unraid.docker.icon=https://peptides.example.com/icons/icon-512.png
-      - net.unraid.docker.webui=https://peptides.example.com
     environment:
-      - TZ=Australia/Brisbane
+      - TZ=${TZ:-UTC}                  # set your timezone so local-midnight schedules read correctly
       - DATABASE_URL=file:/data/peptides.db
       - PT_FIELD_KEY=${PT_FIELD_KEY}
       - AUTH_SECRET=${AUTH_SECRET}
       - HA_WEBHOOK_URL=${HA_WEBHOOK_URL}
       - WELLNESS_IMPORT_TOKEN=${WELLNESS_IMPORT_TOKEN}
       - PRISMA_QUERY_ENGINE_LIBRARY=/app/node_modules/.prisma/client/libquery_engine-linux-musl-openssl-3.0.x.so.node
-      # cloudflared (in-container) — the named tunnel token.
+      # Optional — Cloudflare Tunnel (leave blank to publish a local port instead; see below).
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
-      # garmin-sync (in-container) — talks to the app + serves /sync over localhost.
+      # Optional — Garmin wellness sync (leave blank to disable).
       - GARMIN_EMAIL=${GARMIN_EMAIL}
       - GARMIN_PASSWORD=${GARMIN_PASSWORD}
       - APP_IMPORT_URL=http://localhost:3000/api/wellness/garmin
@@ -41,9 +41,13 @@ services:
       - SYNC_INTERVAL_SECONDS=21600
       - TOKENS_DIR=/tokens
     volumes:
-      - /mnt/user/appdata/peptide-tracker/data:/data
-      - /mnt/user/appdata/peptide-tracker/garmin-tokens:/tokens
-      - /mnt/user/Backups/peptide-tracker:/backup
+      - ./data:/data                  # SQLite database + app data — back this up
+      - ./garmin-tokens:/tokens       # saved Garmin auth tokens (only if using Garmin sync)
+      - ./backup:/backup              # Litestream replica target
+    # Using a Cloudflare Tunnel? Keep `expose`. Otherwise comment it out and
+    # publish the port instead:
+    #   ports:
+    #     - "3000:3000"
     expose:
       - "3000"
 networks: {}

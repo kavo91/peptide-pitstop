@@ -6,9 +6,9 @@
 # when their config is present (so a DEV instance with blank TUNNEL_TOKEN / Garmin
 # creds doesn't crash-loop them). litestream + app always run. Optional services
 # run in restart-loops so a transient failure (e.g. a Garmin auth hiccup) never
-# takes prod down.
+# takes the whole container down.
 
-# 1) Migrations (non-fatal — matches the sidecar image's migrate-on-start).
+# 1) Migrations (non-fatal — migrate-on-start).
 node node_modules/prisma/build/index.js migrate deploy \
   || echo "[start] prisma migrate deploy skipped — starting with existing schema"
 
