@@ -35,7 +35,10 @@ export function generateMetadata(): Metadata {
     manifest: "/manifest.webmanifest",
     // Peptide Pitstop's brake-disc favicon.
     icons: {
-      icon: "/icons/icon-pitstop.svg",
+      icon: [
+        { url: "/icons/icon-pitstop.svg", type: "image/svg+xml" },
+        { url: "/icons/favicon-32.png", type: "image/png", sizes: "32x32" },
+      ],
       shortcut: "/icons/icon-pitstop.svg",
       // iOS home-screen ignores SVG apple-touch-icons — must be a PNG.
       apple: [{ url: "/icons/apple-touch-icon-pitstop.png", sizes: "180x180" }],
