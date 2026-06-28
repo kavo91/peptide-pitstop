@@ -16,8 +16,7 @@ function gradeColor(pct: number | null): string {
  * sits inside a radial gauge whose arc + figure colour grade by value (red when
  * low), filling the stretched stat-cell like a dashboard tacho. The gauge + hero
  * numeral scale to the card width via container queries, so it stays the hero at
- * both the laptop (~300px) and iPhone (~170px) cell sizes. Rendered only under
- * DESIGN=pitstop (the current design keeps the plain MetricTile).
+ * both the laptop (~300px) and iPhone (~170px) cell sizes.
  */
 export function AdherenceTacho({ pct }: { pct: number | null }) {
   const v = pct == null ? 0 : Math.max(0, Math.min(100, pct));

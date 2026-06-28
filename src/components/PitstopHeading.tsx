@@ -1,41 +1,28 @@
 /**
- * Page heading with a runtime design switch.
+ * Page heading — renders the title in the Teko display face, UPPERCASE, split
+ * into two parts joined by a race-orange "/" (e.g. DASH/BOARD). A large faded
+ * "race number" sits behind the title as a non-interactive ghost numeral.
  *
- *  - "current" (default): renders EXACTLY what the page rendered before — a
- *    plain `<h1 className={className}>{title}</h1>`. No split, no ghost number,
- *    no visual change, so the default design stays byte-identical.
- *  - "pitstop": renders the title in the Teko display face, UPPERCASE, split
- *    into two parts joined by a race-orange "/" (e.g. DASH/BOARD). A large faded
- *    "race number" sits behind the title as a non-interactive ghost numeral.
- *
- * Server-safe: pure presentational, no hooks, no client APIs. Pass the design
- * in from the server page via activeDesign() so this never reads process.env.
+ * Server-safe: pure presentational, no hooks, no client APIs.
  */
 import type { ReactNode } from "react";
 
 interface PitstopHeadingProps {
-  /** Plain title — rendered verbatim for the current design. */
+  /** Plain title — used when no explicit split is given. */
   title: string;
   /** Race number for the ghost numeral (zero-padded to 2 digits). */
   index: number;
-  /** Active design pack — pass activeDesign() from the server page. */
-  design: "pitstop" | "current";
   /** h1 classes — preserves each page's existing heading spacing/scale. */
   className?: string;
   /**
-   * Optional two-part split for the pitstop heading, e.g. ["DASH","BOARD"] →
-   * DASH/BOARD. When omitted, the pitstop title renders uppercase with a leading
-   * orange "/" accent. Ignored entirely by the current design.
+   * Optional two-part split for the heading, e.g. ["DASH","BOARD"] →
+   * DASH/BOARD. When omitted, the title renders uppercase with a leading
+   * orange "/" accent.
    */
   split?: readonly [string, string];
 }
 
-export function PitstopHeading({ title, index, design, className, split }: PitstopHeadingProps) {
-  // Current design: byte-identical to the page's original plain heading.
-  if (design !== "pitstop") {
-    return <h1 className={className}>{title}</h1>;
-  }
-
+export function PitstopHeading({ title, index, className, split }: PitstopHeadingProps) {
   const race = String(index).padStart(2, "0");
   const titleNode: ReactNode = split ? (
     <>

@@ -106,7 +106,7 @@ The motorsport "pit-wall" dark theme ships alongside a clean light theme, and th
 
 ### Experience
 - **Installable PWA.** Add to your home screen; works offline for the things that matter on the go.
-- **Pit-wall design language.** A motorsport-inspired "Peptide Pitstop" theme (carbon + race-orange, radial gauges, split headings) — switchable via a single `DESIGN` env var, with the original clean theme byte-identical when unset.
+- **Pit-wall design language.** A motorsport-inspired theme — carbon + race-orange, radial gauges, split headings — with light and dark modes.
 
 ---
 
@@ -195,7 +195,6 @@ Set your timezone with `TZ` (e.g. `TZ=America/New_York`) so local-midnight sched
 | `WELLNESS_IMPORT_TOKEN` | Bearer token the Garmin sidecar presents (fails closed if unset) |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Your Cloudflare Tunnel token |
 | `GARMIN_EMAIL` / `GARMIN_PASSWORD` | Consumed only by the Garmin sync sidecar |
-| `DESIGN` | UI theme pack (`pitstop`, or unset for the original theme) |
 
 See `.env.example` for the full, commented list.
 

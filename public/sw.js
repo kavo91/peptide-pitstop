@@ -1,5 +1,5 @@
 /**
- * Peptide Tracker — app-shell service worker.
+ * Peptide Pitstop — app-shell service worker.
  *
  * Strategy:
  *   • Navigation requests (HTML documents) → NETWORK-FIRST. App Router / RSC
@@ -20,7 +20,7 @@
 // Bumped v1 → v2: the v1 cache-first strategy poisoned the cache with stale
 // page HTML. The activate handler below purges any cache != CACHE_NAME, so
 // bumping this name evicts the bad v1 entries on next activation.
-const CACHE_NAME = "peptide-shell-v4";
+const CACHE_NAME = "peptide-shell-v5";
 
 // App shell routes — pages that should load offline (no data, just the shell).
 // IMPORTANT: cache.addAll() is atomic — one 404 aborts the entire install.
@@ -32,12 +32,12 @@ const SHELL_URLS = [
   "/inventory",
   "/more",
   "/manifest.webmanifest",
-  "/icons/icon.svg",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
-  "/icons/icon-maskable-512.png",
-  "/apple-touch-icon.png",
-  "/favicon.ico",
+  "/icons/icon-pitstop.svg",
+  "/icons/icon-pitstop-192.png",
+  "/icons/icon-pitstop-512.png",
+  "/icons/icon-pitstop-maskable-512.png",
+  "/icons/apple-touch-icon-pitstop.png",
+  "/icons/favicon-32.png",
 ];
 
 // ── Install: pre-cache shell ──────────────────────────────────────────────────

@@ -6,7 +6,6 @@ import { HeatmapGrid } from "@/components/HeatmapGrid";
 import { MultiPlasmaChart } from "@/components/MultiPlasmaChart";
 import { InsightsCard } from "@/components/InsightsCard";
 import { PitstopHeading } from "@/components/PitstopHeading";
-import { activeDesign } from "@/lib/design";
 import { PAGE_MAIN } from "@/lib/layout";
 import { redirect } from "next/navigation";
 
@@ -24,7 +23,6 @@ export default async function AnalyticsPage() {
   const data = await getAnalyticsData(user.id);
   const insights = await getInsightsData(user.id, data.overallAdherence.adherencePct);
   const nowKey = ymd(data.now);
-  const design = activeDesign();
 
   const heatmapFromLabel = data.heatmapFrom.toLocaleDateString(undefined, {
     month: "short",
@@ -36,7 +34,7 @@ export default async function AnalyticsPage() {
     <main className={PAGE_MAIN}>
       <BackButton fallback="/more" />
 
-      <PitstopHeading title="Analytics" index={6} design={design} className="mb-1 text-3xl font-semibold tracking-tight" split={["ANA", "LYTICS"]} />
+      <PitstopHeading title="Analytics" index={6} className="mb-1 text-3xl font-semibold tracking-tight" split={["ANA", "LYTICS"]} />
       <p className="mb-6 text-sm text-muted">
         Dose history, adherence, and estimated plasma levels.
         <span className="block text-xs">Not medical advice.</span>
@@ -63,50 +61,32 @@ export default async function AnalyticsPage() {
         <div className="lg:flex lg:flex-col">
           <section className="mb-4 lg:mb-0 lg:flex lg:grow lg:flex-col">
             <h2 className="mb-2 text-sm font-semibold">Adherence (90 days)</h2>
-            {design === "pitstop" ? (
-              // Fluid radial gauges that resize to fit the card: Overall is the
-              // large hero, per-peptide gauges fill a responsive grid below.
-              <div className="rounded-card bg-surface p-4 shadow-sm ring-1 ring-line/10 lg:grow">
-                {/* Overall "hero" gauge. The fluid gauge fills its container up to the
-                    xl cap, so a responsive container width keeps it COMPACT on mobile
-                    (~96px, just above the per-peptide gauges) and only blows it up to
-                    the full hero dial at lg+ (laptop/desktop). */}
-                <div className="mb-4 flex justify-center">
-                  <div className="w-24 lg:w-[150px]">
-                    <AdherenceCard adherence={data.overallAdherence} design={design} size="xl" fluid />
-                  </div>
+            {/* Fluid radial gauges that resize to fit the card: Overall is the
+                large hero, per-peptide gauges fill a responsive grid below. */}
+            <div className="rounded-card bg-surface p-4 shadow-sm ring-1 ring-line/10 lg:grow">
+              {/* Overall "hero" gauge. The fluid gauge fills its container up to the
+                  xl cap, so a responsive container width keeps it COMPACT on mobile
+                  (~96px, just above the per-peptide gauges) and only blows it up to
+                  the full hero dial at lg+ (laptop/desktop). */}
+              <div className="mb-4 flex justify-center">
+                <div className="w-24 lg:w-[150px]">
+                  <AdherenceCard adherence={data.overallAdherence} size="xl" fluid />
                 </div>
-                {data.adherenceByPeptide.length > 1 && (
-                  // Mobile: a centered flex-wrap so a partial last row (e.g. 5 in 3s →
-                  // 3 + 2) centres instead of sitting ragged-left. sm+ keeps the tidy
-                  // 5-up grid. Each item is width-capped so 3 sit per row on a phone.
-                  <div className="flex flex-wrap justify-center gap-3 sm:grid sm:grid-cols-5">
-                    {data.adherenceByPeptide.map((pa) => (
-                      <div key={pa.peptideId} className="w-[28%] sm:w-auto">
-                        <AdherenceCard peptideName={pa.peptideName} adherence={pa.adherence} design={design} size="md" fluid />
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
-            ) : (
-              <AdherenceCard adherence={data.overallAdherence} />
-            )}
+              {data.adherenceByPeptide.length > 1 && (
+                // Mobile: a centered flex-wrap so a partial last row (e.g. 5 in 3s →
+                // 3 + 2) centres instead of sitting ragged-left. sm+ keeps the tidy
+                // 5-up grid. Each item is width-capped so 3 sit per row on a phone.
+                <div className="flex flex-wrap justify-center gap-3 sm:grid sm:grid-cols-5">
+                  {data.adherenceByPeptide.map((pa) => (
+                    <div key={pa.peptideId} className="w-[28%] sm:w-auto">
+                      <AdherenceCard peptideName={pa.peptideName} adherence={pa.adherence} size="md" fluid />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
-
-          {design !== "pitstop" && data.adherenceByPeptide.length > 1 && (
-            <section className="mb-6">
-              <div className="grid gap-2 sm:grid-cols-2">
-                {data.adherenceByPeptide.map((pa) => (
-                  <AdherenceCard
-                    key={pa.peptideId}
-                    peptideName={pa.peptideName}
-                    adherence={pa.adherence}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
         </div>
       </div>
 
@@ -126,7 +106,6 @@ export default async function AnalyticsPage() {
               <MultiPlasmaChart
                 plasmaByPeptide={data.plasmaByPeptide}
                 now={data.now}
-                design={design}
                 missedDoses={data.missedDoseTimes}
               />
             </div>

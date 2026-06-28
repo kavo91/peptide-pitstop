@@ -2,17 +2,18 @@ import { describe, it, expect } from "vitest";
 import { contrastRatio } from "./color-contrast";
 
 /**
- * Locks the pitstop gauge / chart token colours against WCAG regression in BOTH
- * themes. These hexes mirror the CSS custom properties in globals.css (kept in
- * sync by hand — same pattern as color-contrast-tokens.test.ts). They are applied
- * to SVG gauges/charts as `rgb(var(--token))`, which resolves in this stack.
+ * Locks the pitstop gauge / chart token colours against WCAG regression in both
+ * light and dark themes. These hexes mirror the CSS custom properties in
+ * globals.css (kept in sync by hand — same pattern as
+ * color-contrast-tokens.test.ts). They are applied to SVG gauges/charts as
+ * `rgb(var(--token))`, which resolves in this stack.
  *
  *  - LIGHT Gulf: gauges + chart series sit on the white card surface (#FFFFFF);
  *    the centre numeral is text, so foregrounds need the AA body ratio (>=4.5:1).
  *    This is what the Gulf-polish work fixed (the old hardcoded hex failed here).
- *  - DARK pitstop: the "slipping" gauge figure is the ORIGINAL race-orange
- *    #FF5B14 (NOT the hi-viz --warn #E8FF3A), restoring dark byte-identity; on the
- *    #16181C surface it clears the large/graphical 3:1 threshold.
+ *  - DARK: the "slipping" gauge figure is the race-orange #FF5B14 (NOT the
+ *    hi-viz --warn #E8FF3A); on the #16181C surface it clears the
+ *    large/graphical 3:1 threshold.
  */
 describe("pitstop gauge/chart tokens — LIGHT Gulf on #FFFFFF clear AA (>=4.5:1)", () => {
   const white = "#FFFFFF";
@@ -31,10 +32,10 @@ describe("pitstop gauge/chart tokens — LIGHT Gulf on #FFFFFF clear AA (>=4.5:1
   }
 });
 
-describe("pitstop gauge tokens — DARK on #16181C keep the original look", () => {
+describe("pitstop gauge tokens — DARK on #16181C", () => {
   const surface = "#16181C";
-  it("--gauge-slip dark is the original race-orange #FF5B14 (graphical >= 3:1)", () => {
-    // Documents + guards the dark byte-identity value (vs the hi-viz --warn #E8FF3A).
+  it("--gauge-slip dark is race-orange #FF5B14 (graphical >= 3:1)", () => {
+    // Documents + guards the dark --gauge-slip value (vs the hi-viz --warn #E8FF3A).
     expect(contrastRatio("#FF5B14", surface)).toBeGreaterThanOrEqual(3);
   });
 });

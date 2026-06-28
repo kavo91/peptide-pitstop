@@ -17,14 +17,8 @@ interface Props {
    */
   compactOnPhone?: boolean;
   /**
-   * Active design pack, threaded from the server page (client components never
-   * read process.env). Only the "pitstop" pack renders the missed-dose redline
-   * + legend item; "current" stays byte-identical to the original chart.
-   */
-  design?: "pitstop" | "current";
-  /**
    * Scheduled-but-not-logged dose times within the chart window. Rendered as
-   * dashed-red vertical markers under the pitstop design only. Ignored otherwise.
+   * dashed-red vertical markers.
    */
   missedDoses?: Date[];
 }
@@ -55,7 +49,6 @@ export function MultiPlasmaChart({
   plasmaByPeptide,
   now,
   compactOnPhone = false,
-  design = "current",
   missedDoses = [],
 }: Props) {
   // Same guard as PlasmaChart: a series needs >= 2 points to draw a line.
@@ -115,29 +108,25 @@ export function MultiPlasmaChart({
   const labelStart = fmt(new Date(minT));
   const labelEnd = fmt(new Date(maxT));
 
-  // Missed-dose markers — pitstop only. Map each missed time onto the shared X
-  // scale, keep only those inside the visible window, and de-dupe coincident
-  // x-positions so overlapping markers don't double-paint. Height-independent.
-  const isPitstop = design === "pitstop";
-  const missedX = isPitstop
-    ? Array.from(
-        new Set(
-          missedDoses
-            .map((d) => d.getTime())
-            .filter((t) => t >= minT && t <= maxT)
-            .map((t) => Number(toViewX(t, minT, maxT).toFixed(1))),
-        ),
-      )
-    : [];
+  // Missed-dose markers. Map each missed time onto the shared X scale, keep only
+  // those inside the visible window, and de-dupe coincident x-positions so
+  // overlapping markers don't double-paint. Height-independent.
+  const missedX = Array.from(
+    new Set(
+      missedDoses
+        .map((d) => d.getTime())
+        .filter((t) => t >= minT && t <= maxT)
+        .map((t) => Number(toViewX(t, minT, maxT).toFixed(1))),
+    ),
+  );
 
-  // Intermediate x-axis date ticks — pitstop only. Three evenly-spaced points
-  // (25/50/75% of the window) give faint gridlines + tick marks + centred date
-  // labels so the time axis reads beyond the bare start/now/end labels. Gated to
-  // pitstop so the current design stays byte-identical (no extra axis chrome).
-  // Height-independent X positions; the verticals/labels paint per-height inside
-  // renderSvg. All x sit inside [PAD.left, WIDTH - PAD.right] → no overflow.
+  // Intermediate x-axis date ticks. Three evenly-spaced points (25/50/75% of the
+  // window) give faint gridlines + tick marks + centred date labels so the time
+  // axis reads beyond the bare start/now/end labels. Height-independent X
+  // positions; the verticals/labels paint per-height inside renderSvg. All x sit
+  // inside [PAD.left, WIDTH - PAD.right] → no overflow.
   const axisTicks =
-    isPitstop && maxT > minT
+    maxT > minT
       ? [0.25, 0.5, 0.75].map((f) => {
           const t = minT + f * (maxT - minT);
           return { x: toViewX(t, minT, maxT), label: fmt(new Date(t)) };
@@ -166,9 +155,8 @@ export function MultiPlasmaChart({
         className="w-full"
         style={{ height: "auto" }}
       >
-        {/* Intermediate x-axis gridlines (pitstop only) — faint verticals
-            painted FIRST so they sit behind the curves. Empty array under the
-            current design → renders nothing (byte-identical). */}
+        {/* Intermediate x-axis gridlines — faint verticals painted FIRST so they
+            sit behind the curves. */}
         {axisTicks.map((tk, i) => (
           <line
             key={`grid-${i}`}
@@ -208,11 +196,11 @@ export function MultiPlasmaChart({
           </g>
         ))}
 
-        {/* Missed-dose markers (pitstop only) — DOTTED red verticals topped with
-            a small downward flag at each scheduled-but-not-logged dose time. The
-            dotted pattern + event flag read as discrete markers, distinct from
-            the peptide-coloured DASHED forecast curves (differentiated by marker
-            + dash style + colour, not dash alone). Empty under current design. */}
+        {/* Missed-dose markers — DOTTED red verticals topped with a small
+            downward flag at each scheduled-but-not-logged dose time. The dotted
+            pattern + event flag read as discrete markers, distinct from the
+            peptide-coloured DASHED forecast curves (differentiated by marker +
+            dash style + colour, not dash alone). */}
         {missedX.map((x, i) => (
           <g key={`missed-${i}`}>
             <path
@@ -266,9 +254,8 @@ export function MultiPlasmaChart({
           {labelStart}
         </text>
 
-        {/* Intermediate x-axis ticks + centred date labels (pitstop only) — fill
-            in the gap between the start/now/end labels. Empty under the current
-            design → renders nothing (byte-identical). */}
+        {/* Intermediate x-axis ticks + centred date labels — fill in the gap
+            between the start/now/end labels. */}
         {axisTicks.map((tk, i) => (
           <g key={`tick-${i}`}>
             <line
@@ -344,9 +331,8 @@ export function MultiPlasmaChart({
             {ln.peptideName}
           </li>
         ))}
-        {/* Missed-dose legend entry — pitstop only, and only when markers exist.
-            Current design renders nothing extra (byte-identical legend). */}
-        {isPitstop && missedX.length > 0 && (
+        {/* Missed-dose legend entry — only when markers exist. */}
+        {missedX.length > 0 && (
           <li className="inline-flex items-center gap-1.5">
             <svg width="16" height="6" aria-hidden="true">
               {/* DOTTED red — mirrors the dotted chart markers and reads apart

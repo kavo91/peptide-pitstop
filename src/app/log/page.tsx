@@ -5,7 +5,6 @@ import { AdHocLogForm } from "@/components/AdHocLogForm";
 import { OralLogForm } from "@/components/OralLogForm";
 import { BackButton } from "@/components/BackButton";
 import { buildProtocolDoseOptions, type ProtocolForOptions } from "@/lib/log/protocol-options";
-import { activeDesign } from "@/lib/design";
 import { plannedDayWindow } from "@/lib/planned/match";
 import { PitstopHeading } from "@/components/PitstopHeading";
 import { PAGE_MAIN } from "@/lib/layout";
@@ -14,7 +13,6 @@ export const dynamic = "force-dynamic";
 
 export default async function LogPage() {
   const user = await getCurrentUser();
-  const design = activeDesign();
   if (!user) return <main className="mx-auto max-w-md px-4 py-10 lg:max-w-2xl lg:px-8"><p className="text-muted">No data yet — run the seed.</p></main>;
 
   const preps = await prisma.preparation.findMany({
@@ -179,12 +177,8 @@ export default async function LogPage() {
   return (
     <main className={PAGE_MAIN}>
       <BackButton fallback="/" />
-      <PitstopHeading title="Log a dose" index={3} design={design} className="mb-1 text-3xl font-semibold tracking-tight" split={["LOG", "DOSE"]} />
-      {design === "pitstop" ? (
-        <p className="mb-6 font-mono uppercase tracking-[0.16em] text-xs text-muted">Record an injection</p>
-      ) : (
-        <p className="mb-6 text-muted">Record any dose, any time — independent of the schedule.</p>
-      )}
+      <PitstopHeading title="Log a dose" index={3} className="mb-1 text-3xl font-semibold tracking-tight" split={["LOG", "DOSE"]} />
+      <p className="mb-6 font-mono uppercase tracking-[0.16em] text-xs text-muted">Record an injection</p>
       {/* Desktop (≥1440px): ad-hoc form LEFT, oral medications RIGHT in a two-up
           grid. The grid only activates when oral options exist, so the second
           column is never empty. Mobile / smaller laptops stay single column
@@ -192,7 +186,7 @@ export default async function LogPage() {
           `sm` breakpoint, where the form's sticky mobile CTA is already static,
           so two-up never affects the sticky CTA. */}
       <div className={oralOptions.length > 0 ? "min-[1440px]:grid min-[1440px]:grid-cols-2 min-[1440px]:items-start min-[1440px]:gap-8" : undefined}>
-        <AdHocLogForm options={options} syringes={syringes} suggestedSiteByPeptide={suggestedSiteByPeptide} recentSitesByPeptide={recentSitesByPeptide} protocolOptions={protocolOptions} design={design} />
+        <AdHocLogForm options={options} syringes={syringes} suggestedSiteByPeptide={suggestedSiteByPeptide} recentSitesByPeptide={recentSitesByPeptide} protocolOptions={protocolOptions} />
 
       {oralOptions.length > 0 && (
         <section className="mt-8 min-[1440px]:mt-0">
@@ -201,18 +195,14 @@ export default async function LogPage() {
             {oralOptions.map((o) => (
               <li key={o.peptideId} className="rounded-card bg-surface shadow-sm ring-1 ring-line/10">
                 <details>
-                  {design === "pitstop" ? (
-                    <summary className="flex cursor-pointer items-center justify-between p-4">
-                      <span className="uppercase tracking-[0.06em] font-medium">{o.peptideName}</span>
-                      {loggedTodayPeptideIds.has(o.peptideId) ? (
-                        <span className="rounded-control bg-ok/10 px-2.5 py-1 text-xs font-medium uppercase tracking-[0.08em] text-ok ring-1 ring-ok/40">Taken</span>
-                      ) : (
-                        <span className="rounded-control bg-accent/10 px-2.5 py-1 text-xs font-medium uppercase tracking-[0.08em] text-accent ring-1 ring-accent/40">Log</span>
-                      )}
-                    </summary>
-                  ) : (
-                    <summary className="cursor-pointer p-4 font-medium">{o.peptideName}</summary>
-                  )}
+                  <summary className="flex cursor-pointer items-center justify-between p-4">
+                    <span className="uppercase tracking-[0.06em] font-medium">{o.peptideName}</span>
+                    {loggedTodayPeptideIds.has(o.peptideId) ? (
+                      <span className="rounded-control bg-ok/10 px-2.5 py-1 text-xs font-medium uppercase tracking-[0.08em] text-ok ring-1 ring-ok/40">Taken</span>
+                    ) : (
+                      <span className="rounded-control bg-accent/10 px-2.5 py-1 text-xs font-medium uppercase tracking-[0.08em] text-accent ring-1 ring-accent/40">Log</span>
+                    )}
+                  </summary>
                   <div className="border-t border-line/10 p-4">
                     <OralLogForm
                       protocolId={o.protocolId}

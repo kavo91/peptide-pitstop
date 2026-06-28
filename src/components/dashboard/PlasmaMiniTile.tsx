@@ -17,13 +17,11 @@ interface Props {
   plasmaByPeptide: PeptidePlasma[];
   mostRecentPeptideId: string | null;
   now: Date;
-  /** Active design pack, threaded from the Dashboard RSC (no client env read). */
-  design?: "pitstop" | "current";
-  /** Missed-dose times for the chart's pitstop-only redline markers. */
+  /** Missed-dose times for the chart's redline markers. */
   missedDoses?: Date[];
 }
 
-export function PlasmaMiniTile({ plasmaByPeptide, now, design = "current", missedDoses = [] }: Props) {
+export function PlasmaMiniTile({ plasmaByPeptide, now, missedDoses = [] }: Props) {
   const hasData = plasmaByPeptide.some((p) => p.series.length >= 2);
 
   if (!hasData) {
@@ -39,7 +37,7 @@ export function PlasmaMiniTile({ plasmaByPeptide, now, design = "current", misse
     <Link href="/analytics" className="block">
       <div className="rounded-card bg-surface p-4 ring-1 ring-line/10 shadow-sm">
         <p className="mb-2 text-xs font-medium text-muted">Plasma — all peptides</p>
-        <MultiPlasmaChart plasmaByPeptide={plasmaByPeptide} now={now} compactOnPhone design={design} missedDoses={missedDoses} />
+        <MultiPlasmaChart plasmaByPeptide={plasmaByPeptide} now={now} compactOnPhone missedDoses={missedDoses} />
       </div>
     </Link>
   );

@@ -3,7 +3,6 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/owner";
 import { decryptField } from "@/lib/crypto/fieldEncryption";
 import { deserializeSideEffects } from "@/lib/side-effects";
-import { brandName } from "@/lib/design";
 import {
   buildReportPdf,
   type ReportData,
@@ -171,7 +170,7 @@ async function buildReportData(
   const labs = [...panelMap.values()].sort((a, b) => a.collectedDate.getTime() - b.collectedDate.getTime());
 
   return {
-    brand: brandName(),
+    brand: "Peptide Pitstop",
     ownerEmail,
     generatedAt: new Date(),
     from,

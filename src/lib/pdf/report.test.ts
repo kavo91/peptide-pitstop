@@ -7,7 +7,7 @@ const PDF_MAGIC = "%PDF";
 function sampleData(): ReportData {
   const d = (s: string) => new Date(s);
   return {
-    brand: "Peptide Tracker",
+    brand: "Peptide Pitstop",
     ownerEmail: "owner@example.com",
     generatedAt: d("2026-06-23T08:00:00"),
     from: d("2026-03-25T00:00:00"),
@@ -64,7 +64,7 @@ function sampleData(): ReportData {
 /** A fully-empty report — every section degrades to a "no data" line. */
 function emptyData(): ReportData {
   return {
-    brand: "Peptide Tracker",
+    brand: "Peptide Pitstop",
     ownerEmail: "owner@example.com",
     generatedAt: new Date("2026-06-23T08:00:00"),
     from: new Date("2026-03-25T00:00:00"),

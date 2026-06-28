@@ -19,7 +19,6 @@ import { BackButton } from "@/components/BackButton";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SignOutEverywhereButton } from "@/components/SignOutEverywhereButton";
 import { PitstopHeading } from "@/components/PitstopHeading";
-import { activeDesign } from "@/lib/design";
 import { signOutEverywhere } from "@/app/actions/auth";
 import { PAGE_MAIN } from "@/lib/layout";
 
@@ -118,7 +117,7 @@ export default async function SettingsPage() {
   return (
     <main className={PAGE_MAIN}>
       <BackButton />
-      <PitstopHeading title="Settings" index={10} design={activeDesign()} className="mb-1 text-3xl font-semibold tracking-tight" split={["SET", "TINGS"]} />
+      <PitstopHeading title="Settings" index={10} className="mb-1 text-3xl font-semibold tracking-tight" split={["SET", "TINGS"]} />
       <p className="mb-6 text-muted">Manage your peptides and syringes.</p>
 
       <section className="mb-8">

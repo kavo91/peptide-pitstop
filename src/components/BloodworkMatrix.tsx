@@ -1,9 +1,8 @@
 /**
- * Pitstop-only bloodwork comparison matrix — a biomarker × (last 3 panels,
- * newest-first) table styled as a race telemetry sheet. Presentational and
- * read-only: it receives already-decoded panel data from the server page and
- * derives nothing but display state (out-of-range flags + improved-vs-prior
- * arrows). Rendered ONLY when the pitstop design is active.
+ * Bloodwork comparison matrix — a biomarker × (last 3 panels, newest-first)
+ * table styled as a race telemetry sheet. Presentational and read-only: it
+ * receives already-decoded panel data from the server page and derives nothing
+ * but display state (out-of-range flags + improved-vs-prior arrows).
  *
  * Reference only — not medical advice.
  */

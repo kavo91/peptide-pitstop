@@ -10,7 +10,6 @@ import { decryptField } from "@/lib/crypto/fieldEncryption";
 import { BackButton } from "@/components/BackButton";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { PitstopHeading } from "@/components/PitstopHeading";
-import { activeDesign } from "@/lib/design";
 import { PAGE_MAIN } from "@/lib/layout";
 import { deletePrescription } from "@/app/actions/prescriptions";
 
@@ -38,7 +37,7 @@ export default async function PrescriptionsPage() {
   if (!user) {
     return (
       <main className="mx-auto max-w-md px-4 py-10">
-        <PitstopHeading title="Prescriptions" index={9} design={activeDesign()} className="text-3xl font-semibold tracking-tight" split={["PRE", "SCRIPTIONS"]} />
+        <PitstopHeading title="Prescriptions" index={9} className="text-3xl font-semibold tracking-tight" split={["PRE", "SCRIPTIONS"]} />
         <p className="mt-4 text-muted">No data yet — run the seed.</p>
       </main>
     );
@@ -57,7 +56,7 @@ export default async function PrescriptionsPage() {
       <BackButton />
       <div className="mb-6 flex items-start justify-between gap-3">
         <div>
-          <PitstopHeading title="Prescriptions" index={9} design={activeDesign()} className="text-3xl font-semibold tracking-tight" split={["PRE", "SCRIPTIONS"]} />
+          <PitstopHeading title="Prescriptions" index={9} className="text-3xl font-semibold tracking-tight" split={["PRE", "SCRIPTIONS"]} />
           <p className="text-muted">Refills, cost, expiry, and reorder reminders.</p>
         </div>
         <Link href="/prescriptions/new" className="shrink-0 rounded-control bg-accent px-3 py-2 text-sm font-medium text-onAccent">+ Add prescription</Link>

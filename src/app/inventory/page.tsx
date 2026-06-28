@@ -10,28 +10,12 @@ import { prisma } from "@/lib/db";
 import { ReconWizard } from "@/components/ReconWizard";
 import { VialActions } from "@/components/VialActions";
 import { VialPrescription } from "@/components/VialPrescription";
-import { activeDesign } from "@/lib/design";
 import { PitstopHeading } from "@/components/PitstopHeading";
 import { VialGlyph, VialLevelBar, VialStatusChip, vialState, vialFill } from "@/components/VialGlyph";
 import Link from "next/link";
 import { PAGE_MAIN } from "@/lib/layout";
 
 export const dynamic = "force-dynamic";
-
-const STATUS_STYLE: Record<string, string> = {
-  sealed: "bg-muted/10 text-muted",
-  in_use: "bg-ok/10 text-ok",
-  finished: "bg-line/[0.06] text-muted",
-  discarded: "bg-line/[0.06] text-muted",
-};
-
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span className={`rounded-full px-2 py-1 text-xs font-medium capitalize ${STATUS_STYLE[status] ?? "bg-line/[0.06] text-muted"}`}>
-      {status.replace("_", " ")}
-    </span>
-  );
-}
 
 function PreparedVial({ v, pit }: { v: VialView; pit?: boolean }) {
   const low = v.daysLeft != null && v.daysLeft <= 7;
@@ -76,7 +60,7 @@ export default async function InventoryPage() {
   if (!user) {
     return (
       <main className="mx-auto max-w-md px-4 py-10">
-        <PitstopHeading title="Inventory" index={5} design={activeDesign()} className="text-3xl font-semibold tracking-tight" split={["INVEN", "TORY"]} />
+        <PitstopHeading title="Inventory" index={5} className="text-3xl font-semibold tracking-tight" split={["INVEN", "TORY"]} />
         <p className="mt-4 text-muted">No data yet — run the seed.</p>
       </main>
     );
@@ -119,30 +103,20 @@ export default async function InventoryPage() {
   const inUse = active.filter((v) => v.prepared);
   const needsPrep = active.filter((v) => !v.prepared);
   const archived = vials.filter((v) => v.status === "finished" || v.status === "discarded");
-  const design = activeDesign();
-  const pit = design === "pitstop";
 
   return (
     <main className={PAGE_MAIN}>
       <div className="mb-6 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          {pit ? (
-            <div className="flex min-w-0 items-center gap-2">
-              <PitstopHeading title="Inventory" index={5} design={design} className="text-3xl font-semibold tracking-tight" split={["INVEN", "TORY"]} />
-              {reorder.length > 0 && (
-                <span className="max-w-[40%] truncate rounded-full bg-accent/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-accent ring-1 ring-accent/40">
-                  Reorder · {reorder[0].peptideName}{reorder.length > 1 ? ` +${reorder.length - 1}` : ""}
-                </span>
-              )}
-            </div>
-          ) : (
-            <PitstopHeading title="Inventory" index={5} design={design} className="text-3xl font-semibold tracking-tight" split={["INVEN", "TORY"]} />
-          )}
-          {pit ? (
-            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted">Vials &amp; supplies · {active.length} active</p>
-          ) : (
-            <p className="text-muted">Vials, concentration, and how long each lasts.</p>
-          )}
+          <div className="flex min-w-0 items-center gap-2">
+            <PitstopHeading title="Inventory" index={5} className="text-3xl font-semibold tracking-tight" split={["INVEN", "TORY"]} />
+            {reorder.length > 0 && (
+              <span className="max-w-[40%] truncate rounded-full bg-accent/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-accent ring-1 ring-accent/40">
+                Reorder · {reorder[0].peptideName}{reorder.length > 1 ? ` +${reorder.length - 1}` : ""}
+              </span>
+            )}
+          </div>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted">Vials &amp; supplies · {active.length} active</p>
         </div>
         <Link href="/inventory/new" className="shrink-0 rounded-control bg-accent px-3 py-2 text-sm font-medium text-onAccent">+ Add vial</Link>
       </div>
@@ -164,7 +138,7 @@ export default async function InventoryPage() {
         </section>
       )}
 
-      {pit && (() => {
+      {(() => {
         const dosesLogged = [...doseCountByVial.values()].reduce((a, b) => a + b, 0);
         const coverageDays = inUse
           .map((v) => v.daysLeft)
@@ -199,21 +173,17 @@ export default async function InventoryPage() {
       {/* In use — prepared vials, depletion info shown up front */}
       {inUse.length > 0 && (
         <section className="mb-8">
-          {pit ? (
-            <div className="mb-3 flex items-center gap-2">
-              <span className="uppercase tracking-[0.2em] text-[10px] text-muted">In use</span>
-              <span className="h-px flex-1 bg-line/15" />
-              <span className="font-mono tabular-nums text-[10px] text-muted">{inUse.length} vial{inUse.length !== 1 ? "s" : ""}</span>
-            </div>
-          ) : (
-            <h2 className="mb-3 text-sm font-semibold">In use</h2>
-          )}
+          <div className="mb-3 flex items-center gap-2">
+            <span className="uppercase tracking-[0.2em] text-[10px] text-muted">In use</span>
+            <span className="h-px flex-1 bg-line/15" />
+            <span className="font-mono tabular-nums text-[10px] text-muted">{inUse.length} vial{inUse.length !== 1 ? "s" : ""}</span>
+          </div>
           <ul className="grid gap-3 lg:grid-cols-2 lg:items-start min-[1900px]:grid-cols-3">
             {inUse.map((v) => (
               <li key={v.id} className="min-w-0 rounded-card bg-surface shadow-sm ring-1 ring-line/10">
                 <div className="flex items-center justify-between gap-3 p-4">
                   <div className="flex min-w-0 items-center gap-3">
-                    {pit && <VialGlyph state={vialState(v)} fill={vialFill(v)} />}
+                    <VialGlyph state={vialState(v)} fill={vialFill(v)} />
                     <div className="min-w-0">
                       <p className="truncate font-medium">{v.peptideName}</p>
                       <p className="text-sm text-muted tabular-nums">
@@ -224,26 +194,22 @@ export default async function InventoryPage() {
                       </p>
                     </div>
                   </div>
-                  {pit ? (
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      {v.daysLeft != null && (
-                        <div className={`flex items-baseline gap-0.5 font-mono tabular-nums leading-none ${v.daysLeft <= 7 ? "text-warn" : ""}`}>
-                          <span className="text-2xl font-semibold">~{v.daysLeft}</span>
-                          <span className="text-[11px] text-muted">d</span>
-                        </div>
-                      )}
-                      <VialStatusChip state={vialState(v)} />
-                    </div>
-                  ) : (
-                    <StatusBadge status={v.status} />
-                  )}
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    {v.daysLeft != null && (
+                      <div className={`flex items-baseline gap-0.5 font-mono tabular-nums leading-none ${v.daysLeft <= 7 ? "text-warn" : ""}`}>
+                        <span className="text-2xl font-semibold">~{v.daysLeft}</span>
+                        <span className="text-[11px] text-muted">d</span>
+                      </div>
+                    )}
+                    <VialStatusChip state={vialState(v)} />
+                  </div>
                 </div>
                 <details data-expand-mobile className="group">
                   <summary className="flex cursor-pointer list-none items-center gap-1 border-t border-line/10 px-4 py-2 text-xs font-medium text-muted lg:hidden">
                     Details
                     <span aria-hidden className="transition-transform group-open:rotate-90">›</span>
                   </summary>
-                  <PreparedVial v={v} pit={pit} />
+                  <PreparedVial v={v} pit />
                 </details>
                 {/* Vial actions live OUTSIDE <details> so Edit/Retire/Delete and
                     the ⋯ menu stay visible on mobile when the info dl is
@@ -265,22 +231,18 @@ export default async function InventoryPage() {
       {/* Needs preparation — collapsed by default; expand to run the recon wizard */}
       {needsPrep.length > 0 && (
         <section className="mb-8">
-          {pit ? (
-            <div className="mb-3 flex items-center gap-2">
-              <span className="uppercase tracking-[0.2em] text-[10px] text-muted">Needs preparation</span>
-              <span className="h-px flex-1 bg-line/15" />
-              <span className="font-mono tabular-nums text-[10px] text-muted">{needsPrep.length} vial{needsPrep.length !== 1 ? "s" : ""}</span>
-            </div>
-          ) : (
-            <h2 className="mb-3 text-sm font-semibold">Needs preparation</h2>
-          )}
+          <div className="mb-3 flex items-center gap-2">
+            <span className="uppercase tracking-[0.2em] text-[10px] text-muted">Needs preparation</span>
+            <span className="h-px flex-1 bg-line/15" />
+            <span className="font-mono tabular-nums text-[10px] text-muted">{needsPrep.length} vial{needsPrep.length !== 1 ? "s" : ""}</span>
+          </div>
           <ul className="grid gap-3 lg:grid-cols-2 lg:items-start min-[1900px]:grid-cols-3">
             {needsPrep.map((v) => (
               <li key={v.id} className="min-w-0 rounded-card bg-surface shadow-sm ring-1 ring-line/10">
                 <details>
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
                     <div className="flex min-w-0 items-center gap-3">
-                      {pit && <VialGlyph state="sealed" fill={0} />}
+                      <VialGlyph state="sealed" fill={0} />
                       <div className="min-w-0">
                         <p className="truncate font-medium">{v.peptideName}</p>
                         <p className="text-sm text-muted tabular-nums">
@@ -289,7 +251,7 @@ export default async function InventoryPage() {
                             <span className={v.expired ? "text-danger" : ""}> · {v.expired ? "expired" : "exp"} {v.expiry}</span>
                           )}
                         </p>
-                        {pit && (() => {
+                        {(() => {
                           const doses = projectedSealedDoses({
                             labelStrengthMg: v.labelStrengthMg,
                             targetDose: v.recon?.targetDose,
@@ -304,14 +266,10 @@ export default async function InventoryPage() {
                         })()}
                       </div>
                     </div>
-                    {pit ? (
-                      <span className="flex shrink-0 items-center gap-1.5">
-                        <VialStatusChip state="sealed" />
-                        <VialStatusChip state="prep" />
-                      </span>
-                    ) : (
-                      <span className="shrink-0 rounded-control bg-accent/10 px-2.5 py-1 text-xs font-medium text-accentStrong">Prepare ›</span>
-                    )}
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      <VialStatusChip state="sealed" />
+                      <VialStatusChip state="prep" />
+                    </span>
                   </summary>
                   <div className="border-t border-line/10 p-4">
                     <ReconWizard
@@ -340,23 +298,19 @@ export default async function InventoryPage() {
 
       {archived.length > 0 && (
         <section className="mt-8">
-          {pit ? (
-            <div className="mb-3 flex items-center gap-2">
-              <span className="uppercase tracking-[0.2em] text-[10px] text-muted">Finished</span>
-              <span className="h-px flex-1 bg-line/15" />
-              <span className="font-mono tabular-nums text-[10px] text-muted">{archived.length} vial{archived.length !== 1 ? "s" : ""}</span>
-            </div>
-          ) : (
-            <h2 className="mb-3 text-sm font-medium text-muted">Finished &amp; discarded</h2>
-          )}
+          <div className="mb-3 flex items-center gap-2">
+            <span className="uppercase tracking-[0.2em] text-[10px] text-muted">Finished</span>
+            <span className="h-px flex-1 bg-line/15" />
+            <span className="font-mono tabular-nums text-[10px] text-muted">{archived.length} vial{archived.length !== 1 ? "s" : ""}</span>
+          </div>
           <ul className="space-y-2">
             {archived.map((v) => (
               <li key={v.id} className="flex items-center justify-between rounded-control bg-surface px-4 py-3 text-sm ring-1 ring-line/10">
                 <span className="flex min-w-0 items-center gap-2 text-muted">
-                  {pit && <VialGlyph state="finished" fill={0} className="!h-8 !w-auto" />}
+                  <VialGlyph state="finished" fill={0} className="!h-8 !w-auto" />
                   <span className="truncate">{v.peptideName} · {Number(v.labelStrengthMg)} mg</span>
                 </span>
-                {pit ? <VialStatusChip state="finished" /> : <StatusBadge status={v.status} />}
+                <VialStatusChip state="finished" />
               </li>
             ))}
           </ul>
