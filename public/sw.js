@@ -20,7 +20,7 @@
 // Bumped v1 → v2: the v1 cache-first strategy poisoned the cache with stale
 // page HTML. The activate handler below purges any cache != CACHE_NAME, so
 // bumping this name evicts the bad v1 entries on next activation.
-const CACHE_NAME = "peptide-shell-v5";
+const CACHE_NAME = "peptide-shell-v6";
 
 // App shell routes — pages that should load offline (no data, just the shell).
 // IMPORTANT: cache.addAll() is atomic — one 404 aborts the entire install.
