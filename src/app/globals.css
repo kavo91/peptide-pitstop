@@ -126,12 +126,10 @@ body {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   PEPTIDE PITSTOP — runtime design pack ("Pit Wall + Apex")
+   PEPTIDE PITSTOP — theme ("Pit Wall + Apex")
    ────────────────────────────────────────────────────────────────────────────
-   Activated when DESIGN=pitstop → layout.tsx stamps data-design="pitstop" on
-   <html>. EVERY rule below is scoped under that attribute, so when DESIGN is
-   unset (data-design="current") nothing here matches and the neon-teal default
-   is byte-identical. The base token blocks above are NOT modified.
+   layout.tsx stamps data-design="pitstop" on <html>; EVERY rule below is scoped
+   under that attribute. The base token blocks above are NOT modified.
 
    Tokens are space-separated RGB triples consumed as rgb(var(--token)/<alpha>).
    This block is appended last, so for equal specificity (e.g. it ties with
@@ -280,11 +278,9 @@ body {
 }
 
 /* ── Split page headings + ghost race numbers ──────────────────────────────
-   PitstopHeading emits this structure ONLY when DESIGN=pitstop; the current
-   design falls back to a plain <h1>, so these rules never match there. The h1
-   keeps its original utility classes (text-3xl etc.) so the Teko size bump and
-   page spacing still apply; the title text inherits the Teko face from the
-   h1/h2/h3 rule above. */
+   Styles the structure PitstopHeading emits. The h1 keeps its original utility
+   classes (text-3xl etc.) so the Teko size bump and page spacing still apply;
+   the title text inherits the Teko face from the h1/h2/h3 rule above. */
 [data-design="pitstop"] .pitstop-heading {
   position: relative;
   display: inline-block;
@@ -389,10 +385,10 @@ body {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
-   Concept-2 "across the app" component livery (DESIGN=pitstop ONLY).
-   Every rule is scoped under [data-design="pitstop"] so the current design
-   stays byte-identical. Concept literals are mapped to pitstop tokens; the
-   sector-best purple has no token → literal #B14EFF where needed.
+   Concept-2 "across the app" component livery.
+   Every rule is scoped under [data-design="pitstop"]. Concept literals are
+   mapped to pitstop tokens; the sector-best purple has no token → literal
+   #B14EFF where needed.
    ════════════════════════════════════════════════════════════════════════ */
 
 /* Orange livery edge on key cards (concept .slash-edge). */
@@ -508,7 +504,7 @@ body {
 [data-design="pitstop"] table.pitstop-bw .latest-cell { background: rgb(var(--accent) / 0.07); }
 [data-design="pitstop"] table.pitstop-bw .bw-trend { display: inline-block; margin-left: 3px; font-size: 9px; }
 
-/* ── Follow-up items (DESIGN=pitstop only) ─────────────────────────────────
+/* ── Follow-up items ───────────────────────────────────────────────────────
    Shared classes for the header dose-status badge dot (pulse) and the log
    peptide quick-pick pills (skew + counter-skew). Everything else for the
    follow-up items uses Tailwind utilities / inline SVG in the components. */

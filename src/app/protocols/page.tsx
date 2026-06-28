@@ -6,7 +6,6 @@ import { ProtocolEditor } from "@/components/ProtocolEditor";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { BackButton } from "@/components/BackButton";
 import { PitstopHeading } from "@/components/PitstopHeading";
-import { activeDesign } from "@/lib/design";
 import { PAGE_MAIN } from "@/lib/layout";
 import { deleteProtocol } from "@/app/actions/protocols";
 
@@ -32,7 +31,7 @@ export default async function ProtocolsPage() {
       <BackButton fallback="/more" />
       <div className="mb-6 flex items-start justify-between gap-3">
         <div>
-          <PitstopHeading title="Protocols" index={8} design={activeDesign()} className="text-3xl font-semibold tracking-tight" split={["PROTO", "COLS"]} />
+          <PitstopHeading title="Protocols" index={8} className="text-3xl font-semibold tracking-tight" split={["PROTO", "COLS"]} />
           <p className="text-muted">Set start dates, schedules, and pause or resume.</p>
         </div>
         <Link href="/protocols/new" className="shrink-0 rounded-control bg-accent px-3 py-2 text-sm font-medium text-onAccent">+ Add protocol</Link>

@@ -1,14 +1,13 @@
 /**
  * More — secondary navigation hub. Surfaces screens that don't earn a tab slot:
  * Prescriptions (live), and the later-phase screens as disabled placeholders so
- * the information architecture from design §7 is visible from day one.
+ * the planned information architecture (spec §7) is visible from day one.
  */
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { getCurrentUser } from "@/lib/auth/owner";
 import { getReorderStatus } from "@/lib/reorder";
-import { brandName, activeDesign } from "@/lib/design";
 import { APP_VERSION } from "@/lib/version";
 import { PitstopHeading } from "@/components/PitstopHeading";
 import { PAGE_MAIN } from "@/lib/layout";
@@ -37,7 +36,7 @@ export default async function MorePage() {
   const reorderCount = user ? (await getReorderStatus(user.id)).filter((r) => r.status === "reorder_now").length : 0;
   return (
     <main className={PAGE_MAIN}>
-      <PitstopHeading title="More" index={11} design={activeDesign()} className="mb-1 text-3xl font-semibold tracking-tight" split={["MO", "RE"]} />
+      <PitstopHeading title="More" index={11} className="mb-1 text-3xl font-semibold tracking-tight" split={["MO", "RE"]} />
       {/* Decorative subtitle — hidden on phones to reclaim vertical space (no-scroll budget). */}
       <p className="mb-6 text-muted max-[640px]:hidden">Everything else.</p>
 
@@ -70,7 +69,7 @@ export default async function MorePage() {
         <button type="submit" className="w-full rounded-control bg-surface px-4 py-3 text-sm font-medium text-danger ring-1 ring-line/10">Sign out</button>
       </form>
 
-      <p className="mt-8 text-center text-xs text-muted max-[640px]:mt-3 lg:hidden">{brandName()} · not medical advice · v{APP_VERSION}</p>
+      <p className="mt-8 text-center text-xs text-muted max-[640px]:mt-3 lg:hidden">Peptide Pitstop · not medical advice · v{APP_VERSION}</p>
     </main>
   );
 }

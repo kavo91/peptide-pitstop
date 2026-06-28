@@ -17,7 +17,7 @@ import { parsePeptidePage, isBlendOrStack } from "./parse";
 import { SLUG_MAP, BLEND_SLUG_MAP, slugUrl, type SlugTarget } from "./slug-map";
 
 export const USER_AGENT =
-  "PeptideTrackerBot/1.0 (+self-hosted personal peptide tracker; reference enrichment; contact via repo)";
+  "PeptidePitstopBot/1.0 (+self-hosted personal peptide tracker; reference enrichment; contact via repo)";
 
 const ATTRIBUTION = "Reference data curated from peptidedosages.com. Not medical advice.";
 

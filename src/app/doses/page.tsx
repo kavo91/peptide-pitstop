@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/owner";
 import { getWeek, getMonth, weekStartOf } from "@/lib/doses-timeline";
 import { DosesWeek } from "@/components/DosesWeek";
@@ -10,7 +9,6 @@ import { formatSideEffects, deserializeSideEffects, resolveSymptomList } from "@
 import { parseMonthParam, shiftMonth, monthKey } from "@/lib/month-nav";
 import { parseWeekParam, shiftWeek, weekKey } from "@/lib/week-nav";
 import type { ManualDay } from "@/lib/wellness-log";
-import { activeDesign } from "@/lib/design";
 import { PitstopHeading } from "@/components/PitstopHeading";
 import { PAGE_MAIN } from "@/lib/layout";
 
@@ -61,28 +59,21 @@ export default async function DosesPage({ searchParams }: { searchParams: { view
   const user = await getCurrentUser();
   if (!user) return null;
   const view = searchParams.view === "month" ? "month" : "week";
-  const design = activeDesign();
   const today = new Date();
   const todayKey = ymd(today);
 
-  // Current design: full-width pill (byte-identical). Pitstop: compact inline
-  // segmented control with a skewed active option. Navigation + a11y preserved.
+  // Compact inline segmented control with a skewed active option.
   const tab = (v: string, label: string) => {
-    if (design === "pitstop") {
-      const active = view === v;
-      return (
-        <a
-          href={`/doses?view=${v}`}
-          aria-current={active ? "page" : undefined}
-          className={`px-3 py-1.5 rounded-md text-[11px] uppercase tracking-[0.08em] ${active ? "bg-accent text-onAccent" : "text-muted hover:bg-bg"}`}
-          style={active ? { transform: "skewX(-7deg)" } : undefined}
-        >
-          {active ? <span style={{ display: "inline-block", transform: "skewX(7deg)" }}>{label}</span> : label}
-        </a>
-      );
-    }
+    const active = view === v;
     return (
-      <Link href={`/doses?view=${v}`} className={`flex-1 rounded-control px-3 py-2 text-center text-sm font-medium ${view === v ? "bg-accent text-onAccent" : "bg-bg text-muted ring-1 ring-line/15"}`}>{label}</Link>
+      <a
+        href={`/doses?view=${v}`}
+        aria-current={active ? "page" : undefined}
+        className={`px-3 py-1.5 rounded-md text-[11px] uppercase tracking-[0.08em] ${active ? "bg-accent text-onAccent" : "text-muted hover:bg-bg"}`}
+        style={active ? { transform: "skewX(-7deg)" } : undefined}
+      >
+        {active ? <span style={{ display: "inline-block", transform: "skewX(7deg)" }}>{label}</span> : label}
+      </a>
     );
   };
 
@@ -120,19 +111,15 @@ export default async function DosesPage({ searchParams }: { searchParams: { view
           relDay: relDayLabel(next.date, todayKey),
         }
       : undefined;
-    body = <DosesMonth monthLabel={m.monthLabel} gridStart={m.gridStart} gridEnd={m.gridEnd} entries={m.entries} metrics={m.metrics} todayKey={todayKey} wellnessByDay={wellnessByDay} hydrationTargetMl={user.hydrationTargetMl ?? null} symptoms={resolveSymptomList(user.symptomList)} nav={nav} design={design} nextDose={nextDose} />;
+    body = <DosesMonth monthLabel={m.monthLabel} gridStart={m.gridStart} gridEnd={m.gridEnd} entries={m.entries} metrics={m.metrics} todayKey={todayKey} wellnessByDay={wellnessByDay} hydrationTargetMl={user.hydrationTargetMl ?? null} symptoms={resolveSymptomList(user.symptomList)} nav={nav} nextDose={nextDose} />;
   }
 
   return (
     <main className={PAGE_MAIN}>
       <BackButton fallback="/" />
-      <PitstopHeading title="Doses" index={2} design={design} className="mb-1 text-3xl font-semibold tracking-tight" split={["DO", "SES"]} />
+      <PitstopHeading title="Doses" index={2} className="mb-1 text-3xl font-semibold tracking-tight" split={["DO", "SES"]} />
       <p className="mb-4 text-muted">Your schedule — past and upcoming.</p>
-      {design === "pitstop" ? (
-        <div className="mb-5 inline-flex rounded-lg bg-surface p-0.5 ring-1 ring-line/15">{tab("week", "This week")}{tab("month", "Month")}</div>
-      ) : (
-        <div className="mb-5 flex gap-2">{tab("week", "This week")}{tab("month", "Month")}</div>
-      )}
+      <div className="mb-5 inline-flex rounded-lg bg-surface p-0.5 ring-1 ring-line/15">{tab("week", "This week")}{tab("month", "Month")}</div>
       {body}
     </main>
   );

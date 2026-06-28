@@ -14,7 +14,6 @@ import { BackButton } from "@/components/BackButton";
 import { WearableSection } from "@/components/wellness/WearableSection";
 import { TodayCard } from "@/components/wellness/TodayCard";
 import { PitstopHeading } from "@/components/PitstopHeading";
-import { activeDesign } from "@/lib/design";
 import Link from "next/link";
 import { PAGE_MAIN } from "@/lib/layout";
 
@@ -37,7 +36,7 @@ export default async function JournalPage() {
   if (!user) {
     return (
       <main className="mx-auto max-w-md px-4 py-10">
-        <PitstopHeading title="Wellness" index={7} design={activeDesign()} className="text-3xl font-semibold tracking-tight" split={["WELL", "NESS"]} />
+        <PitstopHeading title="Wellness" index={7} className="text-3xl font-semibold tracking-tight" split={["WELL", "NESS"]} />
         <p className="mt-4 text-muted">Sign in to track your wellness.</p>
       </main>
     );
@@ -99,7 +98,7 @@ export default async function JournalPage() {
       <div className="min-[1900px]:max-w-3xl min-[1900px]:shrink-0">
         <BackButton fallback="/more" />
         <div className="mb-6">
-          <PitstopHeading title="Wellness" index={7} design={activeDesign()} className="text-3xl font-semibold tracking-tight" split={["WELL", "NESS"]} />
+          <PitstopHeading title="Wellness" index={7} className="text-3xl font-semibold tracking-tight" split={["WELL", "NESS"]} />
           <p className="text-muted">Weight, mood, energy, sleep and side effects.</p>
         </div>
 

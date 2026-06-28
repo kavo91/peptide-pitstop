@@ -5,11 +5,11 @@
  * and whose colour encodes status: ok=green, low=race-orange (with a danger
  * redline mark), sealed=purple powder (dashed cake), finished=empty + dimmed.
  * Token-driven (rgb(var(--…))) via the `style` prop so it tracks the active
- * design palette — `var()` does NOT resolve in SVG presentation attributes,
+ * theme palette — `var()` does NOT resolve in SVG presentation attributes,
  * only as real CSS properties. Pure (no client hooks) → safe in an RSC.
  *
  * Geometry mirrors docs/design/concepts/concept-pitstop-final.html (the chosen
- * board). Used only under DESIGN=pitstop; the current design never renders it.
+ * board).
  */
 import type { VialView } from "@/lib/inventory";
 

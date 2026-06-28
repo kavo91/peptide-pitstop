@@ -9,9 +9,6 @@ export interface BiomarkerTrendProps {
   referenceHigh?: number | null;
   optimalLow?: number | null;
   optimalHigh?: number | null;
-  /** Active design pack. Pitstop swaps the near-empty single-point chart for a
-   *  compact "single reading" hint; "current" is byte-identical to before. */
-  design?: "pitstop" | "current";
 }
 
 const WIDTH = 600;
@@ -42,17 +39,15 @@ export function BiomarkerTrend({
   referenceHigh,
   optimalLow,
   optimalHigh,
-  design,
 }: BiomarkerTrendProps) {
   if (points.length === 0) return null;
 
   const latest = points[points.length - 1];
 
   // Single reading → a trend chart is just one dot with no line, reading as
-  // near-empty (flagged on mobile during the ultra-wide audit). Under pitstop,
-  // show the value + date with a compact hint to log another panel instead.
-  // "current" keeps the original single-point chart (byte-identical).
-  if (design === "pitstop" && points.length === 1) {
+  // near-empty. Show the value + date with a compact hint to log another panel
+  // instead.
+  if (points.length === 1) {
     return (
       <div className="rounded-card bg-surface p-4 shadow-sm ring-1 ring-line/10">
         <div className="mb-1 flex items-baseline justify-between gap-2">

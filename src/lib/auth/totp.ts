@@ -5,7 +5,6 @@
  */
 import { generateSecret, generateURI, verifySync } from "otplib";
 import QRCode from "qrcode";
-import { brandName } from "@/lib/design";
 
 // ±30s tolerance (one step either side) for client clock skew.
 const EPOCH_TOLERANCE_S = 30;
@@ -15,9 +14,8 @@ export function generateTotpSecret(): string {
 }
 
 export function totpKeyUri(account: string, secret: string): string {
-  // Issuer shown in authenticator apps follows the active design pack
-  // (brandName() reads the DESIGN env at call time; this is server-side).
-  return generateURI({ issuer: brandName(), label: account, secret });
+  // Issuer shown in authenticator apps.
+  return generateURI({ issuer: "Peptide Pitstop", label: account, secret });
 }
 
 export async function totpQrDataUrl(keyUri: string): Promise<string> {

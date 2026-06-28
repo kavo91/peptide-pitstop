@@ -15,8 +15,7 @@ const MAX_ROWS = 6;
  * Pitstop "Cycle" tile — a motorsport pit-wall timing board of the user's active
  * protocols: a POS index + peptide + a mono SCHED token per row, daily cadences
  * in cyan. Replaces the single "Day N" cycle readout (chosen design, 2026-06-24).
- * Caps at MAX_ROWS with a "+N more" footer; taps through to /protocols. Styled
- * entirely with the pitstop design tokens (rendered only under DESIGN=pitstop).
+ * Caps at MAX_ROWS with a "+N more" footer; taps through to /protocols.
  */
 export function ProtocolTimingTile({ protocols }: { protocols: ProtocolRow[] }) {
   const shown = protocols.slice(0, MAX_ROWS);

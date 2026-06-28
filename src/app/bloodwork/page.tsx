@@ -15,7 +15,6 @@ import { BloodworkAddPanel } from "@/components/BloodworkAddPanel";
 import { BiomarkerTrend } from "@/components/BiomarkerTrend";
 import { BloodworkMatrix } from "@/components/BloodworkMatrix";
 import { DeleteLabPanelButton } from "@/components/DeleteLabPanelButton";
-import { activeDesign } from "@/lib/design";
 import { PAGE_MAIN } from "@/lib/layout";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +44,6 @@ function flagBadge(flag: string | null): { cls: string; label: string } | null {
 export default async function BloodworkPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const design = activeDesign();
 
   const panels = await prisma.labPanel.findMany({
     where: { userId: user.id },
@@ -80,15 +78,13 @@ export default async function BloodworkPage() {
   );
   const trends = trendSeries(allResults);
 
-  // Pitstop-only: summarise the latest panel vs the prior one (read-only).
-  const pit = design === "pitstop";
+  // Summarise the latest panel vs the prior one (read-only).
   const summary = panelSummary(decoded[0]?.results, decoded[1]?.results);
 
   // A biomarker with a single reading renders as a near-empty one-dot chart that
-  // dominates page height on mobile. Under pitstop the comparison matrix already
-  // shows that latest value, so skip those cards and only keep ≥2-reading trends.
-  // "current" keeps every card (single-point charts included) — byte-identical.
-  const visibleTrends = pit ? trends.filter((t) => t.points.length >= 2) : trends;
+  // dominates page height on mobile. The comparison matrix already shows that
+  // latest value, so skip those cards and only keep ≥2-reading trends.
+  const visibleTrends = trends.filter((t) => t.points.length >= 2);
 
   // Meta (units + optimal + latest reference interval) for each biomarker. Panels
   // are date-desc, so the first occurrence of a name is its most recent reading.
@@ -108,9 +104,8 @@ export default async function BloodworkPage() {
 
   const formBiomarkers = BIOMARKER_LIBRARY.map((b) => ({ name: b.name, defaultUnit: b.defaultUnit, category: b.category }));
 
-  // Raw lab-panel history body — identical markup for both designs. Pitstop wraps
-  // it in a collapsed <details> (it duplicates the matrix and is tall on mobile);
-  // "current" keeps it as an open <section> below, so its DOM stays byte-identical.
+  // Raw lab-panel history body, wrapped in a collapsed <details> below (it
+  // duplicates the matrix and is tall on mobile).
   const panelsBody =
     decoded.length === 0 ? (
       <p className="rounded-card bg-surface p-4 text-sm text-muted ring-1 ring-line/10">
@@ -163,9 +158,9 @@ export default async function BloodworkPage() {
     <main className={PAGE_MAIN}>
       <BackButton fallback="/more" />
 
-      <BloodworkAddPanel design={design} pit={pit} biomarkers={formBiomarkers} defaultOpen={decoded.length === 0} />
+      <BloodworkAddPanel biomarkers={formBiomarkers} defaultOpen={decoded.length === 0} />
 
-      {pit && decoded.length > 0 && (
+      {decoded.length > 0 && (
         <>
           {/* "N of M in range" summary card — at the top of the page */}
           {summary.total > 0 && (
@@ -209,13 +204,7 @@ export default async function BloodworkPage() {
       {visibleTrends.length > 0 && (
         <section className="mb-8">
           <h2 className="mb-3 text-sm font-medium text-muted">Trends</h2>
-          <div
-            className={
-              pit
-                ? "grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3"
-                : "grid grid-cols-1 gap-4 lg:grid-cols-2"
-            }
-          >
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
             {visibleTrends.map((t) => {
               const meta = metaByName.get(t.biomarkerName);
               return (
@@ -228,7 +217,6 @@ export default async function BloodworkPage() {
                   referenceHigh={meta?.refHigh}
                   optimalLow={meta?.optimalLow}
                   optimalHigh={meta?.optimalHigh}
-                  design={design}
                 />
               );
             })}
@@ -236,19 +224,12 @@ export default async function BloodworkPage() {
         </section>
       )}
 
-      {pit ? (
-        <details open={decoded.length === 0}>
-          <summary className="mb-3 cursor-pointer select-none text-sm font-medium text-muted">
-            Lab panels
-          </summary>
-          {panelsBody}
-        </details>
-      ) : (
-        <section>
-          <h2 className="mb-3 text-sm font-medium text-muted">Lab panels</h2>
-          {panelsBody}
-        </section>
-      )}
+      <details open={decoded.length === 0}>
+        <summary className="mb-3 cursor-pointer select-none text-sm font-medium text-muted">
+          Lab panels
+        </summary>
+        {panelsBody}
+      </details>
     </main>
   );
 }

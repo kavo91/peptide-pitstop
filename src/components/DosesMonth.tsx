@@ -7,7 +7,6 @@ import { LEGEND_ORDER, STATUS_DESCRIPTION, STATUS_LABEL } from "@/lib/timeline-s
 import type { ManualDay } from "@/lib/wellness-log";
 import { DayDetail } from "./DayDetail";
 
-const DOW = ["M", "T", "W", "T", "F", "S", "S"];
 const DOW_LONG = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /** "Next on the line" upcoming-dose summary, computed server-side. */
@@ -57,16 +56,15 @@ const STATUS_TEXT_CLASS: Record<DoseStatus, string> = {
   missed: "text-danger",
 };
 
-export function DosesMonth({ monthLabel, gridStart, gridEnd, entries, metrics, todayKey, wellnessByDay, hydrationTargetMl, symptoms, nav, design = "current", nextDose }: { monthLabel: string; gridStart: string; gridEnd: string; entries: TimelineEntry[]; metrics: Record<string, DayMetric>; todayKey: string; wellnessByDay: Record<string, ManualDay>; hydrationTargetMl?: number | null; symptoms?: readonly string[]; nav: { prev: string; next: string; current: string; isCurrent: boolean }; design?: "pitstop" | "current"; nextDose?: NextDose }) {
+export function DosesMonth({ monthLabel, gridStart, gridEnd, entries, metrics, todayKey, wellnessByDay, hydrationTargetMl, symptoms, nav, nextDose }: { monthLabel: string; gridStart: string; gridEnd: string; entries: TimelineEntry[]; metrics: Record<string, DayMetric>; todayKey: string; wellnessByDay: Record<string, ManualDay>; hydrationTargetMl?: number | null; symptoms?: readonly string[]; nav: { prev: string; next: string; current: string; isCurrent: boolean }; nextDose?: NextDose }) {
   const days = daysBetween(gridStart, gridEnd);
-  const pit = design === "pitstop";
-  // Honest "logged / total" ratio for the month sub-heading (pitstop only).
+  // Honest "logged / total" ratio for the month sub-heading.
   // total = scheduled days (any planned-or-taken status, same semantics as the
   // legend); logged = taken (on-time / shifted / off-schedule). Days only —
   // count distinct dates so a multi-dose day is one tick on each side.
   let loggedCount = 0;
   let totalCount = 0;
-  if (pit) {
+  {
     // The target month always contains gridStart + 10 days (gridStart is the
     // Monday on/before the 1st, so +10 lands inside the month). Use its YYYY-MM.
     const mid = new Date(gridStart + "T00:00:00");
@@ -95,11 +93,9 @@ export function DosesMonth({ monthLabel, gridStart, gridEnd, entries, metrics, t
         </div>
         <Link href={`/doses?view=month&month=${nav.next}`} aria-label="Next month" className="rounded-control px-3 py-1 text-sm ring-1 ring-line/15 hover:bg-bg">→</Link>
       </div>
-      {pit && (
-        <p className="-mt-1 mb-3 font-mono uppercase tracking-[0.16em] text-[11px] text-muted">{monthLabel} · {loggedCount} / {totalCount} LOGGED</p>
-      )}
-      <div className={"grid grid-cols-7 gap-1 max-[640px]:gap-0.5" + (design === "pitstop" ? " pitstop-cal" : "")}>
-        {(pit ? DOW_LONG : DOW).map((d, i) => <div key={i} className={pit ? "pb-1 text-center text-[9px] uppercase tracking-[0.08em] text-muted" : "pb-1 text-center text-[10px] text-muted"}>{d}</div>)}
+      <p className="-mt-1 mb-3 font-mono uppercase tracking-[0.16em] text-[11px] text-muted">{monthLabel} · {loggedCount} / {totalCount} LOGGED</p>
+      <div className="grid grid-cols-7 gap-1 max-[640px]:gap-0.5 pitstop-cal">
+        {DOW_LONG.map((d, i) => <div key={i} className="pb-1 text-center text-[9px] uppercase tracking-[0.08em] text-muted">{d}</div>)}
         {days.map((d) => {
           const dayEntries = entries.filter((e) => e.date === d);
           const m = metrics[d];
@@ -178,7 +174,7 @@ export function DosesMonth({ monthLabel, gridStart, gridEnd, entries, metrics, t
         <span className="font-medium text-accent2Strong">Shifted</span> {STATUS_DESCRIPTION.taken_rebased}{" "}
         <span className="font-medium text-warn">Off-schedule</span> {STATUS_DESCRIPTION.taken_offschedule}
       </p>
-      {pit && nextDose && (
+      {nextDose && (
         <Link href="/today" className="pitstop-slash-edge relative mt-4 flex items-center gap-3 rounded-card bg-surface p-3 ring-1 ring-line/10 transition-colors hover:ring-accent/40 lg:p-4">
           <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-lg bg-accent/10 ring-1 ring-accent/30">
             <Clock className="h-[18px] w-[18px] text-accent" aria-hidden />

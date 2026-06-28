@@ -25,7 +25,7 @@ describe("totp", () => {
   it("builds an otpauth key URI with issuer and account", () => {
     const uri = totpKeyUri("user@example.com", "JBSWY3DPEHPK3PXP");
     expect(uri).toContain("otpauth://totp/");
-    expect(uri).toContain("Peptide%20Tracker");
+    expect(uri).toContain("Peptide%20Pitstop");
     expect(uri).toContain("secret=JBSWY3DPEHPK3PXP");
   });
 });

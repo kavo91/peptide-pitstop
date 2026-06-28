@@ -51,7 +51,6 @@ export function AdHocLogForm({
   suggestedSiteByPeptide,
   recentSitesByPeptide,
   protocolOptions = [],
-  design = "current",
 }: {
   options: PrepOption[];
   syringes: SyringeDTO[];
@@ -61,10 +60,7 @@ export function AdHocLogForm({
   recentSitesByPeptide: Record<string, string[]>;
   /** Active protocols with their resolved per-injection dose (safe resolver path). */
   protocolOptions?: ProtocolDoseOption[];
-  /** Active design pack — threaded from the server page. Gates pitstop presentation. */
-  design?: "pitstop" | "current";
 }) {
-  const pit = design === "pitstop";
   const [protocolId, setProtocolId] = useState("");
   const [prepId, setPrepId] = useState(options[0]?.preparation.id ?? "");
   const [syringeId, setSyringeId] = useState(syringes[0]?.id ?? "");
@@ -243,13 +239,12 @@ export function AdHocLogForm({
         </label>
       )}
 
-      {pit && (
-        // Quick-pick pills — one per prep, mirroring the Peptide <select>. The
-        // active pill is skewed by CSS (.on); its label is wrapped in a <span>
-        // so the CSS counter-skews the text upright. Clicking routes through the
-        // SAME selectPrep() the <select> uses.
-        <div className="flex flex-wrap gap-2">
-          {options.map((o) => {
+      {/* Quick-pick pills — one per prep, mirroring the Peptide <select>. The
+          active pill is skewed by CSS (.on); its label is wrapped in a <span>
+          so the CSS counter-skews the text upright. Clicking routes through the
+          SAME selectPrep() the <select> uses. */}
+      <div className="flex flex-wrap gap-2">
+        {options.map((o) => {
             const active = o.preparation.id === prepId;
             const conc = new Decimal(o.preparation.concentrationMcgPerMl).div(1000).toDecimalPlaces(2).toString();
             // Two preps of one peptide can share a concentration (only the vial /
@@ -278,10 +273,9 @@ export function AdHocLogForm({
               </button>
             );
           })}
-        </div>
-      )}
+      </div>
 
-      <label className={`block text-sm${pit ? " sr-only" : ""}`}>
+      <label className="block text-sm sr-only">
         Peptide
         <select
           value={prepId}
@@ -313,33 +307,26 @@ export function AdHocLogForm({
         </select>
       </label>
 
-      {pit ? (
-        // Pit-board row: Rajdhani uppercase muted label + a mono-styled field.
-        // Cosmetic only — the datetime-local stays fully editable.
-        <label className="block">
-          <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-muted">Time taken</span>
-          <input
-            type="datetime-local"
-            value={takenAt}
-            onChange={(e) => setTakenAt(e.target.value)}
-            className="w-full rounded-control border border-line/15 bg-bg px-3 py-2 font-mono tabular-nums"
-          />
-        </label>
-      ) : (
-        <label className="block text-sm">
-          Time taken
-          <input type="datetime-local" value={takenAt} onChange={(e) => setTakenAt(e.target.value)} className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2" />
-        </label>
-      )}
+      {/* Pit-board row: Rajdhani uppercase muted label + a mono-styled field.
+          Cosmetic only — the datetime-local stays fully editable. */}
+      <label className="block">
+        <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-muted">Time taken</span>
+        <input
+          type="datetime-local"
+          value={takenAt}
+          onChange={(e) => setTakenAt(e.target.value)}
+          className="w-full rounded-control border border-line/15 bg-bg px-3 py-2 font-mono tabular-nums"
+        />
+      </label>
 
-      {/* Syringe preview. Current design: only once a draw is computed (unchanged).
-          Pitstop: always present once a prep + syringe are picked — it shows an
-          EMPTY barrel and fills as you type a dose, so the ad-hoc flow has the
-          same always-visible syringe as the protocol flow (which auto-fills the
-          dose). The draw stats/warnings still gate on a real `draw`. */}
-      {(pit ? Boolean(opt && syr) : Boolean(draw)) && (
+      {/* Syringe preview — always present once a prep + syringe are picked: it
+          shows an EMPTY barrel and fills as you type a dose, so the ad-hoc flow
+          has the same always-visible syringe as the protocol flow (which
+          auto-fills the dose). The draw stats/warnings still gate on a real
+          `draw`. */}
+      {Boolean(opt && syr) && (
         <>
-          {pit && doseValue && (
+          {doseValue && (
             <div className="pitstop-dosebox">
               <span className="pitstop-dosebox__num">{doseValue}</span>
               <span className="pitstop-dosebox__unit">{doseUnit.toUpperCase()}</span>
@@ -357,7 +344,6 @@ export function AdHocLogForm({
             }
             overfill={blocked}
             multiUnit={multiUnit}
-            design={design}
           />
           {draw && (
             <>
@@ -382,7 +368,6 @@ export function AdHocLogForm({
           value={site || null}
           onChange={setSite}
           recentSites={recentSitesForPeptide}
-          design={design}
         />
       </div>
       <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes (optional, encrypted)" className="w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-sm" />
@@ -394,7 +379,7 @@ export function AdHocLogForm({
         </p>
       )}
 
-      <button type="button" onClick={onConfirm} disabled={busy || blocked || !draw || protocolNeedsPrep} className={`w-full rounded-control bg-accent px-4 py-3 font-medium text-onAccent disabled:opacity-40 sticky bottom-[64px] z-20 shadow-lg sm:static sm:bottom-auto sm:z-auto sm:shadow-none${pit ? " pitstop-savebtn" : ""}`}>
+      <button type="button" onClick={onConfirm} disabled={busy || blocked || !draw || protocolNeedsPrep} className="w-full rounded-control bg-accent px-4 py-3 font-medium text-onAccent disabled:opacity-40 sticky bottom-[64px] z-20 shadow-lg sm:static sm:bottom-auto sm:z-auto sm:shadow-none pitstop-savebtn">
         <Syringe className="mr-1.5 inline h-4 w-4 align-[-0.125em]" aria-hidden />{busy ? "Logging…" : "Log dose"}
       </button>
     </div>

@@ -13,25 +13,18 @@ interface Props {
    * Values are pre-stringified by `doseUnitBreakdown` (safe resolver path).
    */
   multiUnit?: { mcg: string; mg: string; ml: string; units: string };
-  /** Active design pack — threaded from the form. Gates pitstop presentation. */
-  design?: "pitstop" | "current";
 }
 
-export function VisualSyringe({ capacityMl, fillMl, markingLabel, overfill = false, multiUnit, design = "current" }: Props) {
-  const pit = design === "pitstop";
+export function VisualSyringe({ capacityMl, fillMl, markingLabel, overfill = false, multiUnit }: Props) {
   const W = 260;
   const H = 64;
   const barrelX = 8;
   const barrelW = 210;
   const fraction = capacityMl > 0 ? Math.min(fillMl / capacityMl, 1) : 0;
   const fillW = barrelW * fraction;
-  // Pitstop fills the barrel with a left→right orange gradient (literal hex —
-  // var() does not resolve in SVG attrs). Current design unchanged.
-  const fillColor = overfill
-    ? "rgb(var(--danger))"
-    : pit
-      ? "url(#pitstop-syr-fill)"
-      : "rgb(var(--accent))";
+  // Fill the barrel with a left→right orange gradient (literal hex — var() does
+  // not resolve in SVG attrs).
+  const fillColor = overfill ? "rgb(var(--danger))" : "url(#pitstop-syr-fill)";
 
   // Graduation ticks at 0/25/50/75/100% of capacity.
   const ticks = [0, 0.25, 0.5, 0.75, 1];
@@ -39,14 +32,12 @@ export function VisualSyringe({ capacityMl, fillMl, markingLabel, overfill = fal
   return (
     <figure className="w-full">
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Syringe filled to ${markingLabel}`} className="w-full">
-        {pit && (
-          <defs>
-            <linearGradient id="pitstop-syr-fill" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0" stopColor="#b34110" />
-              <stop offset="1" stopColor="#FF5B14" />
-            </linearGradient>
-          </defs>
-        )}
+        <defs>
+          <linearGradient id="pitstop-syr-fill" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stopColor="#b34110" />
+            <stop offset="1" stopColor="#FF5B14" />
+          </linearGradient>
+        </defs>
         {/* barrel */}
         <rect x={barrelX} y={18} width={barrelW} height={28} rx={4} fill="rgb(var(--surface))" stroke="rgb(var(--muted))" strokeWidth={1.5} />
         {/* fill */}
@@ -55,23 +46,17 @@ export function VisualSyringe({ capacityMl, fillMl, markingLabel, overfill = fal
         {ticks.map((t) => (
           <line key={t} x1={barrelX + barrelW * t} y1={14} x2={barrelX + barrelW * t} y2={50} stroke="rgb(var(--muted))" strokeWidth={1} opacity={0.5} />
         ))}
-        {/* pitstop dashed marker at the fill edge */}
-        {pit && !overfill && (
+        {/* dashed marker at the fill edge */}
+        {!overfill && (
           <line x1={barrelX + fillW} y1={12} x2={barrelX + fillW} y2={52} stroke="#FF5B14" strokeWidth={1.5} strokeDasharray="3 2" />
         )}
         {/* plunger + needle */}
         <rect x={barrelX + barrelW} y={22} width={18} height={20} rx={2} fill="rgb(var(--muted))" />
         <line x1={barrelX + barrelW + 18} y1={32} x2={W - 2} y2={32} stroke="rgb(var(--muted))" strokeWidth={2} />
       </svg>
-      {pit ? (
-        <figcaption className="mt-1 text-center font-mono uppercase text-[10px] tracking-[0.1em] text-accentStrong">
-          Draw to {markingLabel}
-        </figcaption>
-      ) : (
-        <figcaption className="mt-1 text-center text-sm font-medium tabular-nums">
-          Draw to <span className={overfill ? "text-danger" : "text-accentStrong"}>{markingLabel}</span>
-        </figcaption>
-      )}
+      <figcaption className="mt-1 text-center font-mono uppercase text-[10px] tracking-[0.1em] text-accentStrong">
+        Draw to {markingLabel}
+      </figcaption>
       {multiUnit && (
         <dl
           aria-label="Dose in all units"
