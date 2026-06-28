@@ -18,6 +18,10 @@ tsconfig.tsbuildinfo
 .superpowers/
 .playwright-mcp/
 
+# python bytecode (garmin-sync)
+__pycache__/
+*.pyc
+
 # scratch / sqlite sidecar artifacts
 *.db-shm
 *.db-wal

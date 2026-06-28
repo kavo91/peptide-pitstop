@@ -15,3 +15,20 @@ docker-compose.yml
 **/._*
 **/.DS_Store
 .DS_Store
+# Python bytecode
+**/__pycache__
+**/*.pyc
+# GitHub Pages landing + SEO assets (served by Pages, not part of the app image)
+/index.html
+/CNAME
+/.nojekyll
+/sitemap.xml
+/robots.txt
+/*.txt
+/docs
+# Repo docs (not needed in the runtime image)
+/README.md
+/CONTRIBUTING.md
+/SECURITY.md
+/NOTICE.md
+/.github
