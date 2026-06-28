@@ -139,8 +139,9 @@
   .cta{display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:26px}
   .heroshot{margin:44px auto 0; max-width:980px}
   .heroshot img{width:100%; height:auto; border-radius:14px; border:1px solid var(--line); box-shadow:0 30px 80px rgba(0,0,0,.55)}
-  /* sections */
-  section{padding:56px 0}
+  /* sections — note: section also carries .wrap (which sets padding:0 24px), so
+     this selector must out-specify .wrap to restore vertical rhythm */
+  section.wrap{padding:56px 24px}
   .eyebrow{font-family:Teko; text-transform:uppercase; letter-spacing:2px; color:var(--accent); font-size:20px; margin:0 0 6px}
   h2.title{font-size:clamp(34px,6vw,58px); margin:0 0 8px}
   .sub{color:var(--muted); max-width:720px; margin:0 0 28px; font-size:17px}
@@ -193,7 +194,7 @@
   <div class="heroshot"><img src="docs/screenshots/today.png" alt="Peptide Pitstop self-hosted peptide tracker — Today dashboard with dose log and adherence heatmap (demo data)" width="980" height="683" loading="eager" fetchpriority="high" /></div>
 </div>
 
-<div class="band"><section class="wrap" style="padding-top:44px">
+<div class="band"><section class="wrap">
   <p class="eyebrow">Own your own data</p>
   <h2 class="title teko">Your data never leaves your&nbsp;server</h2>
   <p class="sub">A private, self-hosted, encrypted peptide tracker: no cloud account, no telemetry, no third party between you and your health record. You host it, back it up, export it, and delete it — on your terms.</p>
