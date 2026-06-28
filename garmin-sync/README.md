@@ -39,7 +39,7 @@ Garmin Connect ──garminconnect.connectapi──▶ sync.py (assemble raw day
 | `SYNC_PORT` | `8080` | On-demand `POST /sync` listener port |
 | `SYNC_INTERVAL_SECONDS` | `86400` | Sleep between daily runs |
 | `RETRY_DELAY_SECONDS` | `300` | Back-off sleep before exiting non-zero on auth failure |
-| `TZ` | – | Set to `Australia/Brisbane` so "today" matches local days |
+| `TZ` | – | Set to your timezone (e.g. `America/New_York`) so "today" matches local days |
 
 ## One-time MFA bootstrap (seed the token volume)
 
@@ -51,7 +51,7 @@ once-off. Run the sidecar interactively to enter the code:
 docker run --rm -it \
   -e GARMIN_EMAIL="you@example.com" \
   -e GARMIN_PASSWORD="••••••••" \
-  -v /mnt/user/appdata/peptide-tracker/garmin-tokens:/tokens \
+  -v ./garmin-tokens:/tokens \
   peptide-garmin python sync.py --dry-run
 ```
 

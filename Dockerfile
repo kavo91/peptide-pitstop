@@ -1,4 +1,4 @@
-# Multi-stage build → small standalone image for Unraid.
+# Multi-stage build → small standalone image.
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
@@ -18,8 +18,8 @@ ENV NODE_ENV=production
 # the previous Sunday → today.ts misclassifies routine planned rows as off-grid
 # rebase overrides and shows doses a day early. Node honours TZ via bundled ICU
 # even though Alpine ships no tzdata package. (compose also sets TZ — this is the
-# standalone-run safety net.)
-ENV TZ=Australia/Brisbane
+# standalone-run safety net.) Override with your timezone via the compose `TZ` env.
+ENV TZ=UTC
 RUN addgroup -g 1001 nodejs && adduser -u 1001 -G nodejs -S nextjs
 # Next.js standalone output
 COPY --from=builder /app/public ./public

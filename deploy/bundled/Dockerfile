@@ -1,10 +1,10 @@
 # BUNDLED image: Next.js app + Cloudflare tunnel + Litestream backup + Garmin
-# wellness sidecar — ALL FOUR services in ONE container (a supervisor entrypoint
-# runs them; the app is the critical process, the other three auto-restart).
-# Replaces the 4-container prod compose with a single container.
+# wellness sidecar — every service in ONE container (a supervisor entrypoint
+# runs them; the app is the critical process, the others auto-restart).
+# An all-in-one alternative to running the services as separate compose entries.
 #
-# Build from app-src:
-#   docker build -f deploy/bundled/Dockerfile -t peptide-tracker:bundled .
+# Build:
+#   docker build -f deploy/bundled/Dockerfile -t peptide-pitstop:bundled .
 #
 # Mirrors the production Dockerfile, then layers in: the cloudflared + litestream
 # static binaries, python3 + garminconnect (curl_cffi imports cleanly on
@@ -23,13 +23,14 @@ RUN npx prisma generate && npm run build
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-# TZ keystone (see production Dockerfile): AEST so local-midnight PlannedDose rows read correctly.
+# TZ keystone: set this to YOUR timezone (e.g. America/New_York) so local-midnight
+# PlannedDose rows read correctly. Defaults to UTC; override via the compose `TZ` env.
 # NOTE: TZ alone is NOT enough for the Python garmin-sync sidecar (or shell `date`) —
 # alpine ships no zoneinfo, so without tzdata Python falls back to UTC and the sidecar's
-# date.today() lags Brisbane by 10h, never fetching the current AEST day before 10am
-# (morning activities/today's recovery go missing). tzdata (installed below) fixes it;
-# Node already honoured TZ via bundled ICU.
-ENV TZ=Australia/Brisbane
+# date.today() can lag your local day, missing the current day's activities/recovery
+# before your offset clears. tzdata (installed below) fixes it; Node already honours
+# TZ via bundled ICU.
+ENV TZ=UTC
 RUN addgroup -g 1001 nodejs && adduser -u 1001 -G nodejs -S nextjs
 # Next.js standalone output
 COPY --from=builder /app/public ./public
@@ -41,7 +42,7 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 # OpenSSL so Prisma uses the baked musl-openssl-3.0.x engine (no runtime fetch).
-# tzdata so TZ=Australia/Brisbane resolves for Python (garmin-sync) + shell, not just Node.
+# tzdata so the configured TZ resolves for Python (garmin-sync) + shell, not just Node.
 RUN apk add --no-cache openssl tzdata
 RUN chown -R nextjs:nodejs node_modules/.prisma node_modules/@prisma node_modules/prisma
 
