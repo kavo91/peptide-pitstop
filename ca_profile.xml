@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Maintainer>
+  <Icon>https://peptidepitstop.com/public/icons/icon-pitstop-512.png</Icon>
+  <Profile>
+    Peptide Pitstop — free, open-source, self-hosted tools for tracking peptide &amp; GLP-1 therapy. Reconstitution math, dose logging, titration schedules, bloodwork trends and plasma-level modelling, in a private single-user dashboard. Privacy-first: your data stays on your own server, encrypted, with no telemetry. Built and maintained in the open on GitHub.
+  </Profile>
+  <DonateLink>https://buymeacoffee.com/peptidepitstop</DonateLink>
+  <DonateText>If Peptide Pitstop is useful, you can support its development.</DonateText>
+  <WebPage>https://peptidepitstop.com</WebPage>
+</Maintainer>
