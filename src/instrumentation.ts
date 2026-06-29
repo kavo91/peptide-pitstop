@@ -47,6 +47,35 @@ async function runRemindersTick() {
 }
 
 /**
+ * First-boot owner bootstrap. `/setup` step 1 (`startEnrolment`) requires an
+ * UNPROVISIONED owner row (role:"owner", passwordHash:"") to already exist — but
+ * on a fresh volume `prisma migrate deploy` only creates the schema, and the demo
+ * seed (the only other creator of that row) never runs in production. Without
+ * this, the first visit to /setup dead-ends with "No owner account. Run the seed."
+ *
+ * Create the empty owner row IFF none exists; never touch an already-provisioned
+ * owner. Email defaults to owner@example.com (it's only the authenticator label)
+ * and can be overridden with OWNER_EMAIL. Failures are swallowed: a unique-key
+ * race or transient DB error must not crash startup, and /setup still works once
+ * the row is present.
+ */
+async function ensureOwner() {
+  try {
+    const { prisma } = await import("@/lib/db");
+    const existing = await prisma.user.findFirst({
+      where: { role: "owner" },
+      select: { id: true },
+    });
+    if (existing) return;
+    const email = (process.env.OWNER_EMAIL ?? "").trim() || "owner@example.com";
+    await prisma.user.create({ data: { email, passwordHash: "", role: "owner" } });
+    console.log(`[startup] created unprovisioned owner (${email}) — visit /setup to claim it`);
+  } catch (err) {
+    console.error("[startup] owner bootstrap failed", err);
+  }
+}
+
+/**
  * Startup safety check: if the owner is still unprovisioned (passwordHash === "")
  * and no SETUP_TOKEN gate is configured, /setup is open to whoever reaches it.
  */
@@ -88,6 +117,11 @@ export async function register() {
       "[startup] TZ not set — date logic assumes Australia/Brisbane; planned-dose days may be off by one. Set TZ=Australia/Brisbane in the container environment.",
     );
   }
+
+  // Fresh-volume bootstrap: create the unprovisioned owner row if it's missing so
+  // first visit to /setup can actually claim the account (the demo seed, which is
+  // the only other creator of this row, never runs in production).
+  await ensureOwner();
 
   // Public /setup is only safe once the owner is provisioned (the atomic
   // passwordHash:"" claim makes a second run a no-op). If the owner row is still
