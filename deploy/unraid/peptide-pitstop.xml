@@ -10,7 +10,7 @@
   <Support>https://github.com/kavo91/peptide-pitstop/issues</Support>
   <Project>https://github.com/kavo91/peptide-pitstop</Project>
   <Overview>Peptide Pitstop is a free, open-source, self-hosted peptide &amp; GLP-1 tracker. Log doses, titration schedules, protocols, blood-work, and wellness metrics in a single-user private dashboard. Data stays on your server in an encrypted SQLite database (AES-256-GCM field encryption). First run opens a /setup wizard to create your password + TOTP.&#13;&#13;Required environment variables (PT_FIELD_KEY and AUTH_SECRET) MUST be set to long random secrets before first run - see the Project page for how to generate them. Set COOKIE_SECURE to false if you access the UI over plain HTTP on your LAN (without a reverse proxy / HTTPS), otherwise login will fail.</Overview>
-  <Category>Tools: Productivity:</Category>
+  <Category>Productivity:</Category>
   <WebUI>http://[IP]:[PORT:3000]</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/kavo91/peptide-pitstop/main/deploy/unraid/peptide-pitstop.xml</TemplateURL>
   <Icon>https://peptidepitstop.com/public/icons/icon-pitstop-512.png</Icon>
