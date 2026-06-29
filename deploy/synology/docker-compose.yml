@@ -1,0 +1,57 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Peptide Pitstop — Synology DSM 7.2+ Container Manager "Project" compose file
+# Free, open-source, self-hosted peptide & GLP-1 tracker.
+#   GitHub: https://github.com/kavo91/peptide-pitstop
+#   Site:   https://peptidepitstop.com
+#   Image:  ghcr.io/kavo91/peptide-pitstop  (public, multi-arch amd64 + arm64)
+#
+# HOW TO USE (full walkthrough in deploy/synology/README.md):
+#   Container Manager → Project → Create → paste this file (source: "Create
+#   compose.yml") → set the project Path to /volume1/docker/peptide-pitstop.
+#
+# NOTE: no `version:` key — it is obsolete in Compose v2 (Container Manager) and
+# only prints a warning. The current schema is inferred automatically.
+#
+# BEFORE YOU BUILD, edit the two REQUIRED secrets below (PT_FIELD_KEY and
+# AUTH_SECRET). Generate them on any machine (or via DSM → Terminal/SSH):
+#   openssl rand -base64 32     # → PT_FIELD_KEY  (32-byte AES-256-GCM field key)
+#   openssl rand -base64 48     # → AUTH_SECRET   (session signing secret)
+# WARNING: if you lose or change PT_FIELD_KEY later, previously-encrypted fields
+# become permanently unreadable. Save it in your password manager.
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  app:
+    image: ghcr.io/kavo91/peptide-pitstop:latest   # pin to :1.0.1 for a fixed version
+    container_name: peptide-pitstop
+    restart: unless-stopped
+    ports:
+      - "3000:3000"                 # DSM host port : container port. Browse to http://<NAS-IP>:3000
+    volumes:
+      # Synology shared-folder convention — the left side MUST include the volume
+      # number. Create the folder first (File Station → docker → peptide-pitstop)
+      # or let Container Manager create it. This holds the SQLite DB + app data.
+      - /volume1/docker/peptide-pitstop:/data
+    environment:
+      # ── REQUIRED ── replace both placeholder values before building ──────────
+      - PT_FIELD_KEY=REPLACE_WITH_openssl_rand_base64_32
+      - AUTH_SECRET=REPLACE_WITH_openssl_rand_base64_48
+      - DATABASE_URL=file:/data/peptides.db
+
+      # ── Access over plain HTTP on your LAN ──────────────────────────────────
+      # You are reaching the NAS at http://<NAS-IP>:3000 (no HTTPS), so cookies
+      # must NOT be marked Secure or login won't stick. Leave this `false`.
+      # Set to `true` only if you front the app with HTTPS (DSM reverse proxy,
+      # Cloudflare Tunnel, etc.).
+      - COOKIE_SECURE=false
+
+      # ── OPTIONAL ────────────────────────────────────────────────────────────
+      # Your timezone, so local-midnight dose schedules read correctly.
+      - TZ=America/New_York
+      # Home Assistant webhook for push dose reminders.
+      # - HA_WEBHOOK_URL=https://your-home-assistant:8123/api/webhook/peptide_dose_reminder
+      # Bearer token the wellness import endpoint requires (fails closed if unset).
+      # - WELLNESS_IMPORT_TOKEN=
+      # Cloudflare Tunnel token — to publish the app with NO open ports.
+      # If you use this, you can delete the `ports:` block above. See README.
+      # - CLOUDFLARE_TUNNEL_TOKEN=
+

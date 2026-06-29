@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>peptide-pitstop</Name>
+  <Repository>ghcr.io/kavo91/peptide-pitstop:latest</Repository>
+  <Registry>https://github.com/kavo91/peptide-pitstop/pkgs/container/peptide-pitstop</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/kavo91/peptide-pitstop/issues</Support>
+  <Project>https://github.com/kavo91/peptide-pitstop</Project>
+  <Overview>Peptide Pitstop is a free, open-source, self-hosted peptide &amp; GLP-1 tracker. Log doses, titration schedules, protocols, blood-work, and wellness metrics in a single-user private dashboard. Data stays on your server in an encrypted SQLite database (AES-256-GCM field encryption). First run opens a /setup wizard to create your password + TOTP.&#13;&#13;Required environment variables (PT_FIELD_KEY and AUTH_SECRET) MUST be set to long random secrets before first run - see the Project page for how to generate them. Set COOKIE_SECURE to false if you access the UI over plain HTTP on your LAN (without a reverse proxy / HTTPS), otherwise login will fail.</Overview>
+  <Category>Tools: Productivity:</Category>
+  <WebUI>http://[IP]:[PORT:3000]</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/kavo91/peptide-pitstop/main/deploy/unraid/peptide-pitstop.xml</TemplateURL>
+  <Icon>https://peptidepitstop.com/public/icons/icon-pitstop-512.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>You MUST set the PT_FIELD_KEY and AUTH_SECRET variables to strong random secrets before starting the container. Generate PT_FIELD_KEY (base64 32-byte key) with: openssl rand -base64 32 -- Generate AUTH_SECRET with: openssl rand -hex 32 -- Keep both secret and back them up; losing PT_FIELD_KEY makes encrypted data unrecoverable.</Requires>
+  <Beta>false</Beta>
+  <License>AGPL-3.0</License>
+  <WebPage>https://peptidepitstop.com</WebPage>
+  <ExtraSearchTerms>peptide GLP-1 tracker semaglutide tirzepatide health titration dose log self-hosted wellness</ExtraSearchTerms>
+  <Config Name="WebUI Port" Target="3000" Default="3000" Mode="tcp" Description="HTTP port for the Peptide Pitstop web UI." Type="Port" Display="always" Required="true" Mask="false">3000</Config>
+  <Config Name="App Data (/data)" Target="/data" Default="/mnt/user/appdata/peptide-pitstop" Mode="rw" Description="Persistent storage for the SQLite database and app data. Keep this on appdata and back it up." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/peptide-pitstop</Config>
+  <Config Name="PT_FIELD_KEY" Target="PT_FIELD_KEY" Default="" Mode="" Description="REQUIRED. Base64-encoded 32-byte AES-256-GCM field-encryption key. Generate with: openssl rand -base64 32 -- Back this up; losing it makes encrypted fields unrecoverable. Never change it after first run." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="AUTH_SECRET" Target="AUTH_SECRET" Default="" Mode="" Description="REQUIRED. Secret used to sign login sessions. Generate with: openssl rand -hex 32 -- Changing it logs out all sessions." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="DATABASE_URL" Target="DATABASE_URL" Default="file:/data/peptides.db" Mode="" Description="REQUIRED. SQLite database location. Leave as the default so the DB lives on the persistent /data volume." Type="Variable" Display="always" Required="true" Mask="false">file:/data/peptides.db</Config>
+  <Config Name="COOKIE_SECURE" Target="COOKIE_SECURE" Default="false" Mode="" Description="OPTIONAL. Set to false for plain-HTTP LAN access (e.g. http://tower-ip:3000) or login cookies will be rejected. Set to true only when serving over HTTPS via a reverse proxy / tunnel." Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+  <Config Name="TZ (Timezone)" Target="TZ" Default="" Mode="" Description="OPTIONAL. IANA timezone for correct dose/log timestamps, e.g. America/New_York or Australia/Brisbane." Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="HA_WEBHOOK_URL" Target="HA_WEBHOOK_URL" Default="" Mode="" Description="OPTIONAL. Home Assistant webhook URL to push dose/log events for automations. Leave blank to disable." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="WELLNESS_IMPORT_TOKEN" Target="WELLNESS_IMPORT_TOKEN" Default="" Mode="" Description="OPTIONAL. Bearer token that authorizes the external wellness/Garmin import endpoint. Leave blank to disable that endpoint." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="CLOUDFLARE_TUNNEL_TOKEN" Target="CLOUDFLARE_TUNNEL_TOKEN" Default="" Mode="" Description="OPTIONAL. Cloudflare Tunnel token to expose the app via a named tunnel from inside the container. Leave blank if you use Unraid/your own reverse proxy instead." Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+</Container>

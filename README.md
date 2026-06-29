@@ -195,6 +195,16 @@ Update later with `docker compose pull && docker compose up -d`. ⚠️ Keep `PT
 
 > Want it reachable from your phone outside home? Add the optional Cloudflare Tunnel (see [Cloudflare Tunnel + Access](#cloudflare-tunnel--access) below) instead of forwarding ports.
 
+### On a NAS (Unraid · CasaOS · Synology)
+
+Ready-made templates live in [`deploy/`](deploy) — all use the prebuilt image, default to **port 3000** and a **dedicated app-data volume**, so they run happily alongside anything else on the box.
+
+- **Unraid** — [`deploy/unraid/peptide-pitstop.xml`](deploy/unraid/peptide-pitstop.xml). Docker tab → **Add Container** → paste the template's raw URL, or install from **Community Applications** once it's listed. Maps `/data` to `/mnt/user/appdata/peptide-pitstop`.
+- **CasaOS** — [`deploy/casaos/peptide-pitstop/docker-compose.yml`](deploy/casaos/peptide-pitstop/docker-compose.yml). App Store → **Custom Install** → import the compose (includes the `x-casaos` metadata so it shows an icon, description, and env prompts).
+- **Synology** (DSM 7.2+) — [`deploy/synology/docker-compose.yml`](deploy/synology/docker-compose.yml) + a step-by-step [guide](deploy/synology/README.md). Container Manager → **Project** → create from the compose. Maps `/data` to `/volume1/docker/peptide-pitstop`.
+
+In every case: set `PT_FIELD_KEY` and `AUTH_SECRET` before first start (`openssl rand -base64 32`), and if you browse over plain `http://<nas-ip>:3000` keep `COOKIE_SECURE=false`. First load runs the `/setup` wizard.
+
 ### Build from source
 
 Prefer to build it yourself? Two compose variants ship in this repo:
