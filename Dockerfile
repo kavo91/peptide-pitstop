@@ -34,14 +34,18 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 # linux-musl-openssl-3.0.x engine instead of defaulting to openssl-1.1.x and
 # trying to FETCH an engine (which fails writing to root-owned dirs → the
 # "Can't write to @prisma/engines" error that skipped migrate-on-start).
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl su-exec
 # Give the runtime user ownership of the engine dirs so migrate deploy can write
 # if it ever needs to (belt-and-suspenders alongside the openssl fix above).
 RUN chown -R nextjs:nodejs node_modules/.prisma node_modules/@prisma node_modules/prisma
-USER nextjs
+# Volume-ownership entrypoint: a fresh bind-mounted /data is root-owned, so the
+# container starts as root ONLY to chown /data, then drops to the unprivileged
+# nextjs user (via su-exec) for migrations + the server. Do NOT add `USER nextjs`
+# here — the entrypoint must begin as root to fix the mount, or migrate deploy
+# can't create the SQLite DB ("Error code 14: Unable to open the database file").
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
-# Apply any pending migrations (creates the schema on a fresh volume; no-op on an
-# already-migrated DB). Non-fatal: never crash-loop a working DB on transient/drift
-# errors — log and start the server with the existing schema.
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy || echo '[start] prisma migrate deploy skipped (see error above) — starting with existing schema'; exec node server.js"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["node", "server.js"]
