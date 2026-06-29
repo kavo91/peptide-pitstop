@@ -62,7 +62,10 @@ COPY litestream.yml /etc/litestream.yml
 COPY deploy/bundled/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-USER nextjs
+# Runs as root (no USER line) so the supervisor can create the SQLite DB on a
+# freshly bind-mounted, root-owned /data volume (and write /backup, /tokens) —
+# the same fresh-volume fix as the standalone image. Root in-container is the
+# conventional tradeoff for a single-user self-hosted app on NAS appdata.
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
 # Supervisor: migrate → app (critical) + cloudflared + litestream + garmin-sync.
