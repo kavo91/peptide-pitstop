@@ -10,8 +10,8 @@
 # and cloudflared all talk over localhost.
 #
 # Set the secrets below in a .env file next to this compose.
-# NOTE: if you use Garmin sync, the ./garmin-tokens dir must be owned by uid 1001
-# (the in-container 'nextjs' user): `mkdir -p garmin-tokens && sudo chown 1001:1001 garmin-tokens`.
+# The container runs as root, so the ./data, ./garmin-tokens and ./backup dirs
+# are created/writable automatically — no manual chown needed.
 services:
   app:
     build:
