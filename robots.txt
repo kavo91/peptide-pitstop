@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://peptidepitstop.com/sitemap.xml
+Sitemap: https://peptidepitstop.com/sitemap.txt
