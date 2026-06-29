@@ -1,0 +1,108 @@
+name: peptide-pitstop
+services:
+  peptide-pitstop:
+    image: ghcr.io/kavo91/peptide-pitstop:latest
+    container_name: peptide-pitstop
+    network_mode: bridge
+    restart: unless-stopped
+    environment:
+      PT_FIELD_KEY: $PT_FIELD_KEY
+      AUTH_SECRET: $AUTH_SECRET
+      DATABASE_URL: file:/data/peptides.db
+      TZ: $TZ
+      COOKIE_SECURE: "false"
+      HA_WEBHOOK_URL: $HA_WEBHOOK_URL
+      WELLNESS_IMPORT_TOKEN: $WELLNESS_IMPORT_TOKEN
+      CLOUDFLARE_TUNNEL_TOKEN: $CLOUDFLARE_TUNNEL_TOKEN
+    ports:
+      - target: 3000
+        published: "3000"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: /DATA/AppData/$AppID/data
+        target: /data
+    deploy:
+      resources:
+        reservations:
+          memory: "128M"
+    x-casaos:
+      envs:
+        - container: PT_FIELD_KEY
+          description:
+            en_US: "REQUIRED. Base64-encoded 32-byte AES-256-GCM field key. Generate with: openssl rand -base64 32"
+        - container: AUTH_SECRET
+          description:
+            en_US: "REQUIRED. Secret used to sign session cookies. Generate with: openssl rand -base64 32"
+        - container: DATABASE_URL
+          description:
+            en_US: "SQLite database path on the persistent volume. Leave as file:/data/peptides.db"
+        - container: TZ
+          description:
+            en_US: "Local timezone, e.g. America/New_York. Defaults to UTC."
+        - container: COOKIE_SECURE
+          description:
+            en_US: "Set to false for plain-LAN http access; set to true when served over HTTPS."
+        - container: HA_WEBHOOK_URL
+          description:
+            en_US: "Optional Home Assistant webhook URL for dose/event notifications."
+        - container: WELLNESS_IMPORT_TOKEN
+          description:
+            en_US: "Optional bearer token securing the wellness data import endpoint."
+        - container: CLOUDFLARE_TUNNEL_TOKEN
+          description:
+            en_US: "Optional Cloudflare Tunnel token to expose the app without port-forwarding."
+      ports:
+        - container: "3000"
+          description:
+            en_US: "Web UI HTTP port."
+      volumes:
+        - container: /data
+          description:
+            en_US: "Persistent app data: SQLite database and uploads."
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: peptide-pitstop
+  author: kavo91
+  developer: Peptide Pitstop
+  category: Health
+  description:
+    en_US: |
+      Peptide Pitstop is a free, open-source, self-hosted peptide and GLP-1 tracker.
+
+      Track injections, titration schedules, doses, sites and reconstitution math,
+      log bloodwork and wellness metrics, and visualise progress with a
+      motorsport-themed dashboard. All data stays on your own server in an
+      encrypted SQLite database (AES-256-GCM at the field level).
+
+      Single-user. First run opens a /setup wizard to create your password and
+      enrol TOTP two-factor authentication.
+
+      REQUIRED before starting: set PT_FIELD_KEY and AUTH_SECRET. Generate each
+      with openssl rand -base64 32. For plain-LAN http access set COOKIE_SECURE=false.
+  tagline:
+    en_US: Free, open-source, self-hosted peptide & GLP-1 tracker.
+  title:
+    en_US: Peptide Pitstop
+  icon: https://peptidepitstop.com/public/icons/icon-pitstop-512.png
+  index: /
+  port_map: "3000"
+  scheme: http
+  tips:
+    before_install:
+      en_US: |
+        Two secrets are REQUIRED before this app will start. Generate each with:
+          openssl rand -base64 32
+        Set the first value as PT_FIELD_KEY (AES-256-GCM field key) and the second
+        as AUTH_SECRET (session-signing secret). Keep PT_FIELD_KEY unchanged --
+        rotating it makes existing encrypted data unreadable. For plain http on the
+        LAN set COOKIE_SECURE=false. After install, open the Web UI and complete the
+        /setup wizard (password + TOTP).
+  version: "1.0.1"
+  update_at: "2026-06-28"
+  website: https://peptidepitstop.com
+  repo: https://github.com/kavo91/peptide-pitstop
+  support: https://github.com/kavo91/peptide-pitstop/issues
+
