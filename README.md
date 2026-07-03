@@ -27,6 +27,7 @@ Peptide Pitstop is a private, self-hosted web app for managing peptide and GLP-1
 - [✅ Prerequisites](#-prerequisites)
 - [🚀 Quickstart (local dev)](#-quickstart-local-dev)
 - [🐳 Deploy (self-hosted)](#-deploy-self-hosted)
+- [🔔 Push notifications](#-push-notifications)
 - [🔐 Locked out?](#-locked-out)
 - [📚 Further documentation](#-further-documentation)
 - [🛠️ Project status & contributing](#️-project-status--contributing)
@@ -250,6 +251,45 @@ Set your timezone with `TZ` (e.g. `TZ=America/New_York`) so local-midnight sched
 | `GARMIN_EMAIL` / `GARMIN_PASSWORD` | Consumed only by the Garmin sync sidecar |
 
 See `.env.example` for the full, commented list.
+
+---
+
+## 🔔 Push notifications
+
+Dose reminders arrive as **native push notifications from the installed app** —
+no third-party notification service, no account, nothing leaves your server
+except the (amount-free) push payload. Tapping opens Peptide Pitstop directly.
+
+What you get:
+
+- **Per-slot reminders** — each scheduled time on a protocol reminds ±30 min
+  around its own slot, including multi-time schedules (e.g. 08:00 + 20:00).
+- **Doses without a set time** remind once at your chosen hour (default 08:00).
+- **Evening catch-up nag** — one summary of anything still unlogged (default
+  18:00, or turn it off). Doses you've already logged never notify.
+- **Exactly-once** — a claim ledger guarantees no double-sends, ever.
+
+Setup (once per server):
+
+```bash
+npx web-push generate-vapid-keys
+# Put the output in .env, then restart:
+#   VAPID_PUBLIC_KEY=…  VAPID_PRIVATE_KEY=…  VAPID_SUBJECT=mailto:you@example.com
+```
+
+Then on each device: install the PWA (**iOS: Share → Add to Home Screen**,
+iOS 16.4+), open it **from the home-screen icon**, and go to
+**Settings → Notifications → Enable on this device → Send test**. Reminder
+times and the nag toggle live in the same place.
+
+Notes:
+
+- Web Push needs HTTPS (a Cloudflare Tunnel works fine).
+- Use a **separate VAPID keypair per environment** — push services authorise
+  by key, not domain, so a staging box holding your production key and a
+  copied database will push to your real phone.
+- Run Home Assistant? An optional webhook relay covers devices without a
+  subscription — see [docs/ha-reminder-automation.md](docs/ha-reminder-automation.md).
 
 ---
 
