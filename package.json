@@ -1,6 +1,6 @@
 {
   "name": "peptide-tracker",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "license": "AGPL-3.0-only",
   "description": "Self-hosted peptide tracker \u2014 dose logging, reconstitution math, prescriptions, Home Assistant integration.",

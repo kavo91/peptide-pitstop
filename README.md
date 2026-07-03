@@ -243,6 +243,7 @@ Set your timezone with `TZ` (e.g. `TZ=America/New_York`) so local-midnight sched
 | `PT_FIELD_KEY` | 32-byte base64 key for AES-256-GCM field encryption |
 | `AUTH_SECRET` | Session signing secret |
 | `DATABASE_URL` | SQLite path (maps to the `/data` volume) |
+| `OWNER_EMAIL` | Optional authenticator label for the first-run owner bootstrap (defaults to `owner@example.com`) |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push keys (`npx web-push generate-vapid-keys`) |
 | `PUBLIC_APP_URL` | Absolute app URL used in relayed notification deep-links |
 | `HA_WEBHOOK_URL` | Home Assistant webhook — fallback relay for dose reminders |
