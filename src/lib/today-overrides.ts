@@ -13,9 +13,9 @@
  * protocol's grid. `PlannedDose.scheduledAt` is stored as an absolute instant
  * representing a LOCAL midnight, so `startOfDay(new Date(scheduledAt))` only
  * recovers the intended day when the runtime TZ matches the TZ the row was
- * written in (Australia/Brisbane).
+ * written in (the container's TZ).
  *
- * PROD BUG (fixed 2026-06-21 by container `TZ=Australia/Brisbane`): under a UTC
+ * PROD BUG (fixed 2026-06-21 by setting the container's `TZ`): under a UTC
  * runtime a Monday-local-midnight row (`…T00:00+10:00` = `…T14:00Z`) reads back
  * as the *Sunday* 14:00Z → `startOfDay` → Sunday → off the M/W/F grid → wrongly
  * classified as a rebase override → the dose shows "due" a day early.
@@ -74,6 +74,29 @@ export function classifyOverrideDays(
     if (!proto?.scheduleRule) continue;
     if (proto.rebaseMode !== "fixed_anchor") continue;
     const rowDay = startOfDay(new Date(o.scheduledAt));
+    // A STRANDED row is a stale projection artefact, never a rebase override —
+    // counting it as off-grid would make the override branch of dueSlotsForDay
+    // bypass the start/end-date gate and show a not-yet-started dose as due
+    // (BPC+TB4 prod bug, 2026-07-02). Two shapes are stranded (mirrors
+    // materialize.ts isStale — keep in sync):
+    //   - BEFORE startDate: categorically stale (a genuine confirmRebase row
+    //     derives from a real logged dose inside the started window).
+    //   - AFTER endDate and ON the grid ignoring the end date: a grid row
+    //     stranded by an endDate pulled earlier. An OFF-grid row past the end
+    //     is kept — a user-confirmed rebase can shift the final dose past the
+    //     end (rebaseWeek clamps to week-end, not endDate).
+    // A degenerate window (startDate after endDate) strands nothing.
+    const degenerate =
+      proto.startDate && proto.endDate && startOfDay(proto.startDate) > startOfDay(proto.endDate);
+    if (!degenerate) {
+      if (proto.startDate && rowDay < startOfDay(proto.startDate)) continue;
+      if (
+        proto.endDate &&
+        rowDay > startOfDay(proto.endDate) &&
+        slotsOn(parseSchedule(proto.scheduleRule), rowDay, proto.startDate, null).length > 0
+      )
+        continue;
+    }
     const onGrid = slotsOn(parseSchedule(proto.scheduleRule), rowDay, proto.startDate, proto.endDate).length > 0;
     if (onGrid) {
       hasOnGrid.add(o.protocolId); // routine materialised row — the live grid is active

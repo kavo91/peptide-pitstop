@@ -184,6 +184,101 @@ describe("rebase-override classifier — TZ hardening (WS6)", () => {
     expect(sundaySlots).toHaveLength(1); // the symptom: "due" a day early
   });
 
+  // BPC+TB4 prod bug (2026-07-02): moving a stack's start date FORWARD leaves
+  // already-materialised "planned" rows behind (daily rows for Jul 2–5 written
+  // while the stack started immediately). Those rows now sit outside the
+  // window-gated grid, so the classifier misread them as fixed_anchor rebase
+  // overrides — and the override branch of dueSlotsForDay bypasses the
+  // start-date gate entirely, so Today kept showing the doses as due days
+  // before the protocol had started.
+  it("stale PRE-START planned rows are ignored — not overrides, nothing due before the start date", () => {
+    process.env.TZ = "Australia/Brisbane";
+    const daily = JSON.stringify([{ dayPattern: { kind: "daily" }, times: [] }]);
+    const stack = {
+      id: "p-stack",
+      scheduleRule: daily,
+      rebaseMode: "fixed_anchor" as const,
+      // Exactly the prod shape: start date Mon 2026-07-06 stored as a
+      // UTC-midnight instant (= 10:00 Brisbane).
+      startDate: new Date("2026-07-06T00:00:00Z"),
+      endDate: null,
+    };
+    // Stale rows Thu 2026-07-02 … Sun 2026-07-05, Brisbane local midnights.
+    const staleRows = ["2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04"].map((utcDay) => ({
+      protocolId: "p-stack",
+      scheduledAt: new Date(`${utcDay}T14:00:00Z`),
+    }));
+
+    const overrideDays = classifyOverrideDays([stack], staleRows);
+    expect(overrideDays.get("p-stack")).toBeUndefined();
+
+    // The symptom: Today (Thu 2026-07-02) must show NO due slot.
+    const today = startOfDay(new Date("2026-07-02T12:00:00"));
+    expect(dueSlotsForDay(daily, overrideDays.get("p-stack"), today, stack.startDate, stack.endDate)).toHaveLength(0);
+
+    // From the start date onward the live grid takes over as normal.
+    const startDay = startOfDay(new Date("2026-07-06T12:00:00"));
+    expect(dueSlotsForDay(daily, overrideDays.get("p-stack"), startDay, stack.startDate, stack.endDate)).toHaveLength(1);
+  });
+
+  it("stale POST-END planned rows are equally ignored", () => {
+    process.env.TZ = "Australia/Brisbane";
+    const daily = JSON.stringify([{ dayPattern: { kind: "daily" }, times: [] }]);
+    const ended = {
+      id: "p-ended",
+      scheduleRule: daily,
+      rebaseMode: "fixed_anchor" as const,
+      startDate: new Date("2026-06-01T00:00:00Z"),
+      endDate: new Date("2026-06-30T00:00:00Z"),
+    };
+    // A leftover row on Thu 2026-07-02 local — after the protocol ended.
+    const overrideDays = classifyOverrideDays([ended], [
+      { protocolId: "p-ended", scheduledAt: new Date("2026-07-01T14:00:00Z") },
+    ]);
+    expect(overrideDays.get("p-ended")).toBeUndefined();
+    const day = startOfDay(new Date("2026-07-02T12:00:00"));
+    expect(dueSlotsForDay(daily, overrideDays.get("p-ended"), day, ended.startDate, ended.endDate)).toHaveLength(0);
+  });
+
+  it("an OFF-grid row past the endDate is still an override — a confirmed rebase can shift the final dose past the end", () => {
+    process.env.TZ = "Australia/Brisbane";
+    const moTh = JSON.stringify([{ dayPattern: { kind: "weekly", byDays: ["MO", "TH"] }, times: [] }]);
+    const ending = {
+      id: "p-final",
+      scheduleRule: moTh,
+      rebaseMode: "fixed_anchor" as const,
+      startDate: new Date("2026-06-01T00:00:00Z"),
+      endDate: new Date("2026-07-02T00:00:00Z"), // ends Thu
+    };
+    // The final Thu dose was rebase-shifted to Fri 2026-07-03 (past the end).
+    const fri = startOfDay(new Date("2026-07-03T12:00:00"));
+    const overrideDays = classifyOverrideDays([ending], [
+      { protocolId: "p-final", scheduledAt: new Date("2026-07-02T14:00:00Z") }, // Fri 3rd local
+    ]);
+    expect(overrideDays.get("p-final")?.has(dayKey(fri))).toBe(true);
+    expect(dueSlotsForDay(moTh, overrideDays.get("p-final"), fri, ending.startDate, ending.endDate)).toHaveLength(1);
+  });
+
+  it("a genuine IN-window off-grid rebase week still classifies as an override", () => {
+    process.env.TZ = "Australia/Brisbane";
+    const moTh = JSON.stringify([{ dayPattern: { kind: "weekly", byDays: ["MO", "TH"] }, times: [] }]);
+    const started = {
+      id: "p-live",
+      scheduleRule: moTh,
+      rebaseMode: "fixed_anchor" as const,
+      startDate: new Date("2026-06-01T00:00:00Z"),
+      endDate: null,
+    };
+    // Week of Mon 2026-06-15 rebased onto Tue/Fri — purely off-grid rows.
+    const overrideDays = classifyOverrideDays([started], [
+      { protocolId: "p-live", scheduledAt: new Date("2026-06-15T14:00:00Z") }, // Tue 16th local
+      { protocolId: "p-live", scheduledAt: new Date("2026-06-18T14:00:00Z") }, // Fri 19th local
+    ]);
+    const tue = startOfDay(new Date("2026-06-16T12:00:00"));
+    expect(overrideDays.get("p-live")?.has(dayKey(tue))).toBe(true);
+    expect(dueSlotsForDay(moTh, overrideDays.get("p-live"), tue, started.startDate, started.endDate)).toHaveLength(1);
+  });
+
   // GHK-Cu prod bug (2026-06-26): a stray OFF-grid planned row sitting alongside
   // a valid ON-grid row in the same week must NOT be treated as a rebase. A real
   // confirmRebase deletes the on-grid rows, so a genuine rebase week is purely

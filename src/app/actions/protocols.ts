@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/owner";
 import { assertPeptideUsable, assertPrescriptionCompatible, assertPrescriptionOwned, assertSyringeUsable } from "@/lib/auth/ownership";
 import { normaliseScheduleRule } from "@/lib/schedule/normalise";
 import { parsePositiveDecimal, parseDateOrder } from "@/lib/validation/domain";
+import { runPlannedDoseGeneration } from "@/lib/planned/run";
 
 function optDecimal(v?: string | null): string | null {
   const s = (v ?? "").toString().trim();
@@ -104,23 +105,57 @@ export async function saveProtocol(input: ProtocolInput) {
     status: ["active", "paused", "completed"].includes(input.status ?? "") ? input.status! : "active",
   };
 
+  let savedId = input.id;
   try {
     if (input.id) {
+      // Snapshot the stored dates BEFORE the update so the stack cascade below
+      // only fires for dates the user actually CHANGED — a form save that
+      // touched an unrelated field must not impose this component's (echoed)
+      // dates onto siblings whose own dates legitimately differ.
+      const before = await prisma.protocol.findFirst({
+        where: { id: input.id, userId: user.id },
+        select: { stackId: true, startDate: true, endDate: true },
+      });
+      if (!before) return { ok: false as const, error: "Protocol not found." };
+
       const { count } = await prisma.protocol.updateMany({ where: { id: input.id, userId: user.id }, data });
       if (count === 0) return { ok: false as const, error: "Protocol not found." };
+
+      // Stack date alignment: a changed start/end date re-aligns the stack
+      // siblings (same contract as updateProtocol and updateStackSchedule).
+      if (before.stackId) {
+        const dateEq = (a: Date | null, b: Date | null) => (a?.getTime() ?? null) === (b?.getTime() ?? null);
+        const changed: { startDate?: Date | null; endDate?: Date | null } = {};
+        if (!dateEq(before.startDate, data.startDate)) changed.startDate = data.startDate;
+        if (!dateEq(before.endDate, data.endDate)) changed.endDate = data.endDate;
+        if (Object.keys(changed).length > 0) {
+          await prisma.protocol.updateMany({
+            where: { stackId: before.stackId, userId: user.id, id: { not: input.id } },
+            data: changed,
+          });
+        }
+      }
     } else {
       const created = await prisma.protocol.create({ data: { ...data, userId: user.id } });
-      revalidatePath("/protocols");
-      revalidatePath("/");
-      return { ok: true as const, id: created.id };
+      savedId = created.id;
     }
   } catch (e) {
     console.error("saveProtocol failed", e);
     return { ok: false as const, error: "Could not save protocol." };
   }
+
+  // Re-materialise planned doses NOW so date/schedule changes take effect
+  // immediately (stale out-of-window rows deleted, new grid generated) instead
+  // of waiting for the daily tick. Non-fatal — the save itself succeeded.
+  try {
+    await runPlannedDoseGeneration(user.id);
+  } catch (e) {
+    console.error("saveProtocol: planned-dose regeneration failed", e);
+  }
+
   revalidatePath("/protocols");
   revalidatePath("/");
-  return { ok: true as const, id: input.id };
+  return { ok: true as const, id: savedId };
 }
 
 export async function addProtocolStep(input: { protocolId: string; dose: string; doseInputUnit: string; durationDays?: string; notes?: string }) {
@@ -234,6 +269,24 @@ export async function updateProtocol(input: UpdateProtocolInput) {
   const user = await getCurrentUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
+  // One ownership-scoped read serves the schedule-anchor resolution, the
+  // start-vs-end validation, and the stack lookup for the date alignment below.
+  const target = await prisma.protocol.findFirst({
+    where: { id: input.id, userId: user.id },
+    select: { startDate: true, endDate: true, stackId: true },
+  });
+  if (!target) return { ok: false as const, error: "Protocol not found." };
+
+  // The quick editor shows only the start date, so validate against the STORED
+  // end date — an inverted window (start after end) would silently generate
+  // nothing and must be rejected, not persisted.
+  if (input.startDateISO && target.endDate && new Date(input.startDateISO) > target.endDate) {
+    return {
+      ok: false as const,
+      error: `Start date is after this protocol's end date (${target.endDate.toISOString().slice(0, 10)}) — move or clear the end date first.`,
+    };
+  }
+
   // Normalise the schedule rule only when one is supplied. `undefined` leaves the
   // column untouched (Prisma skips undefined); an empty string clears it as before.
   let scheduleRule: string | null | undefined = input.scheduleRule;
@@ -241,11 +294,8 @@ export async function updateProtocol(input: UpdateProtocolInput) {
     // Resolve the EFFECTIVE anchor: the passed startDateISO when supplied, else
     // the protocol's STORED startDate — otherwise a schedule-only update of an
     // interval/cycle rule would be wrongly rejected as never-due.
-    let anchor: string | Date | null | undefined = input.startDateISO;
-    if (anchor === undefined) {
-      const existing = await prisma.protocol.findFirst({ where: { id: input.id, userId: user.id }, select: { startDate: true } });
-      anchor = existing?.startDate ?? null;
-    }
+    const anchor: string | Date | null =
+      input.startDateISO === undefined ? target.startDate ?? null : input.startDateISO;
     const norm = normaliseScheduleRule(input.scheduleRule, anchor);
     if (!norm.ok) return { ok: false as const, error: norm.error };
     scheduleRule = norm.rule;
@@ -261,10 +311,39 @@ export async function updateProtocol(input: UpdateProtocolInput) {
       },
     });
     if (count === 0) return { ok: false as const, error: "Protocol not found." };
+
+    // Stack date alignment: a stack's components run as one combined protocol,
+    // so a start-date CHANGE on one component re-aligns every sibling (the same
+    // contract updateStackSchedule keeps for the stack editor). Without this the
+    // stack silently drifts apart when edited card-by-card on /protocols. An
+    // unchanged (form-echoed) value never cascades — a save that didn't touch
+    // the date must not overwrite siblings with the sender's stale copy.
+    if (input.startDateISO !== undefined && target.stackId) {
+      const newStart = input.startDateISO ? new Date(input.startDateISO) : null;
+      const changed = (newStart?.getTime() ?? null) !== (target.startDate?.getTime() ?? null);
+      if (changed) {
+        await prisma.protocol.updateMany({
+          where: { stackId: target.stackId, userId: user.id, id: { not: input.id } },
+          data: { startDate: newStart },
+        });
+      }
+    }
   } catch (e) {
     console.error("updateProtocol failed", e);
     return { ok: false as const, error: "Could not update protocol." };
   }
+
+  // Re-materialise planned doses NOW so a date change takes effect immediately:
+  // deletes rows stranded outside the new window (which would otherwise sit as
+  // phantom due/missed doses until the daily tick) and generates the new grid.
+  // Failure is non-fatal — the save itself succeeded and the startup/cron
+  // runner self-heals on its next tick.
+  try {
+    await runPlannedDoseGeneration(user.id);
+  } catch (e) {
+    console.error("updateProtocol: planned-dose regeneration failed", e);
+  }
+
   revalidatePath("/");
   revalidatePath("/protocols");
   return { ok: true as const };

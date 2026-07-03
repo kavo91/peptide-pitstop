@@ -72,6 +72,14 @@ export interface MaterializeResult {
   upserts: PlannedDoseUpsert[];
   /** Existing rows whose status should be updated to "missed". */
   statusUpdates: StatusUpdate[];
+  /**
+   * Ids of stale rows to DELETE: planned/missed rows with no linked DoseLog
+   * whose scheduledAt falls outside the protocol's [startDate, endDate] window
+   * (stranded when a start date moves later / an end date moves earlier).
+   * PlannedDose is a projection of the schedule — actual history lives in
+   * DoseLog, which is never touched; rows WITH a DoseLog are always kept.
+   */
+  deletions: string[];
 }
 
 // ─── local helpers ────────────────────────────────────────────────────────
@@ -109,6 +117,51 @@ export function materializePlannedDoses(args: {
   const { protocols, horizonStart, horizonEnd, existing, today } = args;
   const todayKey = KEY(today);
 
+  // Build a lookup: protocolId → protocol (window + rule lookups below).
+  const protocolMap = new Map(protocols.map((p) => [p.id, p]));
+
+  /**
+   * Is this row a STRANDED projection artefact (vs live grid or a genuine
+   * rebase override)? Two — and only two — shapes qualify:
+   *   - BEFORE startDate: categorically stale. A genuine confirmRebase row
+   *     derives from a real logged dose inside the started window, so nothing
+   *     legitimate lives before the start (BPC+TB4 prod bug, 2026-07-02).
+   *   - AFTER endDate *and on the schedule grid ignoring the end date*: a grid
+   *     row stranded by an endDate pulled earlier. An OFF-grid row past the
+   *     end is kept — a user-confirmed rebase (rebaseWeek clamps to week-end,
+   *     not endDate) can legitimately shift the final dose past the end.
+   * A degenerate window (startDate after endDate — the card editor can't see
+   * the end date, so this is reachable) marks NOTHING stale: both half-window
+   * tests would otherwise cover the entire timeline and mass-delete history.
+   */
+  const isStale = (p: ProtocolInput, scheduledAt: Date): boolean => {
+    const rowDay = startOfDay(scheduledAt);
+    if (p.startDate && p.endDate && startOfDay(p.startDate) > startOfDay(p.endDate)) return false;
+    if (p.startDate && rowDay < startOfDay(p.startDate)) return true;
+    if (p.endDate && rowDay > startOfDay(p.endDate)) {
+      return slotsOn(parseSchedule(p.scheduleRule), rowDay, p.startDate, null).length > 0;
+    }
+    return false;
+  };
+
+  // ── 0. Stale-row cleanup ─────────────────────────────────────────────────
+  // A stranded planned/missed row with no linked DoseLog is deleted: left
+  // alone it masquerades as a rebase override (dose shows due before the
+  // protocol starts), gets marked "missed" (adherence pollution), and fires
+  // reminders. Rows with a DoseLog, or taken/skipped rows, are never touched.
+  const deletions: string[] = [];
+  const staleIds = new Set<string>();
+  for (const row of existing) {
+    if (row.hasDoseLog) continue;
+    if (row.status !== "planned" && row.status !== "missed") continue;
+    const p = protocolMap.get(row.protocolId);
+    if (!p) continue;
+    if (isStale(p, row.scheduledAt)) {
+      deletions.push(row.id);
+      staleIds.add(row.id);
+    }
+  }
+
   // ── 1. Compute override-suppressed week set per protocol ─────────────────
   // A "rebase override" is an existing "planned" row whose scheduledAt falls
   // OFF the protocol's schedule grid (written by confirmRebase with a shifted
@@ -120,9 +173,6 @@ export function materializePlannedDoses(args: {
   // this same generator) do NOT trigger suppression — this preserves idempotency.
   // Existing rows with status != "planned" (taken/missed/skipped) are history
   // and do not trigger suppression.
-
-  // Build a lookup: protocolId → protocol (for rule + startDate/endDate lookup)
-  const protocolMap = new Map(protocols.map((p) => [p.id, p]));
 
   type ProtocolWeekKey = string; // `${protocolId}:${weekKey}`
   const suppressedWeeks = new Set<ProtocolWeekKey>();
@@ -139,6 +189,9 @@ export function materializePlannedDoses(args: {
     if (row.status !== "planned") continue;
     const p = protocolMap.get(row.protocolId);
     if (!p || !p.scheduleRule) continue;
+    // Stranded rows are stale artefacts (deleted above), never genuine
+    // rebase overrides — they must not suppress the live grid for their week.
+    if (isStale(p, row.scheduledAt)) continue;
     const onGrid =
       slotsOn(parseSchedule(p.scheduleRule), row.scheduledAt, p.startDate, p.endDate).length > 0;
     const key = `${row.protocolId}:${KEY(weekStartOf(row.scheduledAt))}`;
@@ -228,10 +281,11 @@ export function materializePlannedDoses(args: {
   for (const row of existing) {
     if (row.status !== "planned") continue;
     if (row.hasDoseLog) continue;
+    if (staleIds.has(row.id)) continue; // being deleted — never mark missed
     const rowKey = KEY(row.scheduledAt);
     if (rowKey >= todayKey) continue; // today or future → not yet missed
     statusUpdates.push({ id: row.id, status: "missed" });
   }
 
-  return { upserts, statusUpdates };
+  return { upserts, statusUpdates, deletions };
 }

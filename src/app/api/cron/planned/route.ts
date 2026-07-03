@@ -56,15 +56,17 @@ export async function POST(req: NextRequest) {
 
     let totalUpserted = 0;
     let totalMissed = 0;
+    let totalDeleted = 0;
 
     for (const user of users) {
       const result = await runPlannedDoseGeneration(user.id);
       totalUpserted += result.upserted;
       totalMissed += result.markedMissed;
+      totalDeleted += result.deleted;
     }
 
     console.log(
-      `[cron/planned] complete — upserted=${totalUpserted} markedMissed=${totalMissed} users=${users.length}`,
+      `[cron/planned] complete — upserted=${totalUpserted} markedMissed=${totalMissed} deleted=${totalDeleted} users=${users.length}`,
     );
 
     return NextResponse.json({
@@ -72,6 +74,7 @@ export async function POST(req: NextRequest) {
       users: users.length,
       upserted: totalUpserted,
       markedMissed: totalMissed,
+      deleted: totalDeleted,
     });
   } catch (err) {
     console.error("[cron/planned] error", err);

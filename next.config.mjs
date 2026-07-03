@@ -11,9 +11,13 @@ const nextConfig = {
     // pdfkit loads its bundled .afm font metrics from disk at runtime via fs. Keep
     // it external (un-bundled) so those data files resolve from node_modules in the
     // standalone build — and so the Alpine image needs NO system fonts.
+    // web-push pulls node built-ins (https via https-proxy-agent) that break the
+    // EDGE compile of instrumentation.ts even behind a dynamic import — external
+    // keeps webpack from resolving it; the nodejs runtime requires it from
+    // node_modules (traced into the standalone output).
     // (Next 14 still uses the experimental key; renamed to top-level
     // `serverExternalPackages` in Next 15.)
-    serverComponentsExternalPackages: ["pdfkit"],
+    serverComponentsExternalPackages: ["pdfkit", "web-push"],
     serverActions: { allowedOrigins: ["peptides.example.com", "peptides.example.com", "peptides-dev.example.com"] },
     instrumentationHook: true,
   },

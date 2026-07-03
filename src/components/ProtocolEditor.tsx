@@ -33,9 +33,13 @@ export function ProtocolEditor(p: Props) {
     setSaved(false);
     setError(null);
     try {
+      // Only send the start date when the user actually edited it. An untouched
+      // field stays `undefined` (column untouched server-side) so a status-only
+      // save can never cascade this card's possibly-stale date across a stack.
+      const startDirty = startDate !== (p.startDate ?? "");
       const res = await updateProtocol({
         id: p.id,
-        startDateISO: startDate ? new Date(startDate).toISOString() : null,
+        ...(startDirty ? { startDateISO: startDate ? new Date(startDate).toISOString() : null } : {}),
         status,
       });
       if (res.ok) setSaved(true);

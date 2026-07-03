@@ -128,3 +128,46 @@ self.addEventListener("sync", (event) => {
     );
   }
 });
+
+// ── Web Push: dose reminders from the app itself ──────────────────────────────
+// Payload (JSON): { title, body, tag, url } — composed server-side by
+// src/lib/reminders.ts. `tag` collapses repeats (a newer reminder for the same
+// protocol replaces the stale one on the phone). Tapping opens/focuses the
+// installed PWA window instead of a browser tab.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    /* malformed payload → generic notification below */
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title || "Peptide Pitstop", {
+      body: data.body || "",
+      tag: data.tag || "peptide",
+      icon: "/icons/icon-pitstop-192.png",
+      badge: "/icons/icon-pitstop-192.png",
+      data: { url: data.url || "/today" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/today";
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clients) => {
+        // Reuse an open app window when there is one (focus + navigate)…
+        for (const client of clients) {
+          if ("focus" in client) {
+            if ("navigate" in client) client.navigate(url).catch(() => {});
+            return client.focus();
+          }
+        }
+        // …else open a fresh one (launches the standalone PWA on iOS).
+        return self.clients.openWindow(url);
+      })
+  );
+});

@@ -100,7 +100,7 @@ The motorsport "pit-wall" dark theme ships alongside a clean light theme, and th
 - **Journal & wellness.** Free-text journal plus wellness logging, charted over time.
 
 ### Integrations
-- **Home Assistant reminders.** Dose reminders pushed via a Home Assistant webhook to your phone — free, no third-party notification service.
+- **Push dose reminders.** Native Web Push notifications from the installed PWA — per-slot reminders for multi-time schedules plus a configurable evening catch-up nag; tapping opens the app (iOS 16.4+). Optional Home Assistant webhook fallback for devices without a subscription. Free, no third-party notification service, and no dose amounts in the payload.
 - **Garmin wellness.** A bundled sync sidecar pulls daily Garmin wellness data (steps, sleep, etc.) into the app using your own credentials, on your own schedule.
 - **Curated peptide library + enrichment.** Built-in peptide reference data with an enrichment calculator.
 
@@ -242,7 +242,9 @@ Set your timezone with `TZ` (e.g. `TZ=America/New_York`) so local-midnight sched
 | `PT_FIELD_KEY` | 32-byte base64 key for AES-256-GCM field encryption |
 | `AUTH_SECRET` | Session signing secret |
 | `DATABASE_URL` | SQLite path (maps to the `/data` volume) |
-| `HA_WEBHOOK_URL` | Home Assistant webhook for dose reminders |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push keys (`npx web-push generate-vapid-keys`) |
+| `PUBLIC_APP_URL` | Absolute app URL used in relayed notification deep-links |
+| `HA_WEBHOOK_URL` | Home Assistant webhook — fallback relay for dose reminders |
 | `WELLNESS_IMPORT_TOKEN` | Bearer token the Garmin sidecar presents (fails closed if unset) |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Your Cloudflare Tunnel token |
 | `GARMIN_EMAIL` / `GARMIN_PASSWORD` | Consumed only by the Garmin sync sidecar |
@@ -264,7 +266,7 @@ sqlite3 /path/to/peptides.db \
 
 ## 📚 Further documentation
 
-- [Home Assistant dose-reminder automation](docs/ha-reminder-automation.md) — wiring the reminder webhook to Companion push.
+- [Dose reminder notifications](docs/ha-reminder-automation.md) — Web Push setup (VAPID + device enrolment) and the optional Home Assistant fallback relay.
 
 > Apple Health is intentionally **not** a built-in integration: HealthKit is device-only and a self-hosted web app cannot write to it. See [the Shortcut workaround](docs/apple-health-shortcut.md) if you want a manual bridge.
 

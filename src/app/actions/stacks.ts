@@ -10,6 +10,7 @@ import { vialLabelStrengthMg, perInjectionMcg, DAILY_SCHEDULE_RULE } from "@/lib
 import { normaliseScheduleRule } from "@/lib/schedule/normalise";
 import { encryptField } from "@/lib/crypto/fieldEncryption";
 import { getTodayDoses } from "@/lib/today";
+import { runPlannedDoseGeneration } from "@/lib/planned/run";
 import { peptideTokens } from "@/lib/stacks/server";
 import { logDose } from "./doses";
 
@@ -560,6 +561,15 @@ export async function updateStackSchedule(stackId: string, scheduleRule: string,
   } catch (e) {
     console.error("updateStackSchedule failed", e);
     return { ok: false as const, error: "Could not update the schedule." };
+  }
+
+  // Re-materialise planned doses NOW so the schedule/date change takes effect
+  // immediately (stale out-of-window rows deleted, new grid generated) instead
+  // of waiting for the daily tick. Non-fatal — the update itself succeeded.
+  try {
+    await runPlannedDoseGeneration(user.id);
+  } catch (e) {
+    console.error("updateStackSchedule: planned-dose regeneration failed", e);
   }
 
   revalidatePath("/today");

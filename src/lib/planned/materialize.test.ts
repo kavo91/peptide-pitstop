@@ -511,7 +511,144 @@ describe("JSON scheduleRule (custom-schedules engine)", () => {
   });
 });
 
-// ─── suite 6: protocol without a scheduleRule ─────────────────────────────
+// ─── suite 6: stale out-of-window rows (start date moved forward) ─────────
+// BPC+TB4 prod bug (2026-07-02): pushing a protocol's start date into the
+// future strands the already-materialised daily rows before it. They must be
+// DELETED — not marked missed (adherence pollution), not treated as rebase
+// overrides (Today showed the doses due), not left to fire midnight reminders.
+
+describe("stale out-of-window rows (start date moved forward)", () => {
+  it("deletes pre-start planned rows instead of marking them missed", () => {
+    const today = d("2026-07-03");
+    const horizonEnd = new Date(today.getTime() + 13 * 86_400_000);
+    const stale = ["2026-07-02", "2026-07-03", "2026-07-04", "2026-07-05"].map((day, i) =>
+      existing({ id: `stale-${i}`, scheduledAt: d(day) }),
+    );
+
+    const { upserts, statusUpdates, deletions } = materializePlannedDoses({
+      protocols: [proto({ startDate: d("2026-07-06") })],
+      horizonStart: today,
+      horizonEnd,
+      existing: stale,
+      today,
+    });
+
+    // All four stranded rows are deleted…
+    expect([...deletions].sort()).toEqual(["stale-0", "stale-1", "stale-2", "stale-3"]);
+    // …and the Jul 2 row (before today) is NOT marked missed on its way out.
+    expect(statusUpdates).toHaveLength(0);
+    // The stale rows must not suppress the live grid as fake rebase overrides:
+    // expansion begins exactly at the new start date.
+    expect(upserts.length).toBeGreaterThan(0);
+    expect(KEY(upserts[0].scheduledAt)).toBe("2026-07-06");
+  });
+
+  it("deletes an out-of-window row already marked missed (no dose log)", () => {
+    const today = d("2026-07-04");
+    const horizonEnd = new Date(today.getTime() + 13 * 86_400_000);
+
+    const { deletions } = materializePlannedDoses({
+      protocols: [proto({ startDate: d("2026-07-06") })],
+      horizonStart: today,
+      horizonEnd,
+      existing: [existing({ id: "was-missed", scheduledAt: d("2026-07-02"), status: "missed" })],
+      today,
+    });
+
+    expect(deletions).toEqual(["was-missed"]);
+  });
+
+  it("keeps an out-of-window row that has a linked DoseLog (history is preserved)", () => {
+    const today = d("2026-07-03");
+    const horizonEnd = new Date(today.getTime() + 13 * 86_400_000);
+
+    const { deletions, statusUpdates } = materializePlannedDoses({
+      protocols: [proto({ startDate: d("2026-07-06") })],
+      horizonStart: today,
+      horizonEnd,
+      existing: [existing({ id: "logged", scheduledAt: d("2026-07-02"), hasDoseLog: true })],
+      today,
+    });
+
+    expect(deletions).toHaveLength(0);
+    expect(statusUpdates).toHaveLength(0); // hasDoseLog rows are never marked missed either
+  });
+
+  it("deletes planned rows stranded after the endDate", () => {
+    const today = d("2026-07-03");
+    const horizonEnd = new Date(today.getTime() + 13 * 86_400_000);
+
+    const { deletions } = materializePlannedDoses({
+      protocols: [proto({ startDate: d("2026-06-01"), endDate: d("2026-07-01") })],
+      horizonStart: today,
+      horizonEnd,
+      existing: [existing({ id: "past-end", scheduledAt: d("2026-07-05") })],
+      today,
+    });
+
+    expect(deletions).toEqual(["past-end"]);
+  });
+
+  it("an OFF-grid row past the endDate is kept — a confirmed rebase can shift the final dose past the end", () => {
+    // MO/TH grid ending Thu 2026-07-02; the final dose was rebase-shifted to
+    // Fri 2026-07-03 (off-grid, past end). It must NOT be deleted as stale.
+    const today = d("2026-07-03");
+    const horizonEnd = new Date(today.getTime() + 13 * 86_400_000);
+
+    const { deletions } = materializePlannedDoses({
+      protocols: [proto({ scheduleRule: "FREQ=WEEKLY;BYDAY=MO,TH", startDate: d("2026-06-01"), endDate: d("2026-07-02") })],
+      horizonStart: today,
+      horizonEnd,
+      existing: [existing({ id: "shifted-final", scheduledAt: d("2026-07-03") })],
+      today,
+    });
+
+    expect(deletions).toHaveLength(0);
+  });
+
+  it("a degenerate window (startDate after endDate) marks NOTHING stale — no mass deletion", () => {
+    // Reachable state: the card editor can't see the end date, so a start date
+    // can land past it. Both half-window tests would otherwise cover the whole
+    // timeline and nominate every planned/missed row for deletion.
+    const today = d("2026-07-03");
+    const horizonEnd = new Date(today.getTime() + 13 * 86_400_000);
+    const rows = [
+      existing({ id: "r1", scheduledAt: d("2026-06-20"), status: "missed" }),
+      existing({ id: "r2", scheduledAt: d("2026-07-02") }),
+      existing({ id: "r3", scheduledAt: d("2026-07-10") }),
+    ];
+
+    const { deletions } = materializePlannedDoses({
+      protocols: [proto({ startDate: d("2026-07-06"), endDate: d("2026-07-01") })],
+      horizonStart: today,
+      horizonEnd,
+      existing: rows,
+      today,
+    });
+
+    expect(deletions).toHaveLength(0);
+  });
+
+  it("in-window off-grid rebase rows are untouched — still suppress the week, never deleted", () => {
+    // MO/TH grid, week rebased onto Tue 2026-06-23 (in-window, off-grid).
+    const today = d("2026-06-22"); // Monday
+    const horizonEnd = new Date(today.getTime() + 6 * 86_400_000);
+
+    const { upserts, deletions } = materializePlannedDoses({
+      protocols: [proto({ scheduleRule: "FREQ=WEEKLY;BYDAY=MO,TH", startDate: d("2026-06-01") })],
+      horizonStart: today,
+      horizonEnd,
+      existing: [existing({ id: "rebase-row", scheduledAt: d("2026-06-23") })],
+      today,
+    });
+
+    expect(deletions).toHaveLength(0);
+    // The genuine rebase week stays suppressed (no grid rows generated for it).
+    expect(upserts.filter((u) => KEY(u.scheduledAt) < "2026-06-29")).toHaveLength(0);
+  });
+});
+
+// ─── suite 7: protocol without a scheduleRule ─────────────────────────────
 
 describe("protocol with no scheduleRule", () => {
   it("produces no upserts and no statusUpdates (nothing to expand)", () => {

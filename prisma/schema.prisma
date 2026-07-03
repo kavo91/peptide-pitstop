@@ -30,6 +30,11 @@ model User {
   lastTotpStep Int? // last accepted TOTP time-step — rejects replay within the window
   hydrationTargetMl Int?    // daily water-intake goal (mL); null = no target
   symptomList       String? // JSON array of custom side-effect symptoms; null = curated default
+  // Reminder anchors ("HH:MM" local, container TZ). Untimed daily doses remind
+  // at untimedReminderTime; the still-pending nag fires at nagTime when enabled.
+  untimedReminderTime String  @default("08:00")
+  nagTime             String  @default("18:00")
+  nagEnabled          Boolean @default(true)
 
   peptides      Peptide[]
   prescriptions Prescription[]
@@ -44,6 +49,40 @@ model User {
   auditLogs     AuditLog[]
   wearableDaily WearableDaily[]
   stacks        Stack[]
+  pushSubscriptions PushSubscription[]
+  reminderSends     ReminderSend[]
+}
+
+// Web Push subscription for an installed PWA — one row per device/browser.
+// endpoint is the push service URL (unique per subscription); p256dh/auth are
+// the client's encryption keys. Expired subscriptions (push service returns
+// 404/410) are deleted by the sender.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+}
+
+// Exactly-once ledger for reminder notifications. One row per delivered event;
+// the unique key IS the claim (insert wins, duplicate insert loses). `key` is
+// "<protocolId>@<HH:MM>" | "<protocolId>@untimed" for slot reminders, or "nag"
+// for the daily still-pending summary. protocolId inside the key is a soft ref
+// (rows outlive protocol deletion harmlessly — they only block re-sends).
+model ReminderSend {
+  id      String   @id @default(cuid())
+  userId  String
+  user    User     @relation(fields: [userId], references: [id])
+  dayKey  String // local "YYYY-MM-DD"
+  key     String
+  channel String // webpush | ha
+  sentAt  DateTime @default(now())
+
+  @@unique([userId, dayKey, key])
 }
 
 model Peptide {

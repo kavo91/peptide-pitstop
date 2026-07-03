@@ -8,6 +8,7 @@ import { materializePlannedDoses, type ProtocolInput } from "./materialize";
  * planner, and apply the diff in a single transaction:
  *   - upsert desired rows (keyed on protocolId + scheduledAt)
  *   - bulk-update any "planned" → "missed" status transitions
+ *   - delete stale rows stranded outside their protocol's start/end window
  *
  * Safe to call concurrently: the unique index on (protocolId, scheduledAt)
  * prevents duplicate inserts; the transaction serializes the diff per call.
@@ -15,6 +16,7 @@ import { materializePlannedDoses, type ProtocolInput } from "./materialize";
 export async function runPlannedDoseGeneration(userId: string): Promise<{
   upserted: number;
   markedMissed: number;
+  deleted: number;
 }> {
   const today = startOfDay(new Date());
   const horizonStart = today;
@@ -88,7 +90,7 @@ export async function runPlannedDoseGeneration(userId: string): Promise<{
   }));
 
   // ── Run the pure planner ─────────────────────────────────────────────────
-  const { upserts, statusUpdates } = materializePlannedDoses({
+  const { upserts, statusUpdates, deletions } = materializePlannedDoses({
     protocols,
     horizonStart,
     horizonEnd,
@@ -97,6 +99,7 @@ export async function runPlannedDoseGeneration(userId: string): Promise<{
   });
 
   // ── Apply the diff in a transaction ──────────────────────────────────────
+  let deletedCount = 0;
   await prisma.$transaction(async (tx) => {
     // Upsert desired rows. The @@unique([protocolId, scheduledAt]) constraint
     // makes this safe to re-run — existing rows are updated in place (status
@@ -133,7 +136,24 @@ export async function runPlannedDoseGeneration(userId: string): Promise<{
         data: { status: "missed" },
       });
     }
+
+    // Delete stale rows stranded outside their protocol's start/end window.
+    // The planner only nominates planned/missed rows with no linked DoseLog,
+    // but the snapshot was read OUTSIDE this transaction — re-assert both here
+    // so a dose logged (or a status change) in between can never have its row
+    // deleted from under it. userId re-scopes defensively.
+    if (deletions.length > 0) {
+      const res = await tx.plannedDose.deleteMany({
+        where: {
+          id: { in: deletions },
+          userId,
+          status: { in: ["planned", "missed"] },
+          doseLog: null,
+        },
+      });
+      deletedCount = res.count;
+    }
   });
 
-  return { upserted: upserts.length, markedMissed: statusUpdates.length };
+  return { upserted: upserts.length, markedMissed: statusUpdates.length, deleted: deletedCount };
 }

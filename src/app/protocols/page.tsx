@@ -39,7 +39,11 @@ export default async function ProtocolsPage() {
       <div className="grid gap-3 lg:grid-cols-2 min-[1440px]:grid-cols-3">
         {protocols.map((p) => (
           <div key={p.id}>
+            {/* Key on the server values so a cascade from a sibling save remounts
+                this card with fresh data — its useState would otherwise keep
+                showing (and on save, resend) the pre-cascade date. */}
             <ProtocolEditor
+              key={`${p.id}:${toDateInput(p.startDate) ?? ""}:${p.status}`}
               id={p.id}
               name={p.name}
               peptideName={p.peptide.name}

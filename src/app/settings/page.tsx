@@ -14,6 +14,8 @@ import { getStacks } from "@/lib/stacks/server";
 import { SyringeManager } from "@/components/SyringeManager";
 import { ReorderDefaultsForm } from "@/components/ReorderDefaultsForm";
 import { WellnessSettingsForm } from "@/components/WellnessSettingsForm";
+import { PushNotificationsCard } from "@/components/PushNotificationsCard";
+import { ReminderTimesForm } from "@/components/ReminderTimesForm";
 import { ReportExportForm } from "@/components/ReportExportForm";
 import { BackButton } from "@/components/BackButton";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -169,6 +171,13 @@ export default async function SettingsPage() {
           <WellnessSettingsForm
             hydrationTargetMl={user.hydrationTargetMl ?? null}
             symptomList={parseSymptomOverride(user.symptomList)}
+          />
+
+          <PushNotificationsCard />
+          <ReminderTimesForm
+            untimedTime={user.untimedReminderTime}
+            nagTime={user.nagTime}
+            nagEnabled={user.nagEnabled}
           />
 
           <section className="mt-8">

@@ -23,13 +23,15 @@ async function runForAllUsers() {
     });
     let totalUpserted = 0;
     let totalMissed = 0;
+    let totalDeleted = 0;
     for (const user of users) {
       const result = await runPlannedDoseGeneration(user.id);
       totalUpserted += result.upserted;
       totalMissed += result.markedMissed;
+      totalDeleted += result.deleted;
     }
     console.log(
-      `[planned-doses] complete — upserted=${totalUpserted} markedMissed=${totalMissed} users=${users.length}`,
+      `[planned-doses] complete — upserted=${totalUpserted} markedMissed=${totalMissed} deleted=${totalDeleted} users=${users.length}`,
     );
   } catch (err) {
     console.error("[planned-doses] tick error", err);
