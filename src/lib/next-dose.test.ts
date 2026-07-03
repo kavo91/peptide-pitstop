@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeNextDose } from "./next-dose";
+import { computeNextDose, formatNextDoseLabel } from "./next-dose";
 import type { NextDoseProtocol } from "./next-dose";
 
 // Helpers mirror the schedule-test fixture style: JSON schedule rules + Dates.
@@ -116,5 +116,41 @@ describe("computeNextDose", () => {
     const empty = proto({ id: "p-empty", name: "No-Sched", rule: "" });
     const bad = proto({ id: "p-bad", name: "Bad-Sched", rule: "[not json" });
     expect(computeNextDose([empty, bad], new Date("2026-06-22T09:00:00"))).toBeNull();
+  });
+});
+
+// ── formatNextDoseLabel — day words for cross-day, countdown only same-day ────
+// Dashboard ask (2026-07-04): "GHK-Cu in 1d 11h" reads badly when nothing is
+// due today — a future-day dose should name the DAY ("tomorrow" / "Tuesday"),
+// not tick a countdown. Same-day doses keep the live countdown.
+describe("formatNextDoseLabel", () => {
+  const at = (s: string) => new Date(s).getTime();
+  const now = at("2026-07-04T10:00:00"); // Saturday, mid-morning
+
+  it("same-day dose keeps the countdown", () => {
+    expect(formatNextDoseLabel(at("2026-07-04T20:00:00"), now)).toBe("in 10h 0m");
+    expect(formatNextDoseLabel(at("2026-07-04T10:14:00"), now)).toBe("in 14m");
+  });
+
+  it("next calendar day → 'tomorrow' (even when less than 24h away)", () => {
+    expect(formatNextDoseLabel(at("2026-07-05T08:00:00"), now)).toBe("tomorrow");
+    // 21:30 tonight vs 00:00 tomorrow is < 3h apart but IS tomorrow.
+    expect(formatNextDoseLabel(at("2026-07-05T00:00:00"), at("2026-07-04T21:30:00"))).toBe("tomorrow");
+  });
+
+  it("2–6 days out → weekday name", () => {
+    expect(formatNextDoseLabel(at("2026-07-06T08:00:00"), now)).toBe("Monday");
+    expect(formatNextDoseLabel(at("2026-07-07T20:00:00"), now)).toBe("Tuesday");
+    expect(formatNextDoseLabel(at("2026-07-10T08:00:00"), now)).toBe("Friday");
+  });
+
+  it("a week or more out → short date (weekday alone would be ambiguous)", () => {
+    expect(formatNextDoseLabel(at("2026-07-11T08:00:00"), now)).toBe("11 Jul");
+    expect(formatNextDoseLabel(at("2026-07-20T08:00:00"), now)).toBe("20 Jul");
+  });
+
+  it("preserves the now/overdue edge states", () => {
+    expect(formatNextDoseLabel(now, now)).toBe("now");
+    expect(formatNextDoseLabel(at("2026-07-04T09:00:00"), now)).toBe("overdue");
   });
 });

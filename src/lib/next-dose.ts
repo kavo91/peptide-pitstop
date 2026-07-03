@@ -83,6 +83,8 @@ export function computeNextDose(
   return best;
 }
 
+export { formatNextDoseLabel } from "./next-dose-format";
+
 /**
  * DB wrapper: load the user's active protocols and return the earliest upcoming
  * dose, or null. Mirrors getTodayDoses' protocol query (status "active" +

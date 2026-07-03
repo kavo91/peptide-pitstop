@@ -1,38 +1,18 @@
 "use client";
 
 /**
- * NextDoseCountdown — a live relative countdown to the next scheduled dose,
- * folded into the Today tile's empty state (see page.tsx / TodaySummaryTile).
+ * NextDoseCountdown — the Today tile's empty-state line: says today is clear,
+ * then names when the next dose is. Cross-day doses read as a DAY ("tomorrow",
+ * "Tuesday", "14 Jul") rather than a ticking countdown; only a same-day dose
+ * counts down live ("in 3h 20m" / "in 14m"). Formatting lives in the pure,
+ * unit-tested formatNextDoseLabel (src/lib/next-dose.ts).
  *
- * Server computes the next dose (src/lib/next-dose.ts) and passes an ISO string
- * + peptide name; this client component ticks each minute so the relative label
- * stays fresh without a refetch. Format:
- *   ≥ 1 day  → "in 2d 4h"
- *   < 1 day  → "in 3h 20m"
- *   < 1 hour → "in 14m"
- *   ≤ now    → "now" (within the same minute) / "overdue" (past)
+ * Server computes the next dose (getNextDose) and passes an ISO string +
+ * peptide name; this client component ticks each minute so a same-day
+ * countdown stays fresh without a refetch.
  */
 import { useEffect, useState } from "react";
-
-/**
- * Pure relative formatter — exported for testability. `atMs`/`nowMs` are epoch
- * millis. Returns the bare relative phrase ("in 2d 4h", "now", "overdue").
- */
-export function formatCountdown(atMs: number, nowMs: number): string {
-  const diffMs = atMs - nowMs;
-  const diffMin = Math.round(diffMs / 60_000);
-
-  if (diffMin < 0) return "overdue";
-  if (diffMin === 0) return "now";
-
-  const days = Math.floor(diffMin / 1440);
-  const hours = Math.floor((diffMin % 1440) / 60);
-  const mins = diffMin % 60;
-
-  if (days >= 1) return `in ${days}d ${hours}h`;
-  if (hours >= 1) return `in ${hours}h ${mins}m`;
-  return `in ${mins}m`;
-}
+import { formatNextDoseLabel } from "@/lib/next-dose-format";
 
 interface Props {
   peptideName: string;
@@ -47,7 +27,7 @@ export function NextDoseCountdown({ peptideName, atISO }: Props) {
   const [label, setLabel] = useState<string | null>(null);
 
   useEffect(() => {
-    const tick = () => setLabel(formatCountdown(atMs, Date.now()));
+    const tick = () => setLabel(formatNextDoseLabel(atMs, Date.now()));
     tick(); // immediate paint after hydration
     const id = setInterval(tick, 60_000); // refresh each minute
     return () => clearInterval(id);
@@ -55,7 +35,7 @@ export function NextDoseCountdown({ peptideName, atISO }: Props) {
 
   return (
     <>
-      Next dose: <span className="font-mono text-ink">{peptideName}</span>
+      Nothing due today · Next: <span className="font-mono text-ink">{peptideName}</span>
       {label ? ` ${label}` : ""}
     </>
   );
