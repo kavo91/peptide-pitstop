@@ -7,6 +7,7 @@ import Decimal from "decimal.js";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { logDose } from "@/app/actions/doses";
 import { enqueue } from "@/lib/offline/outbox";
+import { safeUuid } from "@/lib/uuid";
 import { RebasePrompt } from "./RebasePrompt";
 
 interface Props {
@@ -49,7 +50,7 @@ export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAt
     setBusy(true);
     setError(null);
 
-    const uuid = crypto.randomUUID();
+    const uuid = safeUuid();
     const input = {
       protocolId,
       route: "oral" as const,

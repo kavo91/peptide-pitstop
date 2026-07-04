@@ -9,6 +9,7 @@ import { doseUnitBreakdown } from "@/lib/dosing/unit-breakdown";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { logDose } from "@/app/actions/doses";
 import { enqueue } from "@/lib/offline/outbox";
+import { safeUuid } from "@/lib/uuid";
 import { VisualSyringe } from "./VisualSyringe";
 import { RebasePrompt } from "./RebasePrompt";
 import { assessTiming } from "@/lib/halflife";
@@ -102,7 +103,7 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
     setBusy(true);
     setError(null);
 
-    const uuid = crypto.randomUUID();
+    const uuid = safeUuid();
     const input = {
       protocolId,
       preparationId: preparation.id,

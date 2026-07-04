@@ -10,6 +10,7 @@ import type { DoseUnit } from "@/lib/dosing/types";
 import type { ProtocolDoseOption } from "@/lib/log/protocol-options";
 import { logDose } from "@/app/actions/doses";
 import { enqueue } from "@/lib/offline/outbox";
+import { safeUuid } from "@/lib/uuid";
 import { VisualSyringe } from "./VisualSyringe";
 import { RebasePrompt } from "./RebasePrompt";
 import { assessTiming } from "@/lib/halflife";
@@ -172,7 +173,7 @@ export function AdHocLogForm({
     setBusy(true);
     setError(null);
 
-    const uuid = crypto.randomUUID();
+    const uuid = safeUuid();
     const input = {
       preparationId: opt.preparation.id,
       syringeId: syr.id,
