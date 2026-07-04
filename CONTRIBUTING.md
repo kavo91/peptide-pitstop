@@ -1,13 +1,13 @@
 # Contributing to Peptide Pitstop
 
-Thanks for your interest in contributing! Peptide Pitstop is a self-hosted health
-tracking app maintained by a single person, so a little coordination goes a long
-way. This guide covers local setup, testing, and the contribution policy.
+Thanks for your interest. Peptide Pitstop is **open-core** software maintained by a
+single owner, so the contribution policy here is intentionally **limited** — please
+read the policy section before opening a pull request.
 
 ## Local setup
 
-Prerequisites: a recent Node.js LTS, npm, and a Postgres database (or whatever
-the README specifies for your environment).
+Prerequisites: a recent Node.js LTS and npm. The core uses SQLite by default (see
+`.env.example`).
 
 ```bash
 # 1. Install dependencies
@@ -17,8 +17,7 @@ npm install
 cp .env.example .env
 
 # 3. Generate the two required secrets and add them to .env
-#    (see the README for the exact commands — you'll need values for
-#    PT_FIELD_KEY and AUTH_SECRET)
+#    (PT_FIELD_KEY and AUTH_SECRET — see .env.example for the generate commands)
 
 # 4. Apply the database schema
 npx prisma migrate dev
@@ -30,44 +29,55 @@ npm run db:seed
 npm run dev
 ```
 
-The app should now be available locally. The seed data is fictional and exists
-only to give you something to look at — never commit real health data.
+The seed data is fictional and exists only to give you something to look at —
+**never commit real health data.**
 
 ## Running checks
 
-Before opening a PR, make sure the test suite and type checker pass:
+Before proposing any change, make sure the suite and type checker pass:
 
 ```bash
 npm test          # run the test suite
 npm run typecheck # TypeScript type checking
 ```
 
-If your change touches the database schema, run `npx prisma migrate dev` and
-commit the generated migration.
+If your change touches the schema, run `npx prisma migrate dev` and commit the
+generated migration.
 
 ## Code style
 
-- Written in **TypeScript** — keep new code typed; avoid `any` where practical.
-- Follow the existing patterns in the surrounding files (naming, structure,
-  component layout). When in doubt, match what's already there.
-- Keep changes focused. Small, reviewable PRs are much easier on a solo
-  maintainer than large mixed ones.
+- **TypeScript** — keep new code typed; avoid `any` where practical.
+- Match the existing patterns in the surrounding files (naming, structure, layout).
+- Keep changes small and focused — much easier on a solo maintainer.
 
-## Contribution policy
+## Contribution policy (please read)
 
-- **Open an issue first for anything large.** For small fixes (typos, obvious
-  bugs, doc tweaks) a direct PR is fine. For new features, refactors, or
-  anything that changes behaviour, please open an issue to discuss the approach
-  before writing the code — it saves everyone time.
-- **License.** This project is licensed under **AGPL-3.0**. By contributing, you
-  agree that your contributions are licensed under AGPL-3.0 as well.
-- **Contributor agreement.** A lightweight CLA or contributor agreement may be
-  requested before larger contributions are merged. If so, it'll be raised on
-  the relevant issue or PR.
+Peptide Pitstop is maintained by a single owner under an open-core model. To keep
+copyright clean and the roadmap coherent, **the project does not accept unsolicited
+feature pull requests.** The maintainer may close any PR without merging, at their
+sole discretion.
 
-## A note on scope
+What is welcome:
+- **Bug reports** and **security reports** — open an issue (for security, contact
+  the maintainer privately; do not file a public issue).
+- **Small, clearly-scoped fixes** — but only after raising them in an issue first
+  and getting a maintainer's go-ahead. Please do not open a PR before that.
 
-This is a hobby project run by one maintainer in spare time. Reviews may take a
-while, and not every feature request will be a fit for the project's direction.
-That's not a reflection on your idea — just the realities of a single-maintainer
-codebase. Thanks for understanding, and thanks again for contributing!
+Large features, refactors, and new subsystems are handled by the maintainer.
+
+## The CLA is mandatory
+
+Any contribution the maintainer agrees to accept **must** be covered by a signed
+**Contributor License Agreement** ([`CLA.md`](CLA.md)) *before* it is merged. The
+CLA assigns copyright in your contribution to the project owner — this keeps the
+project under single ownership, which its open-core / dual-license model requires.
+**No CLA, no merge.** The CLA Assistant will prompt you on your PR. If you are not
+comfortable assigning copyright, please don't submit code — a bug report is still
+very welcome.
+
+## Scope
+
+This repository is the **open-source core** (AGPL-3.0-only). The paid, proprietary
+modules (intelligence service, native apps, billing, Cloud, clinic edition) are not
+part of this repository and are not open for contribution. See
+[`LICENSING.md`](LICENSING.md) for the full model.
