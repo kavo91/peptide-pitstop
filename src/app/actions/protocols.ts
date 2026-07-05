@@ -38,6 +38,7 @@ export interface ProtocolInput {
   startDate?: string;
   endDate?: string;
   status?: string;
+  steps?: { dose: string; doseInputUnit: string; durationDays?: string; notes?: string }[];
 }
 
 export async function saveProtocol(input: ProtocolInput) {
@@ -105,6 +106,19 @@ export async function saveProtocol(input: ProtocolInput) {
     status: ["active", "paused", "completed"].includes(input.status ?? "") ? input.status! : "active",
   };
 
+  const initialSteps = !input.id && data.scheduleType === "titration" ? (input.steps ?? []) : [];
+  const stepRows = initialSteps.map((s) => {
+    const dose = optDecimal(s.dose);
+    if (!dose) return null;
+    return {
+      dose,
+      doseInputUnit: ["mcg", "mg", "ml", "units"].includes(s.doseInputUnit) ? s.doseInputUnit : "mcg",
+      durationDays: optInt(s.durationDays),
+      notes: s.notes?.trim() || null,
+    };
+  });
+  if (stepRows.some((r) => r === null)) return { ok: false as const, error: "Every step needs a valid dose." };
+
   let savedId = input.id;
   try {
     if (input.id) {
@@ -114,20 +128,21 @@ export async function saveProtocol(input: ProtocolInput) {
       // dates onto siblings whose own dates legitimately differ.
       const before = await prisma.protocol.findFirst({
         where: { id: input.id, userId: user.id },
-        select: { stackId: true, startDate: true, endDate: true },
+        select: { stackId: true, startDate: true, endDate: true, status: true },
       });
       if (!before) return { ok: false as const, error: "Protocol not found." };
 
       const { count } = await prisma.protocol.updateMany({ where: { id: input.id, userId: user.id }, data });
       if (count === 0) return { ok: false as const, error: "Protocol not found." };
 
-      // Stack date alignment: a changed start/end date re-aligns the stack
-      // siblings (same contract as updateProtocol and updateStackSchedule).
+      // Stack alignment: a changed start/end date or status re-aligns siblings
+      // (same contract as updateProtocol and updateStackSchedule).
       if (before.stackId) {
         const dateEq = (a: Date | null, b: Date | null) => (a?.getTime() ?? null) === (b?.getTime() ?? null);
-        const changed: { startDate?: Date | null; endDate?: Date | null } = {};
+        const changed: { startDate?: Date | null; endDate?: Date | null; status?: string } = {};
         if (!dateEq(before.startDate, data.startDate)) changed.startDate = data.startDate;
         if (!dateEq(before.endDate, data.endDate)) changed.endDate = data.endDate;
+        if (before.status !== data.status) changed.status = data.status;
         if (Object.keys(changed).length > 0) {
           await prisma.protocol.updateMany({
             where: { stackId: before.stackId, userId: user.id, id: { not: input.id } },
@@ -136,8 +151,22 @@ export async function saveProtocol(input: ProtocolInput) {
         }
       }
     } else {
-      const created = await prisma.protocol.create({ data: { ...data, userId: user.id } });
-      savedId = created.id;
+      await prisma.$transaction(async (tx) => {
+        const created = await tx.protocol.create({ data: { ...data, userId: user.id } });
+        savedId = created.id;
+        if (stepRows.length > 0) {
+          await tx.protocolStep.createMany({
+            data: stepRows.map((s, i) => ({
+              protocolId: created.id,
+              stepIndex: i,
+              dose: s!.dose,
+              doseInputUnit: s!.doseInputUnit,
+              durationDays: s!.durationDays,
+              notes: s!.notes,
+            })),
+          });
+        }
+      });
     }
   } catch (e) {
     console.error("saveProtocol failed", e);
@@ -328,6 +357,12 @@ export async function updateProtocol(input: UpdateProtocolInput) {
         });
       }
     }
+    if (input.status !== undefined && target.stackId) {
+      await prisma.protocol.updateMany({
+        where: { stackId: target.stackId, userId: user.id, id: { not: input.id } },
+        data: { status: input.status },
+      });
+    }
   } catch (e) {
     console.error("updateProtocol failed", e);
     return { ok: false as const, error: "Could not update protocol." };
@@ -358,11 +393,15 @@ export async function pauseProtocol(protocolId: string) {
   const user = await getCurrentUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
   try {
-    const { count } = await prisma.protocol.updateMany({
+    const target = await prisma.protocol.findFirst({
       where: { id: protocolId, userId: user.id, status: "active" },
+      select: { stackId: true },
+    });
+    if (!target) return { ok: false as const, error: "Protocol not found or not active." };
+    await prisma.protocol.updateMany({
+      where: target.stackId ? { stackId: target.stackId, userId: user.id, status: "active" } : { id: protocolId, userId: user.id, status: "active" },
       data: { status: "paused" },
     });
-    if (count === 0) return { ok: false as const, error: "Protocol not found or not active." };
   } catch (e) {
     console.error("pauseProtocol failed", e);
     return { ok: false as const, error: "Could not pause protocol." };
@@ -380,11 +419,15 @@ export async function resumeProtocol(protocolId: string) {
   const user = await getCurrentUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
   try {
-    const { count } = await prisma.protocol.updateMany({
+    const target = await prisma.protocol.findFirst({
       where: { id: protocolId, userId: user.id, status: "paused" },
+      select: { stackId: true },
+    });
+    if (!target) return { ok: false as const, error: "Protocol not found or not paused." };
+    await prisma.protocol.updateMany({
+      where: target.stackId ? { stackId: target.stackId, userId: user.id, status: "paused" } : { id: protocolId, userId: user.id, status: "paused" },
       data: { status: "active" },
     });
-    if (count === 0) return { ok: false as const, error: "Protocol not found or not paused." };
   } catch (e) {
     console.error("resumeProtocol failed", e);
     return { ok: false as const, error: "Could not resume protocol." };

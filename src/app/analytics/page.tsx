@@ -95,9 +95,9 @@ export default async function AnalyticsPage() {
           before. At ≥lg they sit side-by-side — Plasma takes 2/3 (the SVG scales
           undistorted to its container), Insights 1/3 — so the tall plasma block
           and the Insights list no longer stack into a long single-column tail.
-          When there's no plasma data, Insights spans the full width. */}
+          When there's no plasma section, Insights spans the full width. */}
       <div className="mb-6 lg:grid lg:grid-cols-3 lg:items-stretch lg:gap-6">
-        {data.plasmaByPeptide.length > 0 && (
+        {(data.plasmaByPeptide.length > 0 || data.peptidesWithoutHalfLife.length > 0) && (
           <section className="mb-6 lg:col-span-2 lg:mb-0 lg:flex lg:flex-col">
             <h2 className="mb-2 text-sm font-semibold">
               Plasma curve estimate (±30 days around today)
@@ -107,33 +107,18 @@ export default async function AnalyticsPage() {
                 plasmaByPeptide={data.plasmaByPeptide}
                 now={data.now}
                 missedDoses={data.missedDoseTimes}
+                peptidesWithoutHalfLife={data.peptidesWithoutHalfLife}
               />
             </div>
           </section>
         )}
 
         {/* ── Cross-metric insights ──────────────────────────────────────── */}
-        <section className={`mb-6 lg:mb-0 lg:flex lg:flex-col ${data.plasmaByPeptide.length === 0 ? "lg:col-span-3" : ""}`}>
+        <section className={`mb-6 lg:mb-0 lg:flex lg:flex-col ${data.plasmaByPeptide.length === 0 && data.peptidesWithoutHalfLife.length === 0 ? "lg:col-span-3" : ""}`}>
           <h2 className="mb-2 text-sm font-semibold">Insights</h2>
           <InsightsCard insights={insights} />
         </section>
       </div>
-
-      {/* ── No-half-life hints ───────────────────────────────────────────── */}
-      {data.peptidesWithoutHalfLife.length > 0 && (
-        <section className="mb-6">
-          <div className="rounded-card bg-surface p-4 shadow-sm ring-1 ring-line/10">
-            <p className="text-sm font-medium">Plasma curve unavailable</p>
-            <ul className="mt-1 space-y-0.5 text-sm text-muted">
-              {data.peptidesWithoutHalfLife.map((p) => (
-                <li key={p.peptideId}>
-                  {p.peptideName} — set a half-life in Settings to see an estimate.
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-      )}
 
       {/* ── Empty state ──────────────────────────────────────────────────── */}
       {data.heatmap.every((b) => b.count === 0) &&

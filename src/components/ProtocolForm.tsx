@@ -24,6 +24,7 @@ export function ProtocolForm({
   initial,
   template,
   templateRamp,
+  templateSteps,
 }: {
   peptides: Opt[];
   prescriptions: Opt[];
@@ -38,10 +39,11 @@ export function ProtocolForm({
   template?: ProtocolInput;
   /**
    * Phase labels for the example titration ramp this template carries, shown as a
-   * read-only preview. The ramp itself is generated on the edit screen (it needs a
-   * persisted protocol id) — this just tells the user what's coming.
+   * read-only preview. When `templateSteps` is present, those steps are created
+   * with the new protocol so the template becomes a real titration ramp.
    */
   templateRamp?: { phase: string; doseLabel: string }[];
+  templateSteps?: NonNullable<ProtocolInput["steps"]>;
 }) {
   // On the new-protocol path a template seeds the form; `initial` (edit) wins.
   const seed = initial ?? template;
@@ -162,7 +164,8 @@ export function ProtocolForm({
     setBusy(true);
     setError(null);
     const scheduleRule = JSON.stringify(entries);
-    const res = await saveProtocol({ ...form, scheduleRule });
+    const steps = !initial?.id && templateSteps && form.scheduleType === "titration" ? templateSteps : undefined;
+    const res = await saveProtocol({ ...form, scheduleRule, steps });
     setBusy(false);
     if (!res.ok) {
       setError(res.error);
@@ -386,7 +389,9 @@ export function ProtocolForm({
         <Link href="/protocols" className="rounded-control bg-bg px-4 py-3 text-sm ring-1 ring-line/15">Cancel</Link>
       </div>
       {!initial?.id && form.scheduleType === "titration" && (
-        <p className="text-xs text-muted">Tip: after creating, you&apos;ll add titration steps on the next screen.</p>
+        <p className="text-xs text-muted">
+          {templateSteps?.length ? "Titration steps will be created from this template." : "Tip: after creating, you&apos;ll add titration steps on the next screen."}
+        </p>
       )}
       {!initial?.id && template && templateRamp && templateRamp.length > 0 && (
         <div className="rounded-control bg-bg p-3 ring-1 ring-line/15">
@@ -396,7 +401,7 @@ export function ProtocolForm({
               <li key={i} className="tabular-nums">{r.phase}: {r.doseLabel}</li>
             ))}
           </ol>
-          <p className="mt-1.5 text-[11px] text-muted">Generate these as titration steps on the next screen. Reference only — not medical advice.</p>
+          <p className="mt-1.5 text-[11px] text-muted">These will be created as titration steps when you save. Reference only — not medical advice.</p>
         </div>
       )}
       {!initial?.id && template && (

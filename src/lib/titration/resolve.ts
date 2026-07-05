@@ -44,6 +44,7 @@ export function resolveTitration(inp: ResolveInput): ResolveResult {
         out.push(...reconstructRebasedSlots({
           weekSlots: wkSlots, weekStart: ws, plannedDays: pdays,
           rebaseMode: inp.rebaseMode, freq: "WEEKLY", delivered: deliveredInWeek,
+          endDate: inp.endDate,
         }));
       }
       slots = out.sort((a, b) => a.date.getTime() - b.date.getTime());

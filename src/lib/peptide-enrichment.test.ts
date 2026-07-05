@@ -10,6 +10,26 @@ import {
 } from "./peptide-enrichment";
 import { PEPTIDE_LIBRARY } from "./peptide-library";
 
+const unitScale: Record<string, number> = { mcg: 1, ug: 1, mg: 1000 };
+
+function normaliseUnit(unit: string) {
+  return unit.toLowerCase().replace("ug", "mcg");
+}
+
+function doseFromLabel(label: string | undefined, preferredUnit: string) {
+  const matches = Array.from(
+    String(label ?? "").matchAll(/([0-9][0-9,]*(?:\.\d+)?)\s*(mcg|ug|mg)\b/gi),
+  ).map((match) => ({
+    value: Number(match[1].replace(/,/g, "")),
+    unit: normaliseUnit(match[2]),
+  }));
+  if (matches.length === 0) return null;
+
+  const targetUnit = normaliseUnit(preferredUnit);
+  const picked = matches.find((match) => match.unit === targetUnit) ?? matches[0];
+  return (picked.value * (unitScale[picked.unit] ?? 1)) / (unitScale[targetUnit] ?? 1);
+}
+
 describe("tokens", () => {
   it("lowercases and splits name + comma aliases (mirrors settings tokens())", () => {
     expect(tokens("Retatrutide")).toEqual(["retatrutide"]);
@@ -92,6 +112,40 @@ describe("entry + template shape", () => {
     for (const r of e.references) {
       expect(typeof r.label).toBe("string");
       expect(r.url === null || /^https?:\/\//.test(r.url)).toBe(true);
+    }
+  });
+
+  it("MOTS-c gradual template uses the labelled 1,000 mcg maintenance dose", () => {
+    const e = getEnrichmentSeed("MOTS-c") as EnrichmentEntry;
+    const t = e.templates.find((template) => template.name === "Standard / Gradual Approach");
+
+    expect(t).toBeTruthy();
+    expect(t?.targetDose).toBe(1000);
+    expect(t?.unit).toBe("mcg");
+    expect(t?.ramp?.at(-1)).toMatchObject({
+      phase: "Weeks 9–10+",
+      dose: 1000,
+      unit: "mcg",
+      doseLabel: "1,000 mcg (1.0 mg)",
+    });
+  });
+
+  it("all template numeric doses are positive and match their dose labels", () => {
+    for (const entry of allEnrichmentSeed()) {
+      for (const template of entry.templates) {
+        if (template.targetDose !== null) {
+          expect(template.targetDose, `${entry.name} / ${template.name} targetDose`).toBeGreaterThan(0);
+        }
+
+        for (const row of template.ramp ?? []) {
+          expect(row.dose, `${entry.name} / ${template.name} / ${row.phase} dose`).toBeGreaterThan(0);
+
+          const labelledDose = doseFromLabel(row.doseLabel, row.unit);
+          if (labelledDose !== null) {
+            expect(row.dose, `${entry.name} / ${template.name} / ${row.phase} doseLabel`).toBe(labelledDose);
+          }
+        }
+      }
     }
   });
 });

@@ -49,4 +49,14 @@ describe("rebaseWeek (snap-back)", () => {
     }).map(iso);
     expect(out).toEqual([]);
   });
+  it("honours the inclusive protocol endDate when rebasing", () => {
+    const out = rebaseWeek({
+      rebaseMode: "fixed_anchor", freq: "WEEKLY",
+      weekStart: d("2026-06-14"), plannedDays: ["MO", "WE", "FR"],
+      actual: { plannedDate: d("2026-06-15"), actualDate: d("2026-06-16") },
+      today: d("2026-06-16"),
+      endDate: d("2026-06-18"),
+    }).map(iso);
+    expect(out).toEqual(["2026-06-18"]);
+  });
 });

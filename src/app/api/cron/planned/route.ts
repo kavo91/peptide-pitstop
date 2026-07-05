@@ -23,7 +23,7 @@ function tokenValid(token: string | undefined, secret: string): boolean {
  *   curl -X POST http://localhost:3009/api/cron/planned \
  *     -H "Authorization: Bearer <CRON_SECRET-or-AUTH_SECRET>"
  *
- * Returns JSON: { ok: true, users: N, upserted: N, markedMissed: N }
+ * Returns JSON: { ok: true, users: N, upserted: N, markedMissed: N, deleted: N, completed: N }
  */
 export async function POST(req: NextRequest) {
   // ── Auth ─────────────────────────────────────────────────────────────────
@@ -57,16 +57,18 @@ export async function POST(req: NextRequest) {
     let totalUpserted = 0;
     let totalMissed = 0;
     let totalDeleted = 0;
+    let totalCompleted = 0;
 
     for (const user of users) {
       const result = await runPlannedDoseGeneration(user.id);
       totalUpserted += result.upserted;
       totalMissed += result.markedMissed;
       totalDeleted += result.deleted;
+      totalCompleted += result.completed;
     }
 
     console.log(
-      `[cron/planned] complete — upserted=${totalUpserted} markedMissed=${totalMissed} deleted=${totalDeleted} users=${users.length}`,
+      `[cron/planned] complete — upserted=${totalUpserted} markedMissed=${totalMissed} deleted=${totalDeleted} completed=${totalCompleted} users=${users.length}`,
     );
 
     return NextResponse.json({
@@ -75,6 +77,7 @@ export async function POST(req: NextRequest) {
       upserted: totalUpserted,
       markedMissed: totalMissed,
       deleted: totalDeleted,
+      completed: totalCompleted,
     });
   } catch (err) {
     console.error("[cron/planned] error", err);

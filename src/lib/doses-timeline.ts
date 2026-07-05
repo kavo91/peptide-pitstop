@@ -17,8 +17,18 @@ export function weekStartOf(date: Date): Date {
 
 async function buildResolvedOccurrences(userId: string, rangeStart: Date, rangeEnd: Date): Promise<ResolvedOcc[]> {
   const protocols = await prisma.protocol.findMany({
-    where: { userId, status: "active" },
-    include: { peptide: true, steps: true },
+    where: {
+      userId,
+      OR: [
+        { status: "active" },
+        {
+          status: "completed",
+          OR: [{ endDate: null }, { endDate: { gte: startOfDay(rangeStart) } }],
+          AND: [{ OR: [{ startDate: null }, { startDate: { lte: startOfDay(rangeEnd) } }] }],
+        },
+      ],
+    },
+    include: { peptide: true, stack: true, steps: true },
   });
   const now = new Date();
 
@@ -68,6 +78,8 @@ async function buildResolvedOccurrences(userId: string, rangeStart: Date, rangeE
       protocolId: p.id,
       peptideId: p.peptideId,
       peptideName: p.peptide.name,
+      stackId: p.stackId,
+      stackName: p.stack?.name ?? null,
       // Clip the expanded-range buffer back to the viewed window.
       slots: clipSlotsToRange(mapped, KEY(startOfDay(rangeStart)), KEY(startOfDay(rangeEnd))),
     });
@@ -81,7 +93,7 @@ async function buildLogs(userId: string, rangeStart: Date, rangeEnd: Date): Prom
     include: {
       preparation: { include: { vial: { include: { peptide: true } } } },
       // Oral doses have no preparation — resolve the peptide via the protocol.
-      protocol: { include: { peptide: true } },
+      protocol: { include: { peptide: true, stack: true } },
     },
   });
   return logs.map((l) => {
@@ -92,6 +104,8 @@ async function buildLogs(userId: string, rangeStart: Date, rangeEnd: Date): Prom
       // else "" (an unlinked ad-hoc oral dose still appears, with no peptide grouping).
       peptideId: l.preparation?.vial.peptideId ?? l.protocol?.peptideId ?? "",
       peptideName: l.preparation?.vial.peptide.name ?? l.protocol?.peptide.name ?? "Oral dose",
+      stackId: l.protocol?.stackId ?? null,
+      stackName: l.protocol?.stack?.name ?? null,
       doseLabel: `${Number(l.doseMcg).toLocaleString()} mcg`,
       dateKey: KEY(t),
       doseLogId: l.id,

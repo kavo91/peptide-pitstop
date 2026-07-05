@@ -8,6 +8,7 @@ import { BackButton } from "@/components/BackButton";
 import { PitstopHeading } from "@/components/PitstopHeading";
 import { PAGE_MAIN } from "@/lib/layout";
 import { deleteProtocol } from "@/app/actions/protocols";
+import { compareStackGrouped } from "@/lib/stack-sort";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +23,22 @@ export default async function ProtocolsPage() {
 
   const protocols = await prisma.protocol.findMany({
     where: { userId: user.id },
-    include: { peptide: true },
+    include: { peptide: true, stack: true },
     orderBy: { name: "asc" },
   });
+  const sortedProtocols = [...protocols].sort((a, b) =>
+    compareStackGrouped({
+      stackId: a.stackId,
+      stackName: a.stack?.name,
+      peptideName: a.peptide.name,
+      name: a.name,
+    }, {
+      stackId: b.stackId,
+      stackName: b.stack?.name,
+      peptideName: b.peptide.name,
+      name: b.name,
+    }),
+  );
 
   return (
     <main className={PAGE_MAIN}>
@@ -37,7 +51,7 @@ export default async function ProtocolsPage() {
         <Link href="/protocols/new" className="shrink-0 rounded-control bg-accent px-3 py-2 text-sm font-medium text-onAccent">+ Add protocol</Link>
       </div>
       <div className="grid gap-3 lg:grid-cols-2 min-[1440px]:grid-cols-3">
-        {protocols.map((p) => (
+        {sortedProtocols.map((p) => (
           <div key={p.id}>
             {/* Key on the server values so a cascade from a sibling save remounts
                 this card with fresh data — its useState would otherwise keep

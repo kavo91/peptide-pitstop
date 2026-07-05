@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { startOfDay, addDays } from "@/lib/schedule/schedule";
 import { materializePlannedDoses, type ProtocolInput } from "./materialize";
+import { autoCompleteProtocolIds } from "./completion";
 
 /**
  * Load protocols + existing PlannedDose rows for a user, call the pure
@@ -17,6 +18,7 @@ export async function runPlannedDoseGeneration(userId: string): Promise<{
   upserted: number;
   markedMissed: number;
   deleted: number;
+  completed: number;
 }> {
   const today = startOfDay(new Date());
   const horizonStart = today;
@@ -97,9 +99,11 @@ export async function runPlannedDoseGeneration(userId: string): Promise<{
     existing,
     today,
   });
+  const completions = autoCompleteProtocolIds(protocols, today);
 
   // ── Apply the diff in a transaction ──────────────────────────────────────
   let deletedCount = 0;
+  let completedCount = 0;
   await prisma.$transaction(async (tx) => {
     // Upsert desired rows. The @@unique([protocolId, scheduledAt]) constraint
     // makes this safe to re-run — existing rows are updated in place (status
@@ -153,7 +157,15 @@ export async function runPlannedDoseGeneration(userId: string): Promise<{
       });
       deletedCount = res.count;
     }
+
+    if (completions.length > 0) {
+      const res = await tx.protocol.updateMany({
+        where: { id: { in: completions }, userId, status: "active" },
+        data: { status: "completed" },
+      });
+      completedCount = res.count;
+    }
   });
 
-  return { upserted: upserts.length, markedMissed: statusUpdates.length, deleted: deletedCount };
+  return { upserted: upserts.length, markedMissed: statusUpdates.length, deleted: deletedCount, completed: completedCount };
 }

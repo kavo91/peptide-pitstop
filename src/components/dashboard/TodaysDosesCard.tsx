@@ -118,7 +118,12 @@ export function TodaysDosesCard({
                     <p className="text-sm text-ink tabular-nums">
                       {d.doseValue} {d.doseUnit}
                       {d.route === "oral" && " · oral"}
-                      {d.route !== "oral" && d.preparation == null && " · needs reconstitution"}
+                      {d.route !== "oral" && !d.alreadyLoggedToday && d.preparation == null && " · needs reconstitution"}
+                      {d.shifted && (
+                        <span className="ml-2 rounded-full bg-accent2/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-accent2Strong">
+                          Shifted
+                        </span>
+                      )}
                     </p>
                     {d.phaseProgress && (
                       // Include the phase's own dose so "Phase 2" can't be misread as

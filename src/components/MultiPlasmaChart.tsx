@@ -8,6 +8,9 @@ import type { PeptidePlasma } from "@/lib/analytics";
 interface Props {
   plasmaByPeptide: PeptidePlasma[];
   now: Date;
+  peptidesWithoutHalfLife?: { peptideId: string; peptideName: string }[];
+  /** Optional legacy design prop accepted for QA/prod source compatibility. */
+  design?: "pitstop" | "current";
   /**
    * Dashboard mini-tile only: ALSO render a shorter-geometry copy that CSS swaps
    * in on phones (<=640px) so the curve fills the width undistorted at a compact
@@ -48,13 +51,28 @@ function toViewX(t: number, minT: number, maxT: number): number {
 export function MultiPlasmaChart({
   plasmaByPeptide,
   now,
+  peptidesWithoutHalfLife = [],
   compactOnPhone = false,
   missedDoses = [],
 }: Props) {
   // Same guard as PlasmaChart: a series needs >= 2 points to draw a line.
   const renderable = plasmaByPeptide.filter((p) => p.series.length >= 2);
   if (renderable.length === 0) {
-    return <p className="text-sm text-muted">Not enough data to render curve.</p>;
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-muted">Not enough data to render curve.</p>
+        {peptidesWithoutHalfLife.length > 0 && (
+          <div className="rounded-control bg-bg p-3 text-xs text-muted ring-1 ring-line/10">
+            <p className="font-medium text-ink">Missing half-life</p>
+            <ul className="mt-1 space-y-0.5">
+              {peptidesWithoutHalfLife.map((p) => (
+                <li key={p.peptideId}>{p.peptideName} — set a half-life in Settings to estimate a curve.</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
   }
 
   // Shared X axis: min/max across ALL series (they share plasmaFrom..plasmaTo).
@@ -188,6 +206,7 @@ export function MultiPlasmaChart({
                 fill="none"
                 stroke={`rgb(var(${ln.colorVar}))`}
                 strokeWidth="1.5"
+                strokeOpacity="0.42"
                 strokeDasharray="4 3"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -351,6 +370,12 @@ export function MultiPlasmaChart({
             Missed dose
           </li>
         )}
+        {peptidesWithoutHalfLife.map((p) => (
+          <li key={p.peptideId} className="inline-flex items-center gap-1.5 text-warn">
+            <span className="h-1.5 w-4 rounded-full bg-warn/25 ring-1 ring-warn/40" aria-hidden="true" />
+            {p.peptideName} · no half-life
+          </li>
+        ))}
       </ul>
       <p className={`mt-1 text-[10px] text-muted${phoneHide}`}>solid = actual · dashed = forecast</p>
       {/* Redundant with the page-footer disclaimer; hidden on the compact phone tile. */}

@@ -4,21 +4,47 @@
  */
 import { prisma } from "@/lib/db";
 import { startOfDay, addDays } from "@/lib/schedule/schedule";
-import { classifyOverrideDays, dueSlotsForDay } from "@/lib/today-overrides";
+import { classifyOverrideDays, dueSlotsForDay, dayKey } from "@/lib/today-overrides";
 import { resolveTitration } from "@/lib/titration/resolve";
 import { buildResolveInput } from "@/lib/titration/from-protocol";
 import { perInjectionDose } from "@/lib/titration/dose-basis";
 import { dosesPerWeek } from "@/lib/schedule/frequency";
 import type { ResolvedSlot, PhaseProgress } from "@/lib/titration/types";
 import type { DoseUnit } from "@/lib/dosing/types";
+import { compareStackGrouped, compareTime } from "@/lib/stack-sort";
+import type { Prisma } from "@prisma/client";
 
 /** Monday (local) of the week containing `date` — matches the calendar's Monday-first weeks. */
 const weekStart = (d: Date) => addDays(startOfDay(d), -((startOfDay(d).getDay() + 6) % 7));
+
+export function buildTodayProtocolWhere(userId: string, day: Date, nextDay: Date): Prisma.ProtocolWhereInput {
+  return {
+    userId,
+    OR: [
+      { status: "active" },
+      {
+        status: "completed",
+        doseLogs: {
+          some: {
+            userId,
+            takenAt: { gte: day, lt: nextDay },
+          },
+        },
+      },
+    ],
+  };
+}
+
+export function shouldShowCompletedLoggedFallback(status: string, slotCount: number, todayLogCount: number): boolean {
+  return status === "completed" && slotCount === 0 && todayLogCount > 0;
+}
 
 export interface DueDose {
   protocolId: string;
   peptideId: string;
   peptideName: string;
+  stackId?: string | null;
+  stackName?: string | null;
   /** "injection" | "oral" — oral renders the simplified log form (no prep/syringe/site). */
   route: string;
   doseValue: string;
@@ -54,6 +80,8 @@ export interface DueDose {
   minIntervalHours: number | null;
   /** Titration phase position for the protocol (null = non-titration). Drives the "Phase N of M" label. */
   phaseProgress: PhaseProgress | null;
+  /** True when the slot is displayed because the schedule was rebased/shifted. */
+  shifted: boolean;
 }
 
 export interface LoggedDose {
@@ -131,8 +159,8 @@ export async function getTodayDoses(userId: string, date = new Date()): Promise<
   const nextDay = new Date(day.getTime() + 86_400_000);
 
   const protocols = await prisma.protocol.findMany({
-    where: { userId, status: "active" },
-    include: { peptide: true, steps: true },
+    where: buildTodayProtocolWhere(userId, day, nextDay),
+    include: { peptide: true, stack: true, steps: true },
   });
 
   // Rebase overrides for this week: a confirmed snap-back deletes the week's
@@ -160,11 +188,25 @@ export async function getTodayDoses(userId: string, date = new Date()): Promise<
   for (const p of protocols) {
     if (!p.scheduleRule) continue;
 
-    // Determine which slots are due today. Override days are always untimed;
-    // otherwise the live grid wins. (Pure decision — see today-overrides.ts.)
-    const slots = dueSlotsForDay(p.scheduleRule, overrideDays.get(p.id), day, p.startDate, p.endDate);
+    // Fetch all of today's logs for this protocol (used for per-slot consumed tracking).
+    const todayLogs = await prisma.doseLog.findMany({
+      where: { userId, protocolId: p.id, takenAt: { gte: day, lt: nextDay } },
+      orderBy: { takenAt: "asc" },
+    });
 
-    if (slots.length === 0) continue;
+    // Determine which slots are due today. Override days are always untimed;
+    // otherwise the live grid wins. Completed protocols with a same-day log get
+    // one read-only logged fallback row when the live grid has no slot, so Today
+    // still reflects a protocol that was logged before/around completion without
+    // adding any new "to go" work.
+    const slots = dueSlotsForDay(p.scheduleRule, overrideDays.get(p.id), day, p.startDate, p.endDate);
+    const completedLoggedFallback = shouldShowCompletedLoggedFallback(p.status, slots.length, todayLogs.length);
+    const shiftedOverrideToday = overrideDays.get(p.id)?.has(dayKey(day)) === true;
+    const effectiveSlots = completedLoggedFallback
+      ? [{ time: null }]
+      : slots;
+
+    if (effectiveSlots.length === 0) continue;
 
     // Resolve dose + live status via the single source of truth. The phase
     // cursor counts DELIVERED doses, so the resolver needs this protocol's FULL
@@ -224,12 +266,6 @@ export async function getTodayDoses(userId: string, date = new Date()): Promise<
       ? await prisma.syringe.findUnique({ where: { id: p.defaultSyringeId } })
       : null;
 
-    // Fetch all of today's logs for this protocol (used for per-slot consumed tracking).
-    const todayLogs = await prisma.doseLog.findMany({
-      where: { userId, protocolId: p.id, takenAt: { gte: day, lt: nextDay } },
-      orderBy: { takenAt: "asc" },
-    });
-
     // Half-life timing: most recent DoseLog for this peptide (any protocol).
     // Same value for every slot; measuring from the actual reference time (not
     // midnight) avoids understating elapsed hours.
@@ -248,7 +284,7 @@ export async function getTodayDoses(userId: string, date = new Date()): Promise<
     // Per-slot consumed tracking: each untimed log can satisfy at most one slot.
     const consumedLogIds = new Set<string>();
 
-    for (const slot of slots) {
+    for (const slot of effectiveSlots) {
       // Per-injection dose comes ONLY from the resolver (never raw step.dose /
       // targetDose). Match the resolved slot by time; fall back to the day's
       // resolved slot (override days are untimed and may not align to a grid
@@ -258,6 +294,7 @@ export async function getTodayDoses(userId: string, date = new Date()): Promise<
       // frequency can't be resolved we leave doseValue "" (no prefilled dose —
       // LogDoseForm guards on empty and disables submit) rather than overdose.
       const slotResolved = resolvedByTime.get(slot.time ?? null) ?? dayResolved;
+      const shifted = !completedLoggedFallback && (shiftedOverrideToday || slotResolved?.rebased === true);
       let doseValue = slotResolved?.perInjectionValue ?? "";
       let doseUnit = (slotResolved?.perInjectionUnit ?? (p.doseInputUnit as DoseUnit) ?? "mcg") as DoseUnit;
       if (!slotResolved && p.targetDose != null) {
@@ -298,6 +335,8 @@ export async function getTodayDoses(userId: string, date = new Date()): Promise<
         protocolId: p.id,
         peptideId: p.peptideId,
         peptideName: p.peptide.name,
+        stackId: p.stackId,
+        stackName: p.stack?.name ?? null,
         route: p.peptide.route,
         doseValue,
         doseUnit,
@@ -323,9 +362,14 @@ export async function getTodayDoses(userId: string, date = new Date()): Promise<
         halfLifeHours,
         minIntervalHours,
         phaseProgress: resolved.phaseProgress,
+        shifted,
       });
     }
   }
 
-  return due;
+  return due.sort((a, b) => {
+    const timeCmp = compareTime(a.time, b.time);
+    if (timeCmp !== 0) return timeCmp;
+    return compareStackGrouped(a, b);
+  });
 }

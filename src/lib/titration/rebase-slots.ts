@@ -10,6 +10,8 @@ export interface ReconstructArgs {
   rebaseMode: "fixed_anchor" | "rolling";
   freq: "DAILY" | "WEEKLY";
   delivered: { id: string; takenAt: Date }[];
+  /** Inclusive protocol end date. Rebased display slots must not cross it. */
+  endDate?: Date | null;
 }
 
 /**
@@ -54,6 +56,7 @@ export function reconstructRebasedSlots(args: ReconstructArgs): DatedSlot[] {
       rebaseMode: "fixed_anchor", freq: "WEEKLY", weekStart: args.weekStart,
       plannedDays: args.plannedDays, actual: { plannedDate: nearest, actualDate: actual },
       today: args.weekStart,
+      endDate: args.endDate,
     });
 
     // Drop the satisfied grid day AND every grid day after it; re-add the actual

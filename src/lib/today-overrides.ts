@@ -81,21 +81,14 @@ export function classifyOverrideDays(
     // materialize.ts isStale — keep in sync):
     //   - BEFORE startDate: categorically stale (a genuine confirmRebase row
     //     derives from a real logged dose inside the started window).
-    //   - AFTER endDate and ON the grid ignoring the end date: a grid row
-    //     stranded by an endDate pulled earlier. An OFF-grid row past the end
-    //     is kept — a user-confirmed rebase can shift the final dose past the
-    //     end (rebaseWeek clamps to week-end, not endDate).
+    //   - AFTER endDate: categorically stale. End dates are an inclusive cutoff;
+    //     no scheduled projection (routine or rebase-shifted) may survive past it.
     // A degenerate window (startDate after endDate) strands nothing.
     const degenerate =
       proto.startDate && proto.endDate && startOfDay(proto.startDate) > startOfDay(proto.endDate);
     if (!degenerate) {
       if (proto.startDate && rowDay < startOfDay(proto.startDate)) continue;
-      if (
-        proto.endDate &&
-        rowDay > startOfDay(proto.endDate) &&
-        slotsOn(parseSchedule(proto.scheduleRule), rowDay, proto.startDate, null).length > 0
-      )
-        continue;
+      if (proto.endDate && rowDay > startOfDay(proto.endDate)) continue;
     }
     const onGrid = slotsOn(parseSchedule(proto.scheduleRule), rowDay, proto.startDate, proto.endDate).length > 0;
     if (onGrid) {

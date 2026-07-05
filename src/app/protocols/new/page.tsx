@@ -6,6 +6,7 @@ import { ProtocolForm } from "@/components/ProtocolForm";
 import { getEnrichment, tokens } from "@/lib/peptide-enrichment";
 import { effectiveTemplates } from "@/lib/enrichment/suggested-protocol";
 import { protocolTemplateToInput, templateToRampSteps } from "@/lib/protocol-template";
+import { generateRamp } from "@/lib/titration/generate-ramp";
 import type { ProtocolInput } from "@/app/actions/protocols";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,7 @@ export default async function NewProtocolPage({
   // with a hint; never crash.
   let template: ProtocolInput | undefined;
   let templateRamp: { phase: string; doseLabel: string }[] | undefined;
+  let templateSteps: NonNullable<ProtocolInput["steps"]> | undefined;
   let missingHint: string | null = null;
 
   if (sp.template) {
@@ -58,9 +60,15 @@ export default async function NewProtocolPage({
 
       if (candidateId && peptides.some((p) => p.id === candidateId)) {
         template = protocolTemplateToInput(tmpl, candidateId);
+        const rampParams = templateToRampSteps(tmpl);
         const ramp = tmpl.ramp ?? [];
-        if (templateToRampSteps(tmpl) && ramp.length > 0) {
+        if (rampParams && ramp.length > 0) {
           templateRamp = ramp.map((r) => ({ phase: r.phase, doseLabel: r.doseLabel }));
+          templateSteps = generateRamp(rampParams).map((step) => ({
+            dose: step.dose,
+            doseInputUnit: step.doseInputUnit,
+            durationDays: step.durationDays != null ? String(step.durationDays) : undefined,
+          }));
         }
       } else if (candidateId && taken.has(candidateId)) {
         missingHint = `${entry.name} already has a protocol — edit it from Protocols instead.`;
@@ -79,7 +87,7 @@ export default async function NewProtocolPage({
       {peptides.length === 0 ? (
         <p className="text-muted">Every peptide already has a protocol. Edit an existing one from <Link href="/protocols" className="font-medium text-accentStrong">Protocols</Link>, or add a new peptide in Settings first.</p>
       ) : (
-        <ProtocolForm peptides={peptides} prescriptions={prescriptions} syringes={syringes} template={template} templateRamp={templateRamp} />
+        <ProtocolForm peptides={peptides} prescriptions={prescriptions} syringes={syringes} template={template} templateRamp={templateRamp} templateSteps={templateSteps} />
       )}
     </main>
   );

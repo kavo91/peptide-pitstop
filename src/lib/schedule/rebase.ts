@@ -20,11 +20,16 @@ export function rebaseWeek(args: {
   plannedDays: WeekdayCode[];
   actual: { plannedDate: Date; actualDate: Date };
   today: Date;
+  /** Inclusive protocol end date. Shifted occurrences after this date are invalid. */
+  endDate?: Date | null;
 }): Date[] {
   if (args.freq !== "WEEKLY" || args.rebaseMode !== "fixed_anchor") return [];
 
   const start = startOfDay(args.weekStart);
   const weekEnd = addDays(start, 6);
+  const effectiveEnd = args.endDate && startOfDay(args.endDate) < weekEnd
+    ? startOfDay(args.endDate)
+    : weekEnd;
   const today = startOfDay(args.today);
   const planned = startOfDay(args.actual.plannedDate);
   const actual = startOfDay(args.actual.actualDate);
@@ -38,5 +43,5 @@ export function rebaseWeek(args: {
 
   return gridDates
     .map((date) => addDays(date, delta))
-    .filter((date) => date >= today && date <= weekEnd && dayIndexInWeek(start, date) >= 0);
+    .filter((date) => date >= today && date <= effectiveEnd && dayIndexInWeek(start, date) >= 0);
 }

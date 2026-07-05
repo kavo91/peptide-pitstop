@@ -126,10 +126,8 @@ export function materializePlannedDoses(args: {
    *   - BEFORE startDate: categorically stale. A genuine confirmRebase row
    *     derives from a real logged dose inside the started window, so nothing
    *     legitimate lives before the start (BPC+TB4 prod bug, 2026-07-02).
-   *   - AFTER endDate *and on the schedule grid ignoring the end date*: a grid
-   *     row stranded by an endDate pulled earlier. An OFF-grid row past the
-   *     end is kept — a user-confirmed rebase (rebaseWeek clamps to week-end,
-   *     not endDate) can legitimately shift the final dose past the end.
+   *   - AFTER endDate: categorically stale. End dates are an inclusive cutoff;
+   *     no scheduled projection (routine or rebase-shifted) may survive past it.
    * A degenerate window (startDate after endDate — the card editor can't see
    * the end date, so this is reachable) marks NOTHING stale: both half-window
    * tests would otherwise cover the entire timeline and mass-delete history.
@@ -138,9 +136,7 @@ export function materializePlannedDoses(args: {
     const rowDay = startOfDay(scheduledAt);
     if (p.startDate && p.endDate && startOfDay(p.startDate) > startOfDay(p.endDate)) return false;
     if (p.startDate && rowDay < startOfDay(p.startDate)) return true;
-    if (p.endDate && rowDay > startOfDay(p.endDate)) {
-      return slotsOn(parseSchedule(p.scheduleRule), rowDay, p.startDate, null).length > 0;
-    }
+    if (p.endDate && rowDay > startOfDay(p.endDate)) return true;
     return false;
   };
 

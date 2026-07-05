@@ -12,6 +12,8 @@ interface PitstopHeadingProps {
   title: string;
   /** Race number for the ghost numeral (zero-padded to 2 digits). */
   index: number;
+  /** Optional legacy design switch kept for QA/prod source compatibility. */
+  design?: "pitstop" | "current";
   /** h1 classes — preserves each page's existing heading spacing/scale. */
   className?: string;
   /**
@@ -22,7 +24,11 @@ interface PitstopHeadingProps {
   split?: readonly [string, string];
 }
 
-export function PitstopHeading({ title, index, className, split }: PitstopHeadingProps) {
+export function PitstopHeading({ title, index, design = "pitstop", className, split }: PitstopHeadingProps) {
+  if (design === "current") {
+    return <h1 className={className}>{title}</h1>;
+  }
+
   const race = String(index).padStart(2, "0");
   const titleNode: ReactNode = split ? (
     <>

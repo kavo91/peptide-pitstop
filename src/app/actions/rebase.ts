@@ -25,6 +25,7 @@ export async function confirmRebase(input: { protocolId: string; plannedDateISO:
   const shifted = rebaseWeek({
     rebaseMode: "fixed_anchor", freq: "WEEKLY", weekStart: ws, plannedDays: wdays,
     actual: { plannedDate: startOfDay(new Date(input.plannedDateISO)), actualDate: actual }, today: actual,
+    endDate: proto.endDate,
   });
   if (shifted.length === 0) return { ok: true as const };
 

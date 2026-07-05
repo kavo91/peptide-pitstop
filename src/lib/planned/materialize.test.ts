@@ -589,9 +589,9 @@ describe("stale out-of-window rows (start date moved forward)", () => {
     expect(deletions).toEqual(["past-end"]);
   });
 
-  it("an OFF-grid row past the endDate is kept — a confirmed rebase can shift the final dose past the end", () => {
-    // MO/TH grid ending Thu 2026-07-02; the final dose was rebase-shifted to
-    // Fri 2026-07-03 (off-grid, past end). It must NOT be deleted as stale.
+  it("an OFF-grid row past the endDate is deleted — endDate is an inclusive cutoff", () => {
+    // MO/TH grid ending Thu 2026-07-02; a leftover Friday row is now stale and
+    // must be deleted rather than left to masquerade as a live override.
     const today = d("2026-07-03");
     const horizonEnd = new Date(today.getTime() + 13 * 86_400_000);
 
@@ -603,7 +603,7 @@ describe("stale out-of-window rows (start date moved forward)", () => {
       today,
     });
 
-    expect(deletions).toHaveLength(0);
+    expect(deletions).toEqual(["shifted-final"]);
   });
 
   it("a degenerate window (startDate after endDate) marks NOTHING stale — no mass deletion", () => {

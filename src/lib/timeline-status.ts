@@ -1,11 +1,14 @@
 import type { DoseStatus, LoggedDose, TimelineEntry } from "./doses-timeline-core";
 import type { ResolvedStatus } from "./titration/types";
+import { compareStackGrouped, compareTime } from "./stack-sort";
 
 /** A protocol's resolved slots for the timeline range (built from resolveTitration). */
 export interface ResolvedOcc {
   protocolId: string;
   peptideId: string;
   peptideName: string;
+  stackId?: string | null;
+  stackName?: string | null;
   slots: {
     date: string;          // "YYYY-MM-DD"
     time: string | null;
@@ -119,6 +122,7 @@ export function buildTimelineEntries(args: {
       entries.push({
         date: s.date, time, protocolId: occ.protocolId,
         peptideId: occ.peptideId, peptideName: occ.peptideName,
+        stackId: occ.stackId, stackName: occ.stackName,
         doseLabel: s.doseLabel, status, phaseIndex: s.phaseIndex,
         doseLogId: s.doseLogId,
       });
@@ -129,10 +133,15 @@ export function buildTimelineEntries(args: {
     if (consumed.has(log.doseLogId)) continue;
     entries.push({
       date: log.dateKey, time: log.time, protocolId: log.protocolId, peptideId: log.peptideId,
-      peptideName: log.peptideName, doseLabel: log.doseLabel,
+      peptideName: log.peptideName, stackId: log.stackId, stackName: log.stackName, doseLabel: log.doseLabel,
       status: "taken_offschedule", doseLogId: log.doseLogId,
     });
   }
 
-  return entries.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.peptideName.localeCompare(b.peptideName)));
+  return entries.sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    const timeCmp = compareTime(a.time, b.time);
+    if (timeCmp !== 0) return timeCmp;
+    return compareStackGrouped(a, b);
+  });
 }

@@ -5,12 +5,44 @@ import { buildResolveInput } from "./titration/from-protocol";
 import { perInjectionDose } from "./titration/dose-basis";
 import { startOfDay } from "./schedule/schedule";
 import { classifyOverrideDays, dueSlotsForDay, dayKey } from "./today-overrides";
+import { buildTodayProtocolWhere, shouldShowCompletedLoggedFallback } from "./today";
 
 // getTodayDoses is DB-bound; these guard the exact resolver contract it relies
 // on. today.ts builds its ResolveInput via buildResolveInput, then reads the
 // slot matching the day/slot.time to set doseValue/doseUnit + alreadyLoggedToday.
 const d = (s: string) => new Date(s + "T00:00:00");
 const wk = JSON.stringify([{ dayPattern: { kind: "weekly", byDays: ["MO", "TH"] }, times: [] }]);
+
+describe("today protocol selection", () => {
+  it("keeps completed protocols with a same-day log in the schedule candidate set", () => {
+    const day = d("2026-07-05");
+    const nextDay = d("2026-07-06");
+
+    expect(buildTodayProtocolWhere("user-1", day, nextDay)).toEqual({
+      userId: "user-1",
+      OR: [
+        { status: "active" },
+        {
+          status: "completed",
+          doseLogs: {
+            some: {
+              userId: "user-1",
+              takenAt: { gte: day, lt: nextDay },
+            },
+          },
+        },
+      ],
+    });
+  });
+
+  it("synthesizes a logged schedule row only for completed protocols with a same-day log and no normal slot", () => {
+    expect(shouldShowCompletedLoggedFallback("completed", 0, 1)).toBe(true);
+    expect(shouldShowCompletedLoggedFallback("completed", 1, 1)).toBe(false);
+    expect(shouldShowCompletedLoggedFallback("completed", 0, 0)).toBe(false);
+    expect(shouldShowCompletedLoggedFallback("active", 0, 1)).toBe(false);
+    expect(shouldShowCompletedLoggedFallback("paused", 0, 1)).toBe(false);
+  });
+});
 
 describe("today dose resolution via resolver", () => {
   it("per_week 8mg/wk @ 2/wk shows 4mg per injection on the current slot", () => {
@@ -240,7 +272,7 @@ describe("rebase-override classifier — TZ hardening (WS6)", () => {
     expect(dueSlotsForDay(daily, overrideDays.get("p-ended"), day, ended.startDate, ended.endDate)).toHaveLength(0);
   });
 
-  it("an OFF-grid row past the endDate is still an override — a confirmed rebase can shift the final dose past the end", () => {
+  it("stale POST-END planned rows are equally ignored", () => {
     process.env.TZ = "Australia/Brisbane";
     const moTh = JSON.stringify([{ dayPattern: { kind: "weekly", byDays: ["MO", "TH"] }, times: [] }]);
     const ending = {
@@ -255,8 +287,8 @@ describe("rebase-override classifier — TZ hardening (WS6)", () => {
     const overrideDays = classifyOverrideDays([ending], [
       { protocolId: "p-final", scheduledAt: new Date("2026-07-02T14:00:00Z") }, // Fri 3rd local
     ]);
-    expect(overrideDays.get("p-final")?.has(dayKey(fri))).toBe(true);
-    expect(dueSlotsForDay(moTh, overrideDays.get("p-final"), fri, ending.startDate, ending.endDate)).toHaveLength(1);
+    expect(overrideDays.get("p-final")).toBeUndefined();
+    expect(dueSlotsForDay(moTh, overrideDays.get("p-final"), fri, ending.startDate, ending.endDate)).toHaveLength(0);
   });
 
   it("a genuine IN-window off-grid rebase week still classifies as an override", () => {

@@ -118,7 +118,7 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
   const plasmaTo = addDays(todayStart, 30);
 
   // ── Load data in parallel ─────────────────────────────────────────────────
-  const [doseLogs, activeProtocols, vialsWithPrep, syringes] = await Promise.all([
+  const [doseLogs, protocolRows, vialsWithPrep, syringes] = await Promise.all([
     prisma.doseLog.findMany({
       where: {
         userId,
@@ -132,7 +132,17 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
       orderBy: { takenAt: "asc" },
     }),
     prisma.protocol.findMany({
-      where: { userId, status: "active" },
+      where: {
+        userId,
+        OR: [
+          { status: "active" },
+          {
+            status: "completed",
+            OR: [{ endDate: null }, { endDate: { gte: adherenceWindow.from } }],
+            AND: [{ OR: [{ startDate: null }, { startDate: { lte: plasmaTo } }] }],
+          },
+        ],
+      },
       include: { peptide: true, steps: true },
     }),
     // Active prep per vial → drives ml/units → mcg in the forward projection.
@@ -162,7 +172,7 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
   // analytics — a not-yet-started protocol has no real adherence, plasma, or dose
   // history, so including it shows a misleading 0%/"—" gauge and a phantom curve.
   // A null start date has no anchor (not "future") and is kept as before.
-  const protocols = activeProtocols.filter((p) => p.startDate == null || p.startDate <= now);
+  const protocols = protocolRows.filter((p) => p.startDate == null || p.startDate <= now);
 
   // Active prep concentration (mcg/mL) per peptide. Multiple vials per peptide →
   // prefer an in-use vial, then the most recently reconstituted active prep. Absent
