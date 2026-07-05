@@ -309,7 +309,7 @@ sqlite3 /path/to/peptides.db \
 
 - [Dose reminder notifications](docs/ha-reminder-automation.md) — Web Push setup (VAPID + device enrolment) and the optional Home Assistant fallback relay.
 
-> Apple Health is intentionally **not** a built-in integration: HealthKit is device-only and a self-hosted web app cannot write to it. See [the Shortcut workaround](docs/apple-health-shortcut.md) if you want a manual bridge.
+> Apple Health is intentionally **not** a built-in integration: HealthKit is device-only and a self-hosted web app cannot write to it.
 
 ---
 
