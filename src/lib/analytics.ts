@@ -168,11 +168,16 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
     }),
   ]);
 
-  // Exclude protocols that haven't started yet (future start date) from ALL
-  // analytics — a not-yet-started protocol has no real adherence, plasma, or dose
-  // history, so including it shows a misleading 0%/"—" gauge and a phantom curve.
-  // A null start date has no anchor (not "future") and is kept as before.
-  const protocols = protocolRows.filter((p) => p.startDate == null || p.startDate <= now);
+  // Split protocol eligibility by surface:
+  // - Adherence/history should ignore not-yet-started protocols, otherwise they
+  //   show misleading 0%/"—" rows before the first scheduled slot exists.
+  // - Plasma FORECASTS should still include active future-start protocols so the
+  //   legend and dashed curve show what is scheduled to begin inside the chart
+  //   window. A null start date has no future anchor and is treated as current.
+  const adherenceProtocols = protocolRows.filter((p) => p.startDate == null || p.startDate <= now);
+  const plasmaProtocols = protocolRows.filter(
+    (p) => p.status === "active" || p.startDate == null || p.startDate <= now,
+  );
 
   // Active prep concentration (mcg/mL) per peptide. Multiple vials per peptide →
   // prefer an in-use vial, then the most recently reconstituted active prep. Absent
@@ -238,7 +243,7 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
     const p = l.preparation?.vial.peptide ?? l.protocol?.peptide ?? null;
     if (p) peptideMap.set(p.id, p.name);
   }
-  for (const proto of protocols) {
+  for (const proto of adherenceProtocols) {
     peptideMap.set(proto.peptide.id, proto.peptide.name);
   }
 
@@ -255,7 +260,7 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
   // (plasmaFrom..plasmaTo). Collected here because the resolver slots are already
   // in hand — no extra query. The chart maps these to dashed-red markers.
   const missedDoseTimes: Date[] = [];
-  for (const proto of protocols) {
+  for (const proto of adherenceProtocols) {
     if (!proto.scheduleRule) continue;
     let resolved: ReturnType<typeof resolveTitration> | null = null;
     try {
@@ -328,7 +333,7 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
 
   // Build unique set of peptides that have protocols (with halfLifeHours)
   const peptideHalfLifes = new Map<string, number | null>();
-  for (const proto of protocols) {
+  for (const proto of plasmaProtocols) {
     const halfLife = proto.peptide.halfLifeHours != null ? Number(proto.peptide.halfLifeHours) : null;
     peptideHalfLifes.set(proto.peptide.id, halfLife);
     if (!peptideMap.has(proto.peptide.id)) {
@@ -336,7 +341,7 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
     }
   }
 
-  for (const proto of protocols) {
+  for (const proto of plasmaProtocols) {
     const peptideId = proto.peptide.id;
     const peptideName = proto.peptide.name;
     const halfLifeHours = peptideHalfLifes.get(peptideId) ?? null;

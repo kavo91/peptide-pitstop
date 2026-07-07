@@ -8,7 +8,6 @@ import {
   parseSchedule,
   scheduleSummary,
   evenlySpacedDays,
-  isWithinDoseWindow,
   DEFAULT_DOSE_TIME,
   type ScheduleEntry,
   type DayPattern,
@@ -17,6 +16,10 @@ import { updateStackSchedule } from "@/app/actions/stacks";
 
 const field = "w-full rounded-control border border-line/15 bg-bg px-2.5 py-1.5 text-sm text-ink";
 const DAYS: WeekdayCode[] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+const STACK_TIME_MIN = "06:00";
+const STACK_TIME_MAX = "22:00";
+const isWithinStackDoseWindow = (time: string) =>
+  /^([01]\d|2[0-3]):[0-5]\d$/.test(time) && time >= STACK_TIME_MIN && time <= STACK_TIME_MAX;
 
 /**
  * Compact, single-entry stack schedule editor. Reuses ProtocolForm's day-pattern
@@ -51,23 +54,25 @@ export function StackScheduleEditor({
   const [err, setErr] = useState<string | null>(null);
 
   const p = entry.dayPattern;
+  const entryTime = entry.times[0] ?? "";
   const patternValid =
     p.kind === "weekly" ? p.byDays.length > 0
     : p.kind === "interval" ? p.everyDays > 0
     : p.kind === "cycle" ? p.onDays > 0 && p.onDays + p.offDays > 0
     : true;
-  const presetTimeBad = preset && !isWithinDoseWindow(presetTime);
+  const presetTimeBad = preset && !isWithinStackDoseWindow(presetTime);
+  const entryTimeBad = !preset && entryTime !== "" && !isWithinStackDoseWindow(entryTime);
   // Interval/cycle patterns are undefined without an anchor date (entryDueOn
   // returns false), so block save until a start date is set — avoids a silently
   // never-due stack.
   const needsStart = (p.kind === "interval" || p.kind === "cycle") && !start.trim();
-  const canSave = patternValid && !presetTimeBad && !needsStart && !busy;
+  const canSave = patternValid && !presetTimeBad && !entryTimeBad && !needsStart && !busy;
 
   // Build the weekly entry the N×/week preset authors (clamped 1..7, time clamped
-  // to the 06:00–20:00 dose window). Mirrors ProtocolForm.presetEntry.
+  // to the 06:00–22:00 dose window). Mirrors ProtocolForm.presetEntry.
   function buildPreset(n: number, time: string): ScheduleEntry {
     const safeN = Math.min(7, Math.max(1, n));
-    const safeTime = isWithinDoseWindow(time) ? time : DEFAULT_DOSE_TIME;
+    const safeTime = isWithinStackDoseWindow(time) ? time : DEFAULT_DOSE_TIME;
     return { dayPattern: { kind: "weekly", byDays: evenlySpacedDays(safeN) }, times: [safeTime] };
   }
 
@@ -148,19 +153,19 @@ export function StackScheduleEditor({
               <input
                 className={field + " mt-1"}
                 type="time"
-                min="06:00"
-                max="20:00"
+                min={STACK_TIME_MIN}
+                max={STACK_TIME_MAX}
                 value={presetTime}
                 onChange={(e) => {
                   const val = e.target.value;
                   setPresetTime(val);
-                  if (isWithinDoseWindow(val)) setEntry(buildPreset(presetN, val));
+                  if (isWithinStackDoseWindow(val)) setEntry(buildPreset(presetN, val));
                 }}
               />
             </label>
           </div>
           <p className="text-muted">Days: <span className="text-ink">{evenlySpacedDays(Math.min(7, Math.max(1, presetN))).join(", ")}</span></p>
-          {presetTimeBad && <p className="text-warn">Time must be between 06:00 and 20:00.</p>}
+          {presetTimeBad && <p className="text-warn">Time must be between 06:00 and 22:00.</p>}
         </div>
       )}
 
@@ -218,12 +223,29 @@ export function StackScheduleEditor({
         </div>
       )}
 
+      {!preset && (
+        <label className="block text-muted">Time
+          <input
+            className={field + " mt-1"}
+            type="time"
+            min="06:00"
+            max="20:00"
+            value={entryTime}
+            onChange={(e) => {
+              const val = e.target.value;
+              setEntry({ ...entry, times: val ? [val] : [] });
+            }}
+          />
+        </label>
+      )}
+
       <label className="block text-muted">Start date
         <input className={field + " mt-1"} type="date" value={start} onChange={(e) => setStart(e.target.value)} />
       </label>
 
       <p className="text-muted">Preview: <span className="text-ink">{scheduleSummary([entry])}</span></p>
       {!patternValid && <p className="text-warn">Pick at least one weekday / a positive interval or cycle.</p>}
+      {entryTimeBad && <p className="text-warn">Time must be between 06:00 and 22:00.</p>}
       {needsStart && <p className="text-warn">Set a start date for interval / cycle schedules.</p>}
       {err && <p className="text-danger">{err}</p>}
 
