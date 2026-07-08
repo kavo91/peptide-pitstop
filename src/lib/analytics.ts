@@ -71,6 +71,8 @@ export interface PeptidePlasma {
   series: PlasmaPoint[];
   /** True when forward-projected doses were appended to the history. */
   hasProjection: boolean;
+  /** Owning stack ids for active/completed protocols contributing this peptide. */
+  stackIds: string[];
 }
 
 export interface AnalyticsData {
@@ -333,9 +335,15 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
 
   // Build unique set of peptides that have protocols (with halfLifeHours)
   const peptideHalfLifes = new Map<string, number | null>();
+  const peptideStackIds = new Map<string, Set<string>>();
   for (const proto of plasmaProtocols) {
     const halfLife = proto.peptide.halfLifeHours != null ? Number(proto.peptide.halfLifeHours) : null;
     peptideHalfLifes.set(proto.peptide.id, halfLife);
+    if (proto.stackId) {
+      const ids = peptideStackIds.get(proto.peptide.id) ?? new Set();
+      ids.add(proto.stackId);
+      peptideStackIds.set(proto.peptide.id, ids);
+    }
     if (!peptideMap.has(proto.peptide.id)) {
       peptideMap.set(proto.peptide.id, proto.peptide.name);
     }
@@ -401,7 +409,7 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
       stepHours: 6,
     });
 
-    plasmaByPeptide.push({ peptideId, peptideName, halfLifeHours, series, hasProjection });
+    plasmaByPeptide.push({ peptideId, peptideName, halfLifeHours, series, hasProjection, stackIds: [...(peptideStackIds.get(peptideId) ?? new Set())].sort() });
   }
 
   plasmaByPeptide.sort((a, b) => a.peptideName.localeCompare(b.peptideName));

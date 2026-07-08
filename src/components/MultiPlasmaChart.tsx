@@ -1,162 +1,188 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import type { PlasmaPoint } from "@/lib/plasma";
 import { splitSeriesAtNow } from "@/lib/plasma";
 import { normalizeToPeak } from "@/lib/plasma-overlay";
 import type { PeptidePlasma } from "@/lib/analytics";
+import { assignPlasmaSeriesColors } from "@/lib/plasma-series-colors";
 
 interface Props {
   plasmaByPeptide: PeptidePlasma[];
   now: Date;
-  peptidesWithoutHalfLife?: { peptideId: string; peptideName: string }[];
-  /** Optional legacy design prop accepted for QA/prod source compatibility. */
-  design?: "pitstop" | "current";
-  /**
-   * Dashboard mini-tile only: ALSO render a shorter-geometry copy that CSS swaps
-   * in on phones (<=640px) so the curve fills the width undistorted at a compact
-   * height, and hide the secondary captions. A CSS height-cap can't do this — a
-   * fixed-aspect SVG letterboxes (side gutters) under preserveAspectRatio "meet".
-   * Off everywhere else (full height + captions shown), e.g. /analytics.
-   */
   compactOnPhone?: boolean;
-  /**
-   * Scheduled-but-not-logged dose times within the chart window. Rendered as
-   * dashed-red vertical markers.
-   */
+  design?: "pitstop" | "current";
   missedDoses?: Date[];
+  peptidesWithoutHalfLife?: { peptideId: string; peptideName: string }[];
+  enableRangeToggle?: boolean;
+  defaultWindowDays?: 7 | 14 | 30;
 }
 
-// Missed-dose marker red. `rgb(var(--token))` DOES resolve in SVG presentation
-// attributes (stroke/fill) in this stack — see the per-peptide stroke lines below
-// (`rgb(var(${ln.colorVar}))`) and the redline markers further down.
 const MISSED_RED = "rgb(var(--danger))";
-
+const DAY_MS = 86_400_000;
 const WIDTH = 600;
 const HEIGHT_FULL = 180;
-const HEIGHT_PHONE = 108; // shorter geometry CSS-swaps in on the phone dashboard tile
+const HEIGHT_PHONE = 108;
 const PAD = { top: 12, right: 12, bottom: 28, left: 8 };
-
-// Per-peptide colour, indexed by order (cycles if there are more peptides than
-// tokens). CSS-var tokens only — these resolve to the active light/dark theme.
-// Ordered for maximum hue contrast between the FIRST peptides (teal→amber→green→
-// red→cyan) so two overlaid curves are easy to tell apart (accent/accent-2 are
-// too similar to sit adjacent).
-const PALETTE = ["--accent", "--warn", "--ok", "--danger", "--accent-2-strong"] as const;
+const COLOR_STATE_KEY = "pitstop.plasma-colors.v1";
+const COLOR_DISMISS_PREFIX = "pitstop.plasma-colors.dismissed.";
 
 function toViewX(t: number, minT: number, maxT: number): number {
   const range = maxT - minT || 1;
   return PAD.left + ((t - minT) / range) * (WIDTH - PAD.left - PAD.right);
 }
 
+function fingerprint(lines: { peptideId: string; color: string }[]): string {
+  return lines.map((ln) => `${ln.peptideId}:${ln.color}`).sort().join("|");
+}
+
+function startOfDayMs(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
 export function MultiPlasmaChart({
   plasmaByPeptide,
   now,
-  peptidesWithoutHalfLife = [],
   compactOnPhone = false,
+  design = "current",
   missedDoses = [],
+  enableRangeToggle = false,
+  defaultWindowDays = 30,
 }: Props) {
-  // Same guard as PlasmaChart: a series needs >= 2 points to draw a line.
+  const [colorNotice, setColorNotice] = useState<string | null>(null);
+  const [windowDays, setWindowDays] = useState<7 | 14 | 30>(defaultWindowDays);
+
   const renderable = plasmaByPeptide.filter((p) => p.series.length >= 2);
-  if (renderable.length === 0) {
-    return (
-      <div className="space-y-2">
-        <p className="text-sm text-muted">Not enough data to render curve.</p>
-        {peptidesWithoutHalfLife.length > 0 && (
-          <div className="rounded-control bg-bg p-3 text-xs text-muted ring-1 ring-line/10">
-            <p className="font-medium text-ink">Missing half-life</p>
-            <ul className="mt-1 space-y-0.5">
-              {peptidesWithoutHalfLife.map((p) => (
-                <li key={p.peptideId}>{p.peptideName} — set a half-life in Settings to estimate a curve.</li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Shared X axis: min/max across ALL series (they share plasmaFrom..plasmaTo).
-  let minT = Infinity;
-  let maxT = -Infinity;
-  for (const p of renderable) {
-    for (const pt of p.series) {
-      const t = pt.t.getTime();
-      if (t < minT) minT = t;
-      if (t > maxT) maxT = t;
-    }
-  }
   const nowMs = now.getTime();
+  const minT = nowMs - windowDays * DAY_MS;
+  const maxT = nowMs + windowDays * DAY_MS;
 
-  // Per-peptide draw data: colour + RAW normalised solid (actual) / dashed
-  // (forecast) segments. Segments are height-independent; paths render per-height.
-  const lines = renderable.map((p, idx) => {
-    const colorVar = PALETTE[idx % PALETTE.length];
+  const visible = renderable
+    .map((p) => ({
+      ...p,
+      series: p.series.filter((pt) => {
+        const t = pt.t.getTime();
+        return t >= minT && t <= maxT;
+      }),
+    }))
+    .filter((p) => p.series.length >= 2);
+
+  if (visible.length === 0) {
+    return <p className="text-sm text-muted">Not enough data to render curve.</p>;
+  }
+
+  const colorAssignments = useMemo(
+    () =>
+      assignPlasmaSeriesColors(
+        visible.map((p) => ({
+          peptideId: p.peptideId,
+          peptideName: p.peptideName,
+          stackIds: p.stackIds,
+        })),
+      ),
+    [visible],
+  );
+  const colorByPeptide = new Map(colorAssignments.map((a) => [a.peptideId, a.color]));
+
+  const lines = visible.map((p) => {
     const norm = normalizeToPeak(p.series);
     const { historical, forecast } = splitSeriesAtNow(norm, now);
     const showForecast = p.hasProjection && forecast.length >= 2;
-    // Mean normalised level → z-orders the lines so the lowest sits in front.
     const mean = norm.length ? norm.reduce((s, pt) => s + pt.level, 0) / norm.length : 0;
     return {
       peptideId: p.peptideId,
       peptideName: p.peptideName,
-      colorVar,
+      color: colorByPeptide.get(p.peptideId) ?? "rgb(var(--accent))",
       mean,
-      // No forecast → draw the solid line over the FULL series so the decay tail
-      // past `now` is still bordered (mirrors PlasmaChart).
       historicalSeg: showForecast ? historical : norm,
       forecastSeg: showForecast ? forecast : null,
     };
   });
 
-  // Draw the lowest-value lines LAST so they sit in the FOREGROUND rather than
-  // being hidden behind taller lines. The legend keeps its stable order; only the
-  // SVG paint order changes (higher mean painted first / behind).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const current = {
+      ids: lines.map((ln) => ln.peptideId).sort(),
+      mapping: Object.fromEntries(lines.map((ln) => [ln.peptideId, ln.color])),
+      signature: fingerprint(lines),
+    };
+    const dismissed = window.localStorage.getItem(`${COLOR_DISMISS_PREFIX}${current.signature}`) === "1";
+    try {
+      const raw = window.localStorage.getItem(COLOR_STATE_KEY);
+      const previous = raw ? JSON.parse(raw) as { ids?: string[]; mapping?: Record<string, string> } : null;
+      const prevIds = new Set(previous?.ids ?? []);
+      const added = current.ids.filter((id) => !prevIds.has(id));
+      const changedShared = current.ids.filter((id) => prevIds.has(id) && previous?.mapping?.[id] && previous.mapping[id] !== current.mapping[id]);
+      if (!dismissed && added.length > 0 && changedShared.length > 0) {
+        const addedNames = lines.filter((ln) => added.includes(ln.peptideId)).map((ln) => ln.peptideName);
+        setColorNotice(`Chart colours updated for contrast after adding ${addedNames.join(", ")}.`);
+      } else {
+        setColorNotice(null);
+      }
+    } catch {
+      setColorNotice(null);
+    }
+    window.localStorage.setItem(COLOR_STATE_KEY, JSON.stringify(current));
+  }, [lines]);
+
+  const dismissNotice = () => {
+    if (typeof window === "undefined") return;
+    const signature = fingerprint(lines);
+    window.localStorage.setItem(`${COLOR_DISMISS_PREFIX}${signature}`, "1");
+    setColorNotice(null);
+  };
+
   const drawOrder = [...lines].sort((a, b) => b.mean - a.mean);
+  const nowX = Math.max(PAD.left, Math.min(WIDTH - PAD.right, toViewX(nowMs, minT, maxT)));
 
-  // nowX is height-independent (X scale only).
-  const nowX = Math.max(
-    PAD.left,
-    Math.min(WIDTH - PAD.right, toViewX(nowMs, minT, maxT)),
-  );
-
-  // X-axis labels: locale-independent fixed "D Mon" (avoids the SSR/browser
-  // hydration mismatch that toLocaleDateString causes). Same approach as PlasmaChart.
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const fmt = (d: Date) => `${d.getDate()} ${MONTHS[d.getMonth()]}`;
   const labelStart = fmt(new Date(minT));
   const labelEnd = fmt(new Date(maxT));
 
-  // Missed-dose markers. Map each missed time onto the shared X scale, keep only
-  // those inside the visible window, and de-dupe coincident x-positions so
-  // overlapping markers don't double-paint. Height-independent.
-  const missedX = Array.from(
-    new Set(
-      missedDoses
-        .map((d) => d.getTime())
-        .filter((t) => t >= minT && t <= maxT)
-        .map((t) => Number(toViewX(t, minT, maxT).toFixed(1))),
-    ),
-  );
+  const isPitstop = design === "pitstop";
+  const missedX = isPitstop
+    ? Array.from(
+        new Set(
+          missedDoses
+            .map((d) => d.getTime())
+            .filter((t) => t >= minT && t <= maxT)
+            .map((t) => Number(toViewX(t, minT, maxT).toFixed(1))),
+        ),
+      )
+    : [];
 
-  // Intermediate x-axis date ticks. Three evenly-spaced points (25/50/75% of the
-  // window) give faint gridlines + tick marks + centred date labels so the time
-  // axis reads beyond the bare start/now/end labels. Height-independent X
-  // positions; the verticals/labels paint per-height inside renderSvg. All x sit
-  // inside [PAD.left, WIDTH - PAD.right] → no overflow.
   const axisTicks =
-    maxT > minT
-      ? [0.25, 0.5, 0.75].map((f) => {
-          const t = minT + f * (maxT - minT);
-          return { x: toViewX(t, minT, maxT), label: fmt(new Date(t)) };
-        })
+    isPitstop && maxT > minT
+      ? compactOnPhone
+        ? (() => {
+            const todayMs = startOfDayMs(now);
+            const yesterdayMs = todayMs - DAY_MS;
+            const tomorrowMs = todayMs + DAY_MS;
+            const dayStart = todayMs - windowDays * DAY_MS;
+            const dayEnd = todayMs + windowDays * DAY_MS;
+            const ticks: number[] = [];
+            for (let t = dayStart; t <= dayEnd; t += DAY_MS) ticks.push(t);
+            return ticks.map((t) => ({
+              x: toViewX(t, minT, maxT),
+              label:
+                t === yesterdayMs
+                  ? "Yesterday"
+                  : t === todayMs
+                    ? "Today"
+                    : t === tomorrowMs
+                      ? "Tomorrow"
+                      : fmt(new Date(t)),
+            }));
+          })()
+        : [0.25, 0.5, 0.75].map((f) => {
+            const t = minT + f * (maxT - minT);
+            return { x: toViewX(t, minT, maxT), label: fmt(new Date(t)) };
+          })
       : [];
 
-  // Render the SVG at a given geometry HEIGHT. Phone vs full differ ONLY in the
-  // viewBox height + Y mapping, so the curve fills the width undistorted at either
-  // height (no letterboxing, no aspect distortion).
   const renderSvg = (HEIGHT: number) => {
-    const toViewY = (level: number) =>
-      PAD.top + (1 - level) * (HEIGHT - PAD.top - PAD.bottom);
+    const toViewY = (level: number) => PAD.top + (1 - level) * (HEIGHT - PAD.top - PAD.bottom);
     const toPath = (seg: PlasmaPoint[]) =>
       seg
         .map((pt, i) => {
@@ -167,163 +193,52 @@ export function MultiPlasmaChart({
         .join(" ");
     const bottomY = HEIGHT - PAD.bottom;
     return (
-      <svg
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        aria-label="Combined plasma curves for all active peptides"
-        className="w-full"
-        style={{ height: "auto" }}
-      >
-        {/* Intermediate x-axis gridlines — faint verticals painted FIRST so they
-            sit behind the curves. */}
+      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} aria-label="Combined plasma curves for all active peptides" className="w-full" style={{ height: "auto" }}>
         {axisTicks.map((tk, i) => (
-          <line
-            key={`grid-${i}`}
-            x1={tk.x}
-            y1={PAD.top}
-            x2={tk.x}
-            y2={bottomY}
-            stroke="rgb(var(--muted))"
-            strokeWidth="0.5"
-            strokeOpacity="0.18"
-          />
+          <line key={`grid-${i}`} x1={tk.x} y1={PAD.top} x2={tk.x} y2={bottomY} stroke="rgb(var(--muted))" strokeWidth="0.5" strokeOpacity="0.18" />
         ))}
-
-        {/* Per-peptide lines: solid = actual, dashed = forecast, peptide colour.
-            drawOrder paints lowest-value lines last (foreground). */}
         {drawOrder.map((ln) => (
           <g key={ln.peptideId}>
-            <path
-              d={toPath(ln.historicalSeg)}
-              fill="none"
-              stroke={`rgb(var(${ln.colorVar}))`}
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            {ln.forecastSeg && (
-              <path
-                d={toPath(ln.forecastSeg)}
-                fill="none"
-                stroke={`rgb(var(${ln.colorVar}))`}
-                strokeWidth="1.5"
-                strokeOpacity="0.42"
-                strokeDasharray="4 3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            )}
+            <path d={toPath(ln.historicalSeg)} fill="none" stroke={ln.color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            {ln.forecastSeg && <path d={toPath(ln.forecastSeg)} fill="none" stroke={ln.color} strokeWidth="1.5" strokeDasharray="4 3" strokeLinecap="round" strokeLinejoin="round" />}
           </g>
         ))}
-
-        {/* Missed-dose markers — DOTTED red verticals topped with a small
-            downward flag at each scheduled-but-not-logged dose time. The dotted
-            pattern + event flag read as discrete markers, distinct from the
-            peptide-coloured DASHED forecast curves (differentiated by marker +
-            dash style + colour, not dash alone). */}
         {missedX.map((x, i) => (
           <g key={`missed-${i}`}>
-            <path
-              d={`M${(x - 3).toFixed(1)},${PAD.top} L${(x + 3).toFixed(1)},${PAD.top} L${x.toFixed(1)},${(PAD.top + 4).toFixed(1)} Z`}
-              fill={MISSED_RED}
-            />
-            <line
-              x1={x}
-              y1={PAD.top + 4}
-              x2={x}
-              y2={bottomY}
-              stroke={MISSED_RED}
-              strokeWidth="1.25"
-              strokeLinecap="round"
-              strokeDasharray="0.5 4"
-            />
+            <path d={`M${(x - 3).toFixed(1)},${PAD.top} L${(x + 3).toFixed(1)},${PAD.top} L${x.toFixed(1)},${(PAD.top + 4).toFixed(1)} Z`} fill={MISSED_RED} />
+            <line x1={x} y1={PAD.top + 4} x2={x} y2={bottomY} stroke={MISSED_RED} strokeWidth="1.25" strokeLinecap="round" strokeDasharray="0.5 4" />
           </g>
         ))}
-
-        {/* "Now" vertical marker */}
         {nowMs >= minT && nowMs <= maxT && (
           <>
-            <line
-              x1={nowX}
-              y1={PAD.top}
-              x2={nowX}
-              y2={bottomY}
-              stroke="rgb(var(--muted))"
-              strokeWidth="1"
-              strokeDasharray="3 3"
-            />
-            <text x={nowX + 3} y={PAD.top + 8} fontSize="9" fill="rgb(var(--muted))">
-              now
-            </text>
+            <line x1={nowX} y1={PAD.top} x2={nowX} y2={bottomY} stroke="rgb(var(--muted))" strokeWidth="1" strokeDasharray="3 3" />
+            <text x={nowX + 3} y={PAD.top + 8} fontSize="9" fill="rgb(var(--muted))">now</text>
           </>
         )}
-
-        {/* X-axis baseline */}
-        <line
-          x1={PAD.left}
-          y1={bottomY}
-          x2={WIDTH - PAD.right}
-          y2={bottomY}
-          stroke="rgb(var(--muted))"
-          strokeWidth="0.5"
-          strokeOpacity="0.4"
-        />
-
-        {/* X-axis date labels */}
-        <text x={PAD.left} y={HEIGHT - 6} fontSize="9" fill="rgb(var(--muted))">
-          {labelStart}
-        </text>
-
-        {/* Intermediate x-axis ticks + centred date labels — fill in the gap
-            between the start/now/end labels. */}
+        <line x1={PAD.left} y1={bottomY} x2={WIDTH - PAD.right} y2={bottomY} stroke="rgb(var(--muted))" strokeWidth="0.5" strokeOpacity="0.4" />
+        {!compactOnPhone && <text x={PAD.left} y={HEIGHT - 6} fontSize="9" fill="rgb(var(--muted))">{labelStart}</text>}
         {axisTicks.map((tk, i) => (
           <g key={`tick-${i}`}>
-            <line
-              x1={tk.x}
-              y1={bottomY}
-              x2={tk.x}
-              y2={bottomY + 3}
-              stroke="rgb(var(--muted))"
-              strokeWidth="0.5"
-              strokeOpacity="0.4"
-            />
-            <text
-              x={tk.x}
-              y={HEIGHT - 6}
-              fontSize="9"
-              fill="rgb(var(--muted))"
-              textAnchor="middle"
-            >
-              {tk.label}
-            </text>
+            <line x1={tk.x} y1={bottomY} x2={tk.x} y2={bottomY + 3} stroke="rgb(var(--muted))" strokeWidth="0.5" strokeOpacity="0.4" />
+            <text x={tk.x} y={HEIGHT - 6} fontSize="9" fill="rgb(var(--muted))" textAnchor="middle">{tk.label}</text>
           </g>
         ))}
-
-        <text
-          x={WIDTH - PAD.right}
-          y={HEIGHT - 6}
-          fontSize="9"
-          fill="rgb(var(--muted))"
-          textAnchor="end"
-        >
-          {labelEnd}
-        </text>
+        {!compactOnPhone && <text x={WIDTH - PAD.right} y={HEIGHT - 6} fontSize="9" fill="rgb(var(--muted))" textAnchor="end">{labelEnd}</text>}
       </svg>
     );
   };
 
-  // Captions hidden only on the compact phone tile (vertical-space budget).
   const phoneHide = compactOnPhone ? " max-[640px]:hidden" : "";
 
   return (
     <div>
-      {/* Subtitle */}
-      <p className={`mb-1 text-xs font-medium text-muted${phoneHide}`}>
-        Relative plasma level — each peptide scaled to its own peak
-      </p>
-
-      {/* compactOnPhone: render BOTH geometries; CSS swaps by breakpoint (pure
-          CSS → no JS, no hydration mismatch, no post-mount layout shift, correct
-          height from first paint). Otherwise a single full-height chart. */}
+      <p className={`mb-1 text-xs font-medium text-muted${phoneHide}`}>Relative plasma level — each peptide scaled to its own peak</p>
+      {colorNotice && (
+        <div className="mb-2 flex items-start justify-between gap-2 rounded-control bg-bg px-2.5 py-2 text-[11px] text-muted ring-1 ring-line/15">
+          <span>{colorNotice}</span>
+          <button type="button" onClick={dismissNotice} className="shrink-0 font-medium text-accentStrong">Dismiss</button>
+        </div>
+      )}
       {compactOnPhone ? (
         <>
           <div className="max-[640px]:hidden">{renderSvg(HEIGHT_FULL)}</div>
@@ -332,56 +247,45 @@ export function MultiPlasmaChart({
       ) : (
         renderSvg(HEIGHT_FULL)
       )}
-
-      {/* Legend: one row per peptide (colour swatch + name) */}
+      {enableRangeToggle && (
+        <div className="mt-2 inline-flex rounded-control bg-bg p-1 ring-1 ring-line/15">
+          {([14, 30] as const).map((days) => {
+            const active = windowDays === days;
+            return (
+              <button
+                key={days}
+                type="button"
+                onClick={() => setWindowDays(days)}
+                className={`rounded-control px-2.5 py-1 text-[11px] font-medium transition ${
+                  active ? "bg-accent text-black" : "text-muted hover:text-text"
+                }`}
+              >
+                ±{days}d
+              </button>
+            );
+          })}
+        </div>
+      )}
       <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-muted">
         {lines.map((ln) => (
           <li key={ln.peptideId} className="inline-flex items-center gap-1.5">
             <svg width="16" height="6" aria-hidden="true">
-              <line
-                x1="0"
-                y1="3"
-                x2="16"
-                y2="3"
-                stroke={`rgb(var(${ln.colorVar}))`}
-                strokeWidth="2"
-              />
+              <line x1="0" y1="3" x2="16" y2="3" stroke={ln.color} strokeWidth="2" />
             </svg>
             {ln.peptideName}
           </li>
         ))}
-        {/* Missed-dose legend entry — only when markers exist. */}
-        {missedX.length > 0 && (
+        {isPitstop && missedX.length > 0 && (
           <li className="inline-flex items-center gap-1.5">
             <svg width="16" height="6" aria-hidden="true">
-              {/* DOTTED red — mirrors the dotted chart markers and reads apart
-                  from the solid peptide swatches + the "dashed = forecast" cue. */}
-              <line
-                x1="0"
-                y1="3"
-                x2="16"
-                y2="3"
-                stroke={MISSED_RED}
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeDasharray="0.5 3"
-              />
+              <line x1="0" y1="3" x2="16" y2="3" stroke={MISSED_RED} strokeWidth="1.5" strokeLinecap="round" strokeDasharray="0.5 3" />
             </svg>
             Missed dose
           </li>
         )}
-        {peptidesWithoutHalfLife.map((p) => (
-          <li key={p.peptideId} className="inline-flex items-center gap-1.5 text-warn">
-            <span className="h-1.5 w-4 rounded-full bg-warn/25 ring-1 ring-warn/40" aria-hidden="true" />
-            {p.peptideName} · no half-life
-          </li>
-        ))}
       </ul>
       <p className={`mt-1 text-[10px] text-muted${phoneHide}`}>solid = actual · dashed = forecast</p>
-      {/* Redundant with the page-footer disclaimer; hidden on the compact phone tile. */}
-      <p className={`mt-1 text-[10px] text-muted${phoneHide}`}>
-        Half-life estimate only — not a measured concentration. Not medical advice.
-      </p>
+      <p className={`mt-1 text-[10px] text-muted${phoneHide}`}>Half-life estimate only — not a measured concentration. Not medical advice.</p>
     </div>
   );
 }
