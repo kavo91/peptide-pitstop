@@ -2,7 +2,7 @@
 
 import { Syringe } from "lucide-react";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Decimal from "decimal.js";
 import { computeDraw } from "@/lib/dosing/engine";
 import { doseUnitBreakdown } from "@/lib/dosing/unit-breakdown";
@@ -61,6 +61,7 @@ export function AdHocLogForm({
   recentSitesByPeptide: Record<string, string[]>;
   /** Active protocols with their resolved per-injection dose (safe resolver path). */
   protocolOptions?: ProtocolDoseOption[];
+  design?: "pitstop" | "current";
 }) {
   const [protocolId, setProtocolId] = useState("");
   const [prepId, setPrepId] = useState(options[0]?.preparation.id ?? "");
@@ -68,6 +69,7 @@ export function AdHocLogForm({
   const [doseValue, setDoseValue] = useState("");
   const [doseUnit, setDoseUnit] = useState<DoseUnit>("mcg");
   const [takenAt, setTakenAt] = useState(nowLocalInput());
+  const [takenAtTouched, setTakenAtTouched] = useState(false);
   const [site, setSite] = useState(() => {
     const firstPeptideId = options[0]?.peptideId ?? "";
     const raw = recentSitesByPeptide[firstPeptideId] ?? [];
@@ -81,6 +83,14 @@ export function AdHocLogForm({
 
   const opt = options.find((o) => o.preparation.id === prepId);
   const syr = syringes.find((s) => s.id === syringeId);
+
+  useEffect(() => {
+    if (takenAtTouched || busy || done) return;
+    const update = () => setTakenAt(nowLocalInput());
+    update();
+    const id = window.setInterval(update, 30_000);
+    return () => window.clearInterval(id);
+  }, [takenAtTouched, busy, done]);
 
   // Derive current peptideId from prepId for the recentSites lookup.
   const currentPeptideId = opt?.peptideId ?? options[0]?.peptideId ?? "";
@@ -181,7 +191,7 @@ export function AdHocLogForm({
       doseUnit,
       injectionSite: site || undefined,
       notes: notes || undefined,
-      takenAtISO: new Date(takenAt).toISOString(),
+      takenAtISO: (takenAtTouched ? new Date(takenAt) : new Date()).toISOString(),
       clientUuid: uuid,
     };
 
@@ -315,7 +325,13 @@ export function AdHocLogForm({
         <input
           type="datetime-local"
           value={takenAt}
-          onChange={(e) => setTakenAt(e.target.value)}
+          onFocus={() => {
+            if (!takenAtTouched) setTakenAt(nowLocalInput());
+          }}
+          onChange={(e) => {
+            setTakenAtTouched(true);
+            setTakenAt(e.target.value);
+          }}
           className="w-full rounded-control border border-line/15 bg-bg px-3 py-2 font-mono tabular-nums"
         />
       </label>

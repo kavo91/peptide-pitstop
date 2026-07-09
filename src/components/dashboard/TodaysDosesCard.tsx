@@ -154,6 +154,7 @@ export function TodaysDosesCard({
                       peptideId={d.peptideId}
                       peptideName={d.peptideName}
                       defaultTakenAtISO={defaultTakenAtISO}
+                      useLiveTakenAt={isToday}
                       initialDoseValue={d.doseValue}
                       initialDoseUnit={d.doseUnit}
                     />
@@ -165,6 +166,7 @@ export function TodaysDosesCard({
                       syringes={syringes}
                       defaultSyringeId={d.syringe?.id}
                       defaultTakenAtISO={defaultTakenAtISO}
+                      useLiveTakenAt={isToday}
                       initialDoseValue={d.doseValue}
                       initialDoseUnit={d.doseUnit}
                       hoursSinceLast={d.hoursSinceLast}

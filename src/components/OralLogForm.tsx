@@ -2,7 +2,7 @@
 
 import { Pill } from "lucide-react";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Decimal from "decimal.js";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { logDose } from "@/app/actions/doses";
@@ -16,6 +16,8 @@ interface Props {
   peptideName: string;
   /** Prefill the "time taken" — used when logging for a day other than today. */
   defaultTakenAtISO?: string;
+  /** Submit the device's current time instead of the prefilled/scheduled time. */
+  useLiveTakenAt?: boolean;
   initialDoseValue: string;
   initialDoseUnit: DoseUnit;
 }
@@ -34,11 +36,12 @@ function toLocalInput(d: Date): string {
  * action with `route: "oral"` (which skips computeDraw + the vial decrement) and
  * the same offline-outbox fallback + planned-dose linking the injection form uses.
  */
-export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAtISO, initialDoseValue, initialDoseUnit }: Props) {
+export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAtISO, useLiveTakenAt = false, initialDoseValue, initialDoseUnit }: Props) {
   const [doseValue, setDoseValue] = useState(initialDoseValue);
   const [doseUnit, setDoseUnit] = useState<DoseUnit>(ORAL_UNITS.includes(initialDoseUnit) ? initialDoseUnit : "mg");
   const [notes, setNotes] = useState("");
-  const [takenAt, setTakenAt] = useState(toLocalInput(defaultTakenAtISO ? new Date(defaultTakenAtISO) : new Date()));
+  const [takenAt, setTakenAt] = useState(toLocalInput(useLiveTakenAt ? new Date() : defaultTakenAtISO ? new Date(defaultTakenAtISO) : new Date()));
+  const [takenAtTouched, setTakenAtTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,11 +49,20 @@ export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAt
 
   const valid = doseValue !== "" && (() => { try { return new Decimal(doseValue).gt(0); } catch { return false; } })();
 
+  useEffect(() => {
+    if (!useLiveTakenAt || takenAtTouched || busy || done) return;
+    const update = () => setTakenAt(toLocalInput(new Date()));
+    update();
+    const id = window.setInterval(update, 30_000);
+    return () => window.clearInterval(id);
+  }, [useLiveTakenAt, takenAtTouched, busy, done]);
+
   async function onConfirm() {
     setBusy(true);
     setError(null);
 
     const uuid = safeUuid();
+    const logTime = useLiveTakenAt && !takenAtTouched ? new Date() : new Date(takenAt);
     const input = {
       protocolId,
       route: "oral" as const,
@@ -58,7 +70,7 @@ export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAt
       doseValue,
       doseUnit,
       notes: notes || undefined,
-      takenAtISO: new Date(takenAt).toISOString(),
+      takenAtISO: logTime.toISOString(),
       clientUuid: uuid,
     };
 
@@ -111,7 +123,18 @@ export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAt
 
       <label className="block text-sm text-muted">
         Time taken
-        <input type="datetime-local" value={takenAt} onChange={(e) => setTakenAt(e.target.value)} className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-ink" />
+        <input
+          type="datetime-local"
+          value={takenAt}
+          onFocus={() => {
+            if (useLiveTakenAt && !takenAtTouched) setTakenAt(toLocalInput(new Date()));
+          }}
+          onChange={(e) => {
+            setTakenAtTouched(true);
+            setTakenAt(e.target.value);
+          }}
+          className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-ink"
+        />
       </label>
 
       <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes (optional, encrypted)" className="w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-sm" />

@@ -47,6 +47,32 @@ function prepFillMl(prep: { prepType: string; bacWaterMl: Decimal | null; totalM
 }
 
 /**
+ * Today-list timed cards used to submit their scheduled slot as `takenAtISO`.
+ * Keep the actual log timestamp live even if a stale client bundle still sends
+ * that scheduled value: when the submitted timestamp is today's exact planned
+ * slot for this protocol, store "now" as takenAt and keep scheduledAt separate.
+ * Off-day/manual timestamps remain untouched.
+ */
+async function resolveLiveTakenAt(inputTakenAtISO: string | undefined, userId: string, protocolId: string | undefined): Promise<Date> {
+  const submitted = inputTakenAtISO ? new Date(inputTakenAtISO) : new Date();
+  if (!inputTakenAtISO || !protocolId || Number.isNaN(submitted.getTime())) return submitted;
+
+  const now = new Date();
+  const { dayStart, dayEnd } = plannedDayWindow(now);
+  if (submitted < dayStart || submitted >= dayEnd) return submitted;
+
+  const planned = await prisma.plannedDose.findFirst({
+    where: {
+      userId,
+      protocolId,
+      scheduledAt: submitted,
+    },
+    select: { id: true },
+  });
+  return planned ? now : submitted;
+}
+
+/**
  * Server-authoritative dose log. Identity comes from the session (never the
  * client). Verifies the preparation/syringe belong to the user, recomputes the
  * draw from the stored prep/syringe (never trusts client maths), blocks on hard
@@ -120,7 +146,7 @@ export async function logDose(input: LogDoseInput): Promise<LogDoseResult> {
   const blocker = draw.warnings.find((w) => w.severity === "block");
   if (blocker) return { ok: false, error: blocker.message };
 
-  const takenAt = input.takenAtISO ? new Date(input.takenAtISO) : new Date();
+  const takenAt = await resolveLiveTakenAt(input.takenAtISO, user.id, effectiveProtocolId);
 
   const created = await prisma.$transaction(async (tx) => {
     // Link this log to the matching planned dose for the day so the cron stops
@@ -235,7 +261,7 @@ async function logOralDose(input: LogDoseInput, userId: string, clientUuid: stri
     if (active.length === 1) effectiveProtocolId = active[0].id;
   }
 
-  const takenAt = input.takenAtISO ? new Date(input.takenAtISO) : new Date();
+  const takenAt = await resolveLiveTakenAt(input.takenAtISO, userId, effectiveProtocolId);
 
   const created = await prisma.$transaction(async (tx) => {
     // Link to the matching planned dose for the day (same nearest-slot rule as injection).

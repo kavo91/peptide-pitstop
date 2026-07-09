@@ -57,16 +57,30 @@ export function SideNav({ envLabel, brand, doseStatus }: { envLabel?: string | n
   const item = (t: NavItem) => {
     const active = isActive(pathname, t.match);
     const Icon = t.icon;
+    const className = `flex items-center gap-2.5 rounded-control px-3 py-2 text-sm font-medium transition-colors ${
+      active
+        ? "bg-accent/10 text-accentStrong"
+        : "text-muted hover:bg-line/[0.05] hover:text-ink"
+    }`;
+    if (t.href === "/") {
+      return (
+        <a
+          key={t.href}
+          href={t.href}
+          aria-current={active ? "page" : undefined}
+          className={className}
+        >
+          <Icon className="h-4 w-4 shrink-0" aria-hidden />
+          {t.label}
+        </a>
+      );
+    }
     return (
       <Link
         key={t.href}
         href={t.href}
         aria-current={active ? "page" : undefined}
-        className={`flex items-center gap-2.5 rounded-control px-3 py-2 text-sm font-medium transition-colors ${
-          active
-            ? "bg-accent/10 text-accentStrong"
-            : "text-muted hover:bg-line/[0.05] hover:text-ink"
-        }`}
+        className={className}
       >
         <Icon className="h-4 w-4 shrink-0" aria-hidden />
         {t.label}

@@ -2,7 +2,7 @@
 
 import { Syringe } from "lucide-react";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Decimal from "decimal.js";
 import { computeDraw } from "@/lib/dosing/engine";
 import { doseUnitBreakdown } from "@/lib/dosing/unit-breakdown";
@@ -34,6 +34,8 @@ interface Props {
   defaultSyringeId?: string;
   /** Prefill the "time taken" — used when logging for a day other than today. */
   defaultTakenAtISO?: string;
+  /** Submit the device's current time instead of the prefilled/scheduled time. */
+  useLiveTakenAt?: boolean;
   initialDoseValue: string;
   initialDoseUnit: DoseUnit;
   /** Hours since the most recent dose for this peptide. null = no prior dose. */
@@ -52,13 +54,14 @@ function toLocalInput(d: Date): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
-export function LogDoseForm({ protocolId, peptideName, preparation, syringes, defaultSyringeId, defaultTakenAtISO, initialDoseValue, initialDoseUnit, hoursSinceLast, halfLifeHours, minIntervalHours, recentSites }: Props) {
+export function LogDoseForm({ protocolId, peptideName, preparation, syringes, defaultSyringeId, defaultTakenAtISO, useLiveTakenAt = false, initialDoseValue, initialDoseUnit, hoursSinceLast, halfLifeHours, minIntervalHours, recentSites }: Props) {
   const [doseValue, setDoseValue] = useState(initialDoseValue);
   const [doseUnit, setDoseUnit] = useState<DoseUnit>(initialDoseUnit);
   const [syringeId, setSyringeId] = useState(defaultSyringeId ?? syringes[0]?.id ?? "");
   const [site, setSite] = useState(() => suggestNextSite(recentSites));
   const [notes, setNotes] = useState("");
-  const [takenAt, setTakenAt] = useState(toLocalInput(defaultTakenAtISO ? new Date(defaultTakenAtISO) : new Date()));
+  const [takenAt, setTakenAt] = useState(toLocalInput(useLiveTakenAt ? new Date() : defaultTakenAtISO ? new Date(defaultTakenAtISO) : new Date()));
+  const [takenAtTouched, setTakenAtTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +77,14 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
       : null;
 
   const syringe = syringes.find((s) => s.id === syringeId) ?? syringes[0];
+
+  useEffect(() => {
+    if (!useLiveTakenAt || takenAtTouched || busy || done) return;
+    const update = () => setTakenAt(toLocalInput(new Date()));
+    update();
+    const id = window.setInterval(update, 30_000);
+    return () => window.clearInterval(id);
+  }, [useLiveTakenAt, takenAtTouched, busy, done]);
 
   const draw = useMemo(() => {
     if (!syringe || !doseValue || new Decimal(doseValue || 0).lte(0)) return null;
@@ -104,6 +115,7 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
     setError(null);
 
     const uuid = safeUuid();
+    const logTime = useLiveTakenAt && !takenAtTouched ? new Date() : new Date(takenAt);
     const input = {
       protocolId,
       preparationId: preparation.id,
@@ -112,7 +124,7 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
       doseUnit,
       injectionSite: site || undefined,
       notes: notes || undefined,
-      takenAtISO: new Date(takenAt).toISOString(),
+      takenAtISO: logTime.toISOString(),
       clientUuid: uuid,
     };
 
@@ -209,7 +221,18 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
 
       <label className="block text-sm text-muted">
         Time taken
-        <input type="datetime-local" value={takenAt} onChange={(e) => setTakenAt(e.target.value)} className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-ink" />
+        <input
+          type="datetime-local"
+          value={takenAt}
+          onFocus={() => {
+            if (useLiveTakenAt && !takenAtTouched) setTakenAt(toLocalInput(new Date()));
+          }}
+          onChange={(e) => {
+            setTakenAtTouched(true);
+            setTakenAt(e.target.value);
+          }}
+          className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-ink"
+        />
       </label>
       <div className="space-y-1">
         <p className="text-sm text-muted">Injection site</p>
