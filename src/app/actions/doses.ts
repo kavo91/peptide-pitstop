@@ -12,6 +12,7 @@ import { encryptField } from "@/lib/crypto/fieldEncryption";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { computeRebaseSuggestion } from "@/lib/schedule/rebase-suggest";
 import { plannedDayWindow, doseDeltaMinutes, pickNearestPlanned } from "@/lib/planned/match";
+import { slotInstantsOn } from "@/lib/schedule/slot-instants";
 
 export interface LogDoseInput {
   protocolId?: string;
@@ -52,6 +53,15 @@ function prepFillMl(prep: { prepType: string; bacWaterMl: Decimal | null; totalM
  * that scheduled value: when the submitted timestamp is today's exact planned
  * slot for this protocol, store "now" as takenAt and keep scheduledAt separate.
  * Off-day/manual timestamps remain untouched.
+ *
+ * Two echo shapes exist because PlannedDose rows are DAY-anchored (local
+ * midnight) while slot clock-times live only in scheduleRule: an untimed card
+ * echoes the planned row's own timestamp, but a timed card echoes a slot
+ * instant (`dayKey + "T" + time`) that never matches any planned row — so the
+ * row lookup alone is blind to exactly the 06:00-style prefills it was built
+ * for. Trade-off: a manually TYPED time equal to today's slot instant is
+ * indistinguishable from an echo and also becomes "now"; log 06:01 to record
+ * a deliberate at-slot time.
  */
 async function resolveLiveTakenAt(inputTakenAtISO: string | undefined, userId: string, protocolId: string | undefined): Promise<Date> {
   const submitted = inputTakenAtISO ? new Date(inputTakenAtISO) : new Date();
@@ -69,7 +79,21 @@ async function resolveLiveTakenAt(inputTakenAtISO: string | undefined, userId: s
     },
     select: { id: true },
   });
-  return planned ? now : submitted;
+  if (planned) return now;
+
+  const protocol = await prisma.protocol.findFirst({
+    where: { id: protocolId, userId },
+    select: { scheduleRule: true, startDate: true, endDate: true },
+  });
+  if (
+    protocol &&
+    slotInstantsOn(protocol.scheduleRule, now, protocol.startDate, protocol.endDate).some(
+      (slot) => slot.getTime() === submitted.getTime(),
+    )
+  ) {
+    return now;
+  }
+  return submitted;
 }
 
 /**
