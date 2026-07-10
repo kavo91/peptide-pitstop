@@ -5,6 +5,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { SideNav } from "@/components/SideNav";
 import { MobileHeader } from "@/components/MobileHeader";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
+import { VersionHeartbeat } from "@/components/VersionHeartbeat";
 import { getCurrentUser } from "@/lib/auth/owner";
 import { getTodayDoseStatus, type TodayDoseStatus } from "@/lib/today";
 
@@ -104,6 +105,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="flex min-h-screen flex-col font-sans antialiased lg:flex-row">
         <ServiceWorkerRegistration />
+        <VersionHeartbeat />
         <SideNav envLabel={ENV_LABEL} brand="Peptide Pitstop" doseStatus={doseStatus} />
         {/* Content column: fills the space beside the desktop sidebar; on mobile
             it is the whole viewport with the bottom nav pinned underneath.

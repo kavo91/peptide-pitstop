@@ -37,8 +37,9 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   // Gate everything except Next internals, icons, manifest, favicons, the
-  // apple-touch-icon, and the service worker (a redirect on the SW script
+  // apple-touch-icon, the service worker (a redirect on the SW script
   // request fails registration; a redirect on the apple-touch-icon breaks the
-  // iOS home-screen icon).
-  matcher: ["/((?!_next/static|_next/image|icons|manifest.webmanifest|favicon.ico|apple-touch-icon.png|sw.js).*)"],
+  // iOS home-screen icon), and the version endpoint (the PWA heartbeat must
+  // read it from any auth state; it discloses only the version string).
+  matcher: ["/((?!_next/static|_next/image|icons|manifest.webmanifest|favicon.ico|apple-touch-icon.png|sw.js|api/version).*)"],
 };
