@@ -9,6 +9,7 @@ import { logDose } from "@/app/actions/doses";
 import { enqueue } from "@/lib/offline/outbox";
 import { safeUuid } from "@/lib/uuid";
 import { RebasePrompt } from "./RebasePrompt";
+import type { RebaseSuggestion } from "@/lib/schedule/rebase-suggest";
 
 interface Props {
   protocolId?: string;
@@ -45,7 +46,7 @@ export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAt
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rebase, setRebase] = useState<{ protocolId: string; plannedDateISO: string; actualDateISO: string; suggestedDays: string[] } | undefined>();
+  const [rebase, setRebase] = useState<RebaseSuggestion | undefined>();
 
   const valid = doseValue !== "" && (() => { try { return new Decimal(doseValue).gt(0); } catch { return false; } })();
 

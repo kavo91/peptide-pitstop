@@ -13,6 +13,7 @@ import { enqueue } from "@/lib/offline/outbox";
 import { safeUuid } from "@/lib/uuid";
 import { VisualSyringe } from "./VisualSyringe";
 import { RebasePrompt } from "./RebasePrompt";
+import type { RebaseSuggestion } from "@/lib/schedule/rebase-suggest";
 import { assessTiming } from "@/lib/halflife";
 import { suggestNextSite } from "@/lib/sites";
 import { BodyMap } from "./BodyMap";
@@ -79,7 +80,7 @@ export function AdHocLogForm({
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rebase, setRebase] = useState<{ protocolId: string; plannedDateISO: string; actualDateISO: string; suggestedDays: string[] } | undefined>();
+  const [rebase, setRebase] = useState<RebaseSuggestion | undefined>();
 
   const opt = options.find((o) => o.preparation.id === prepId);
   const syr = syringes.find((s) => s.id === syringeId);

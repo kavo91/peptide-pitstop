@@ -9,7 +9,13 @@ import { type WeekdayCode, weekdayCode, startOfDay, daysBetween, addDays, parseR
 export type DayPattern =
   | { kind: "daily" }
   | { kind: "weekly"; byDays: WeekdayCode[] }
-  | { kind: "interval"; everyDays: number }
+  /**
+   * `anchors` are catch-up roll points ("YYYY-MM-DD" local-day keys, append-only,
+   * written by confirmRebase when the user accepts an interval roll prompt).
+   * The grid re-bases at each anchor; days before an anchor keep the previous
+   * segment's grid, so history stays exact across any number of rolls.
+   */
+  | { kind: "interval"; everyDays: number; anchors?: string[] }
   | { kind: "cycle"; onDays: number; offDays: number };
 
 export interface ScheduleEntry {
@@ -31,8 +37,16 @@ export function entryDueOn(entry: ScheduleEntry, date: Date, startDate?: Date | 
       return p.byDays.length > 0 && p.byDays.includes(weekdayCode(day));
     case "interval": {
       if (!startDate || p.everyDays <= 0) return false;
-      const elapsed = daysBetween(startOfDay(startDate), day);
-      return elapsed >= 0 && elapsed % p.everyDays === 0;
+      const start = startOfDay(startDate);
+      if (day < start) return false;
+      // Piecewise roll anchors: grid from the latest anchor on/before `day`
+      // (anchors before startDate are ignored — they can't produce due days).
+      let anchor = start;
+      for (const key of p.anchors ?? []) {
+        const a = startOfDay(new Date(key + "T00:00:00"));
+        if (!Number.isNaN(a.getTime()) && a >= start && a <= day && a > anchor) anchor = a;
+      }
+      return daysBetween(anchor, day) % p.everyDays === 0;
     }
     case "cycle": {
       if (!startDate) return false;

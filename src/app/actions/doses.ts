@@ -10,7 +10,7 @@ import { buildOralDoseRecord, isOralDoseUnit } from "@/lib/dosing/oral";
 import { reconcileDoseEditRemaining } from "@/lib/dosing/recompute";
 import { encryptField } from "@/lib/crypto/fieldEncryption";
 import type { DoseUnit } from "@/lib/dosing/types";
-import { computeRebaseSuggestion } from "@/lib/schedule/rebase-suggest";
+import { computeRebaseSuggestion, type RebaseSuggestion } from "@/lib/schedule/rebase-suggest";
 import { plannedDayWindow, doseDeltaMinutes, pickNearestPlanned } from "@/lib/planned/match";
 import { slotInstantsOn } from "@/lib/schedule/slot-instants";
 
@@ -36,7 +36,7 @@ export interface LogDoseResult {
   doseLogId?: string;
   error?: string;
   /** Set when the dose landed off its protocol's grid day (weekly only) — drives the rebase prompt. */
-  rebase?: { protocolId: string; plannedDateISO: string; actualDateISO: string; suggestedDays: string[] };
+  rebase?: RebaseSuggestion;
 }
 
 /** The original fill volume of a preparation, used to clamp volume restoration. */
