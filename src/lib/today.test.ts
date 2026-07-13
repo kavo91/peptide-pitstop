@@ -336,3 +336,55 @@ describe("rebase-override classifier — TZ hardening (WS6)", () => {
     expect(dueSlotsForDay(mwf, overrideDays.get("p-mwf"), tuesday, proto.startDate, proto.endDate)).toHaveLength(0);
   });
 });
+
+// Shifted-week "logged" bug: an off-grid Sunday dose on a weekly M–F fixed_anchor
+// protocol rebases the DISPLAY week to Sun–Thu, so resolveTitration rebuilds the
+// WHOLE week — many slots, all at "21:00", on different calendar days. A caller
+// that asked for a single day (Today) but indexed by time alone picked up the
+// TAKEN Sunday slot for today → the card read "logged". resolveTitration now
+// clips its result to the queried range; these pin that contract.
+describe("shifted week must not mark a later day 'logged'", () => {
+  const tesaRule = JSON.stringify([
+    { dayPattern: { kind: "weekly", byDays: ["MO", "TU", "WE", "TH", "FR"] }, times: ["21:00"] },
+  ]);
+  const tesaProto = {
+    doseBasis: "per_injection" as const,
+    targetDose: new Decimal("0.2"),
+    doseInputUnit: "ml",
+    scheduleRule: tesaRule,
+    rebaseMode: "fixed_anchor" as const,
+    startDate: new Date("2026-07-07T00:00:00.000Z"),
+    endDate: new Date("2026-09-28T00:00:00.000Z"),
+    adherenceWindowMin: 120,
+    steps: [] as [],
+  };
+  const tesaLogs = [
+    { id: "log-thu", takenAt: new Date("2026-07-09T11:40:00.000Z") },
+    { id: "log-fri", takenAt: new Date("2026-07-10T13:15:00.000Z") },
+    { id: "log-sun", takenAt: new Date("2026-07-12T12:34:50.449Z") }, // off-grid Sun 22:34 local
+  ];
+  function resolveMonday() {
+    process.env.TZ = "Australia/Brisbane";
+    const day = startOfDay(new Date("2026-07-13T00:00:00+10:00")); // Mon Jul 13 local midnight
+    return resolveTitration(
+      buildResolveInput({ protocol: tesaProto, deliveredLogs: tesaLogs, range: { start: day, end: day }, now: day }),
+    );
+  }
+
+  it("clips a single-day range to that day even when the week is rebased", () => {
+    const resolved = resolveMonday();
+    expect(resolved.slots.length).toBeGreaterThan(0);
+    expect(resolved.slots.every((s) => dayKey(s.date) === "2026-07-13")).toBe(true); // only Monday
+    expect(resolved.slots.some((s) => s.status === "taken")).toBe(false); // no Sunday slot leaked in
+  });
+
+  it("Monday resolves as an unlogged, shifted dose — not 'logged'", () => {
+    const resolved = resolveMonday();
+    const byTime = new Map<string | null, (typeof resolved.slots)[number]>();
+    for (const rs of resolved.slots) if (!byTime.has(rs.time ?? null)) byTime.set(rs.time ?? null, rs);
+    const monday = byTime.get("21:00");
+    expect(monday).toBeDefined();
+    expect(monday?.status).not.toBe("taken"); // not logged
+    expect(monday?.rebased).toBe(true);        // shown as shifted (Sun–Thu week)
+  });
+});

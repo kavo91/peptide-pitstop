@@ -171,5 +171,24 @@ export function resolveTitration(inp: ResolveInput): ResolveResult {
     };
   }
 
-  return { slots: resolvedSlots, stepUpDates, phaseProgress };
+  // Clip the returned slots to the requested [range.start, range.end] (by local
+  // calendar day, inclusive). A within-week fixed_anchor rebase
+  // (reconstructRebasedSlots) intentionally rebuilds the WHOLE week for status +
+  // phase-cursor correctness, so resolvedSlots can span days OUTSIDE the queried
+  // range — a single-day query can come back with the whole rebased week. Status
+  // and the cursor above were computed over the FULL (unclipped) set, so trimming
+  // here changes only what callers SEE, never how a slot was classified. Without
+  // this, a consumer that indexes the result by its range can pick a DIFFERENT
+  // day's same-time slot (e.g. Today reading a taken earlier-day slot for today).
+  // The calendar/analytics deliberately pass an EXPANDED range and clip the
+  // buffer themselves; their window is within this range, so nothing they show is
+  // dropped. stepUpDates is left unclipped (its consumers are range-independent).
+  const clipLo = startOfDay(inp.range.start).getTime();
+  const clipHi = startOfDay(inp.range.end).getTime();
+  const clippedSlots = resolvedSlots.filter((s) => {
+    const d = startOfDay(s.date).getTime();
+    return d >= clipLo && d <= clipHi;
+  });
+
+  return { slots: clippedSlots, stepUpDates, phaseProgress };
 }

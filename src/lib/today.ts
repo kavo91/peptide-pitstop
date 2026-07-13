@@ -226,10 +226,20 @@ export async function getTodayDoses(userId: string, date = new Date()): Promise<
       }),
     );
     // Index resolved slots by their time so each due slot reads its own dose.
+    // A within-week fixed_anchor rebase makes resolveTitration return the WHOLE
+    // rebased week (an off-grid Sunday dose shifts M–F to Sun–Thu), so even a
+    // single-day range can yield slots on OTHER days — all sharing the same
+    // "HH:MM". Indexing those by time alone let a *different* day's slot answer
+    // for today: a taken Sunday 21:00 slot was picked up by today's 21:00 slot,
+    // so today's card wrongly read "logged". Restrict to slots whose local
+    // calendar day IS today (the resolver also clips to range now; this is a
+    // belt-and-braces guard, matching the calendar's clipSlotsToRange).
+    const todayKey = dayKey(day);
+    const daySlots = resolved.slots.filter((rs) => dayKey(rs.date) === todayKey);
     const resolvedByTime = new Map<string | null, ResolvedSlot>();
-    for (const rs of resolved.slots) if (!resolvedByTime.has(rs.time ?? null)) resolvedByTime.set(rs.time ?? null, rs);
+    for (const rs of daySlots) if (!resolvedByTime.has(rs.time ?? null)) resolvedByTime.set(rs.time ?? null, rs);
     // Day-level fallback (override days are untimed and may not align to a grid slot).
-    const dayResolved = resolved.slots[0] ?? null;
+    const dayResolved = daySlots[0] ?? null;
 
     // Oral peptides have NO preparation, vial-to-prep, or syringe — those are
     // injection-only. Skip all three lookups so an oral protocol is loggable
