@@ -3,6 +3,7 @@
 import { Syringe } from "lucide-react";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Decimal from "decimal.js";
 import { computeDraw } from "@/lib/dosing/engine";
 import { doseUnitBreakdown } from "@/lib/dosing/unit-breakdown";
@@ -67,6 +68,7 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rebase, setRebase] = useState<RebaseSuggestion | undefined>();
+  const router = useRouter();
 
   const timing =
     hoursSinceLast != null
@@ -141,7 +143,16 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
     }
 
     setBusy(false);
-    if (res.ok) { setDone(true); if (res.rebase) setRebase(res.rebase); }
+    if (res.ok) {
+      setDone(true);
+      // Re-render the server tree so the today list / counter / "Logged today"
+      // section reflect the new dose (every other mutation does this; the log
+      // forms were the sole omission). When a rebase decision is pending, keep
+      // this form mounted so RebasePrompt stays visible — it refreshes itself
+      // once the user resolves it.
+      if (res.rebase) setRebase(res.rebase);
+      else router.refresh();
+    }
     else setError(res.error ?? "Could not log dose");
   }
 

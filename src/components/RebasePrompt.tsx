@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { CalendarClock } from "lucide-react";
 import { confirmRebase } from "@/app/actions/rebase";
 import type { RebaseSuggestion } from "@/lib/schedule/rebase-suggest";
@@ -12,6 +13,7 @@ const fmtDay = (iso: string) =>
 
 export function RebasePrompt({ rebase }: { rebase: RebaseSuggestion }) {
   const [state, setState] = useState<"ask" | "busy" | "done" | "kept">("ask");
+  const router = useRouter();
   const isRoll = rebase.kind === "interval";
   const days = rebase.suggestedDays.map((d) => DAY[d as keyof typeof DAY] ?? d).join(" / ");
   const nextDates = (rebase.nextDatesISO ?? []).map(fmtDay);
@@ -20,6 +22,16 @@ export function RebasePrompt({ rebase }: { rebase: RebaseSuggestion }) {
     setState("busy");
     const res = await confirmRebase({ protocolId: rebase.protocolId, plannedDateISO: rebase.plannedDateISO, actualDateISO: rebase.actualDateISO });
     setState(res.ok ? "done" : "ask");
+    // Reflect the just-logged dose + the schedule change in the server-rendered
+    // today list. The refresh replaces this prompt's parent card with its logged
+    // state (that IS the confirmation), so no message is lost that the list
+    // doesn't already show.
+    if (res.ok) router.refresh();
+  }
+
+  function keep() {
+    setState("kept");
+    router.refresh(); // still need the logged dose to appear in the today list
   }
 
   if (state === "done")
@@ -54,7 +66,7 @@ export function RebasePrompt({ rebase }: { rebase: RebaseSuggestion }) {
         <button type="button" onClick={accept} disabled={state === "busy"} className="flex flex-1 items-center justify-center gap-1.5 rounded-control bg-accent px-3 py-2 font-medium text-onAccent disabled:opacity-40">
           {state === "busy" ? "…" : <><CalendarClock className="h-4 w-4" aria-hidden /> {isRoll ? "Roll schedule" : "Shift this week"}</>}
         </button>
-        <button type="button" onClick={() => setState("kept")} className="rounded-control bg-bg px-3 py-2 ring-1 ring-line/15">
+        <button type="button" onClick={keep} className="rounded-control bg-bg px-3 py-2 ring-1 ring-line/15">
           {isRoll ? "Keep original dates" : "Keep grid"}
         </button>
       </div>

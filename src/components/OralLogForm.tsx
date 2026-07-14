@@ -3,6 +3,7 @@
 import { Pill } from "lucide-react";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Decimal from "decimal.js";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { logDose } from "@/app/actions/doses";
@@ -47,6 +48,7 @@ export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAt
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rebase, setRebase] = useState<RebaseSuggestion | undefined>();
+  const router = useRouter();
 
   const valid = doseValue !== "" && (() => { try { return new Decimal(doseValue).gt(0); } catch { return false; } })();
 
@@ -87,7 +89,13 @@ export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAt
     }
 
     setBusy(false);
-    if (res.ok) { setDone(true); if (res.rebase) setRebase(res.rebase); }
+    if (res.ok) {
+      setDone(true);
+      // Refresh the server tree so the today list reflects the logged dose (see
+      // LogDoseForm). Deferred while a rebase decision is pending.
+      if (res.rebase) setRebase(res.rebase);
+      else router.refresh();
+    }
     else setError(res.error ?? "Could not log dose");
   }
 
