@@ -5,6 +5,7 @@
 import { prisma } from "@/lib/db";
 import { startOfDay, addDays } from "@/lib/schedule/schedule";
 import { classifyOverrideDays, dueSlotsForDay, dayKey } from "@/lib/today-overrides";
+import { localeTimeLabel } from "@/lib/tz-day";
 import { resolveTitration } from "@/lib/titration/resolve";
 import { buildResolveInput } from "@/lib/titration/from-protocol";
 import { perInjectionDose } from "@/lib/titration/dose-basis";
@@ -27,7 +28,8 @@ export function buildTodayProtocolWhere(userId: string, day: Date, nextDay: Date
         doseLogs: {
           some: {
             userId,
-            takenAt: { gte: day, lt: nextDay },
+            // localDay-first day bucketing, same as getLoggedToday.
+            OR: [{ localDay: dayKey(day) }, { localDay: null, takenAt: { gte: day, lt: nextDay } }],
           },
         },
       },
@@ -100,8 +102,16 @@ export interface LoggedDose {
 export async function getLoggedToday(userId: string, date = new Date()): Promise<LoggedDose[]> {
   const day = startOfDay(date);
   const nextDay = new Date(day.getTime() + 86_400_000);
+  // Day bucketing: a client-stamped localDay is authoritative (travel-proof —
+  // a dose taken Friday night in Chile files under Friday even though its
+  // takenAt instant is Saturday in the runtime TZ). Legacy rows (null
+  // localDay) keep the original runtime-TZ instant window.
+  const viewKey = dayKey(day);
   const logs = await prisma.doseLog.findMany({
-    where: { userId, takenAt: { gte: day, lt: nextDay } },
+    where: {
+      userId,
+      OR: [{ localDay: viewKey }, { localDay: null, takenAt: { gte: day, lt: nextDay } }],
+    },
     include: {
       preparation: { include: { vial: { include: { peptide: true } } } },
       // Oral doses have no preparation — resolve the peptide name via the protocol.
@@ -119,7 +129,11 @@ export async function getLoggedToday(userId: string, date = new Date()): Promise
     volumeMl: l.volumeMl.toString(),
     injectionSite: l.injectionSite,
     route: l.route ?? "injection",
-    timeLabel: new Date(l.takenAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
+    // Render the wall clock the dose was actually taken at: the stored tz when
+    // stamped (22:09 in Chile shows a Chile clock, not the runtime-TZ 12:09),
+    // else the runtime TZ. ONE locale format for both branches so stamped and
+    // legacy rows never mix 12h/24h styles in the same list.
+    timeLabel: localeTimeLabel(new Date(l.takenAt), l.tz),
   }));
 }
 
@@ -141,14 +155,17 @@ export interface TodayDoseStatus {
  * current local "HH:MM" is overdue; untimed unlogged slots are never overdue.
  * No DB writes, no extra queries beyond getTodayDoses.
  */
-export async function getTodayDoseStatus(userId: string, now = new Date()): Promise<TodayDoseStatus> {
+export async function getTodayDoseStatus(userId: string, now = new Date(), nowHHMMOverride?: string): Promise<TodayDoseStatus> {
   const due = await getTodayDoses(userId, now);
   const total = due.length;
   const remainingItems = due.filter((d) => !d.alreadyLoggedToday);
   const remaining = remainingItems.length;
   const logged = total - remaining;
-  // Current local wall-clock as zero-padded "HH:MM" for a lexical compare with slot.time.
-  const nowHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  // Current local wall-clock as zero-padded "HH:MM" for a lexical compare with
+  // slot.time. When the caller anchors `now` to a viewer's NOON day anchor
+  // (viewerToday().date abroad), it MUST pass the viewer's real wall clock via
+  // nowHHMMOverride — otherwise every slot would be compared against "12:00".
+  const nowHHMM = nowHHMMOverride ?? `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   const overdue = remainingItems.filter((d) => d.time !== null && d.time < nowHHMM).length;
   const status = total === 0 ? "none" : overdue > 0 ? "behind" : "on_track";
   return { status, overdue, remaining, logged };
@@ -188,9 +205,16 @@ export async function getTodayDoses(userId: string, date = new Date()): Promise<
   for (const p of protocols) {
     if (!p.scheduleRule) continue;
 
-    // Fetch all of today's logs for this protocol (used for per-slot consumed tracking).
+    // Fetch all of today's logs for this protocol (used for per-slot consumed
+    // tracking). Same localDay-first bucketing as getLoggedToday: a stamped
+    // dose belongs to its FROZEN day only — a Chile-Friday dose whose instant
+    // is runtime-Saturday must not satisfy Saturday's untimed slot.
     const todayLogs = await prisma.doseLog.findMany({
-      where: { userId, protocolId: p.id, takenAt: { gte: day, lt: nextDay } },
+      where: {
+        userId,
+        protocolId: p.id,
+        OR: [{ localDay: dayKey(day) }, { localDay: null, takenAt: { gte: day, lt: nextDay } }],
+      },
       orderBy: { takenAt: "asc" },
     });
 
@@ -215,7 +239,7 @@ export async function getTodayDoses(userId: string, date = new Date()): Promise<
     // overdose). All protocol logs are loaded once and passed as `delivered`.
     const allProtocolLogs = await prisma.doseLog.findMany({
       where: { userId, protocolId: p.id },
-      select: { id: true, takenAt: true },
+      select: { id: true, takenAt: true, localDay: true },
     });
     const resolved = resolveTitration(
       buildResolveInput({

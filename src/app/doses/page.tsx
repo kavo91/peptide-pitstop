@@ -11,6 +11,7 @@ import { parseWeekParam, shiftWeek, weekKey } from "@/lib/week-nav";
 import type { ManualDay } from "@/lib/wellness-log";
 import { PitstopHeading } from "@/components/PitstopHeading";
 import { PAGE_MAIN } from "@/lib/layout";
+import { viewerToday } from "@/lib/viewer-tz";
 
 export const dynamic = "force-dynamic";
 
@@ -59,8 +60,12 @@ export default async function DosesPage({ searchParams }: { searchParams: { view
   const user = await getCurrentUser();
   if (!user) return null;
   const view = searchParams.view === "month" ? "month" : "week";
-  const today = new Date();
-  const todayKey = ymd(today);
+  // The VIEWER's day (pt_tz cookie), not the server clock — the today ring,
+  // week/month default anchors, nav "current" and future-dimming must follow
+  // the day the user is actually living.
+  const viewer = await viewerToday();
+  const today = viewer.date;
+  const todayKey = viewer.key;
 
   // Compact inline segmented control with a skewed active option.
   const tab = (v: string, label: string) => {

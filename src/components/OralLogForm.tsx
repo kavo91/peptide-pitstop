@@ -9,8 +9,11 @@ import type { DoseUnit } from "@/lib/dosing/types";
 import { logDose } from "@/app/actions/doses";
 import { enqueue } from "@/lib/offline/outbox";
 import { safeUuid } from "@/lib/uuid";
+import { localDayOf, deviceTimeZone } from "@/lib/local-day";
 import { RebasePrompt } from "./RebasePrompt";
 import type { RebaseSuggestion } from "@/lib/schedule/rebase-suggest";
+import { TitrationAdvancePrompt } from "./TitrationAdvancePrompt";
+import type { TitrationAdvanceSuggestion } from "@/lib/titration/advance-suggest";
 
 interface Props {
   protocolId?: string;
@@ -48,6 +51,7 @@ export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAt
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rebase, setRebase] = useState<RebaseSuggestion | undefined>();
+  const [advance, setAdvance] = useState<TitrationAdvanceSuggestion | undefined>();
   const router = useRouter();
 
   const valid = doseValue !== "" && (() => { try { return new Decimal(doseValue).gt(0); } catch { return false; } })();
@@ -74,6 +78,9 @@ export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAt
       doseUnit,
       notes: notes || undefined,
       takenAtISO: logTime.toISOString(),
+      // Freeze the device's calendar day + zone (see LogDoseForm).
+      localDay: localDayOf(logTime),
+      tz: deviceTimeZone() ?? undefined,
       clientUuid: uuid,
     };
 
@@ -92,9 +99,10 @@ export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAt
     if (res.ok) {
       setDone(true);
       // Refresh the server tree so the today list reflects the logged dose (see
-      // LogDoseForm). Deferred while a rebase decision is pending.
+      // LogDoseForm). Deferred while a rebase/phase-advance decision is pending.
       if (res.rebase) setRebase(res.rebase);
-      else router.refresh();
+      if (res.advance) setAdvance(res.advance);
+      if (!res.rebase && !res.advance) router.refresh();
     }
     else setError(res.error ?? "Could not log dose");
   }
@@ -104,6 +112,7 @@ export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAt
       <div className="space-y-2">
         <p className="rounded-control bg-ok/10 px-3 py-2 text-sm font-medium text-ok">Logged ✓ {peptideName}</p>
         {rebase && <RebasePrompt rebase={rebase} />}
+        {advance && <TitrationAdvancePrompt advance={advance} />}
       </div>
     );
   }

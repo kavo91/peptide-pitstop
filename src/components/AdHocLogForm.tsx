@@ -11,8 +11,11 @@ import type { ProtocolDoseOption } from "@/lib/log/protocol-options";
 import { logDose } from "@/app/actions/doses";
 import { enqueue } from "@/lib/offline/outbox";
 import { safeUuid } from "@/lib/uuid";
+import { localDayOf, deviceTimeZone } from "@/lib/local-day";
 import { VisualSyringe } from "./VisualSyringe";
 import { RebasePrompt } from "./RebasePrompt";
+import { TitrationAdvancePrompt } from "./TitrationAdvancePrompt";
+import type { TitrationAdvanceSuggestion } from "@/lib/titration/advance-suggest";
 import type { RebaseSuggestion } from "@/lib/schedule/rebase-suggest";
 import { assessTiming } from "@/lib/halflife";
 import { suggestNextSite } from "@/lib/sites";
@@ -81,6 +84,7 @@ export function AdHocLogForm({
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rebase, setRebase] = useState<RebaseSuggestion | undefined>();
+  const [advance, setAdvance] = useState<TitrationAdvanceSuggestion | undefined>();
 
   const opt = options.find((o) => o.preparation.id === prepId);
   const syr = syringes.find((s) => s.id === syringeId);
@@ -185,6 +189,7 @@ export function AdHocLogForm({
     setError(null);
 
     const uuid = safeUuid();
+    const logTime = takenAtTouched ? new Date(takenAt) : new Date();
     const input = {
       preparationId: opt.preparation.id,
       syringeId: syr.id,
@@ -192,7 +197,10 @@ export function AdHocLogForm({
       doseUnit,
       injectionSite: site || undefined,
       notes: notes || undefined,
-      takenAtISO: (takenAtTouched ? new Date(takenAt) : new Date()).toISOString(),
+      takenAtISO: logTime.toISOString(),
+      // Freeze the device's calendar day + zone (see LogDoseForm).
+      localDay: localDayOf(logTime),
+      tz: deviceTimeZone() ?? undefined,
       clientUuid: uuid,
     };
 
@@ -208,7 +216,11 @@ export function AdHocLogForm({
     }
 
     setBusy(false);
-    if (res.ok) { setDone(true); if (res.rebase) setRebase(res.rebase); }
+    if (res.ok) {
+      setDone(true);
+      if (res.rebase) setRebase(res.rebase);
+      if (res.advance) setAdvance(res.advance);
+    }
     else setError(res.error ?? "Could not log dose");
   }
 
@@ -220,6 +232,7 @@ export function AdHocLogForm({
       <div className="space-y-2">
         <p className="rounded-control bg-ok/10 px-3 py-2 text-sm font-medium text-ok">Logged ✓ {opt?.peptideName}</p>
         {rebase && <RebasePrompt rebase={rebase} />}
+        {advance && <TitrationAdvancePrompt advance={advance} />}
       </div>
     );
   }

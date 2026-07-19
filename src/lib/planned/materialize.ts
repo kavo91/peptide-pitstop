@@ -125,7 +125,7 @@ export function materializePlannedDoses(args: {
    * rebase override)? Two — and only two — shapes qualify:
    *   - BEFORE startDate: categorically stale. A genuine confirmRebase row
    *     derives from a real logged dose inside the started window, so nothing
-   *     legitimate lives before the start (BPC+TB4 prod bug, 2026-07-02).
+   *     legitimate lives before the start (regression, 2026-07-02).
    *   - AFTER endDate: categorically stale. End dates are an inclusive cutoff;
    *     no scheduled projection (routine or rebase-shifted) may survive past it.
    * A degenerate window (startDate after endDate — the card editor can't see

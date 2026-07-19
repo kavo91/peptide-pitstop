@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { startOfDay, addDays } from "@/lib/schedule/schedule";
+import { timeInTz } from "@/lib/tz-day";
 import { resolveTitration } from "@/lib/titration/resolve";
 import { buildResolveInput } from "@/lib/titration/from-protocol";
 import type { LoggedDose, TimelineEntry } from "./doses-timeline-core";
@@ -41,7 +42,7 @@ async function buildResolvedOccurrences(userId: string, rangeStart: Date, rangeE
     // taken/off-schedule split match Today exactly (same matcher, same FCFS).
     const deliveredLogs = await prisma.doseLog.findMany({
       where: { userId, protocolId: p.id },
-      select: { id: true, takenAt: true },
+      select: { id: true, takenAt: true, localDay: true },
     });
 
     // Resolve over an EXPANDED range (rangeEnd + 31d) so the trailing in-range
@@ -89,7 +90,12 @@ async function buildResolvedOccurrences(userId: string, rangeStart: Date, rangeE
 
 async function buildLogs(userId: string, rangeStart: Date, rangeEnd: Date): Promise<LoggedDose[]> {
   const logs = await prisma.doseLog.findMany({
-    where: { userId, takenAt: { gte: startOfDay(rangeStart), lt: addDays(startOfDay(rangeEnd), 1) } },
+    // ±1 day beyond the requested range: a dose with a client-stamped localDay
+    // can sit up to a day away from its takenAt instant (taken Friday night in
+    // a UTC-4 zone = Saturday in the runtime TZ), so instant-window fetching
+    // alone would drop it at a range edge. Out-of-range dateKeys simply don't
+    // match any grid day downstream.
+    where: { userId, takenAt: { gte: addDays(startOfDay(rangeStart), -1), lt: addDays(startOfDay(rangeEnd), 2) } },
     include: {
       preparation: { include: { vial: { include: { peptide: true } } } },
       // Oral doses have no preparation — resolve the peptide via the protocol.
@@ -107,10 +113,23 @@ async function buildLogs(userId: string, rangeStart: Date, rangeEnd: Date): Prom
       stackId: l.protocol?.stackId ?? null,
       stackName: l.protocol?.stack?.name ?? null,
       doseLabel: `${Number(l.doseMcg).toLocaleString()} mcg`,
-      dateKey: KEY(t),
+      // Client-stamped local day is the travel-proof bucket; legacy rows fall
+      // back to the runtime-TZ instant day.
+      dateKey: l.localDay ?? KEY(t),
       doseLogId: l.id,
-      // Actual local clock time it was taken (container TZ = the write TZ).
-      time: `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`,
+      // Wall clock where the dose was taken: stored tz when stamped, else the
+      // runtime TZ (container TZ = the historical write TZ). Both branches are
+      // 24h "HH:MM" so stamped and legacy rows match byte-for-byte at home;
+      // the try/catch keeps one ICU-rejected stored tz from 500ing the page.
+      time: ((): string => {
+        const runtimeHHMM = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
+        if (!l.tz) return runtimeHHMM;
+        try {
+          return timeInTz(t, l.tz);
+        } catch {
+          return runtimeHHMM;
+        }
+      })(),
     };
   });
 }
@@ -120,7 +139,17 @@ export async function getTimeline(userId: string, rangeStart: Date, rangeEnd: Da
     buildResolvedOccurrences(userId, rangeStart, rangeEnd),
     buildLogs(userId, rangeStart, rangeEnd),
   ]);
-  return buildTimelineEntries({ todayKey: KEY(new Date()), occurrences, logs });
+  // Clip to the requested range: buildLogs over-fetches ±1 day (localDay can
+  // sit a day from its instant), and an UNMATCHED out-of-range log would
+  // otherwise surface as a taken_offschedule entry outside the grid — e.g. a
+  // ghost peptide row with seven empty cells in the week view (DosesWeek
+  // derives its row list from ALL entries). Lexical compare is safe for
+  // zero-padded "YYYY-MM-DD" keys.
+  const startKey = KEY(startOfDay(rangeStart));
+  const endKey = KEY(startOfDay(rangeEnd));
+  return buildTimelineEntries({ todayKey: KEY(new Date()), occurrences, logs }).filter(
+    (e) => e.date >= startKey && e.date <= endKey,
+  );
 }
 
 export async function getWeek(userId: string, weekStart: Date) {
@@ -138,7 +167,7 @@ export async function getMonth(userId: string, monthStart: Date) {
     getTimeline(userId, gridStart, gridEnd),
     // Owner-scoped Garmin window over the full visible grid (local-midnight, inclusive).
     prisma.wearableDaily.findMany({
-      where: { userId, date: { gte: startOfDay(gridStart), lte: startOfDay(gridEnd) } },
+      where: { userId, source: "garmin", date: { gte: startOfDay(gridStart), lte: startOfDay(gridEnd) } },
       orderBy: { date: "asc" },
     }),
   ]);

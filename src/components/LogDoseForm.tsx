@@ -11,9 +11,12 @@ import type { DoseUnit } from "@/lib/dosing/types";
 import { logDose } from "@/app/actions/doses";
 import { enqueue } from "@/lib/offline/outbox";
 import { safeUuid } from "@/lib/uuid";
+import { localDayOf, deviceTimeZone } from "@/lib/local-day";
 import { VisualSyringe } from "./VisualSyringe";
 import { RebasePrompt } from "./RebasePrompt";
 import type { RebaseSuggestion } from "@/lib/schedule/rebase-suggest";
+import { TitrationAdvancePrompt } from "./TitrationAdvancePrompt";
+import type { TitrationAdvanceSuggestion } from "@/lib/titration/advance-suggest";
 import { assessTiming } from "@/lib/halflife";
 import { suggestNextSite } from "@/lib/sites";
 import { BodyMap } from "./BodyMap";
@@ -68,6 +71,7 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rebase, setRebase] = useState<RebaseSuggestion | undefined>();
+  const [advance, setAdvance] = useState<TitrationAdvanceSuggestion | undefined>();
   const router = useRouter();
 
   const timing =
@@ -128,6 +132,12 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
       injectionSite: site || undefined,
       notes: notes || undefined,
       takenAtISO: logTime.toISOString(),
+      // Freeze the DEVICE's calendar day + zone: a dose taken Friday night in
+      // Chile stays Friday even when the server (or a later viewer) is a day
+      // ahead. logTime is device-local, so localDayOf reads the intended day
+      // for both the live path and a manually typed time.
+      localDay: localDayOf(logTime),
+      tz: deviceTimeZone() ?? undefined,
       clientUuid: uuid,
     };
 
@@ -147,11 +157,12 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
       setDone(true);
       // Re-render the server tree so the today list / counter / "Logged today"
       // section reflect the new dose (every other mutation does this; the log
-      // forms were the sole omission). When a rebase decision is pending, keep
-      // this form mounted so RebasePrompt stays visible — it refreshes itself
-      // once the user resolves it.
+      // forms were the sole omission). When a rebase or phase-advance decision
+      // is pending, keep this form mounted so the prompt stays visible — each
+      // prompt refreshes itself once the user resolves it.
       if (res.rebase) setRebase(res.rebase);
-      else router.refresh();
+      if (res.advance) setAdvance(res.advance);
+      if (!res.rebase && !res.advance) router.refresh();
     }
     else setError(res.error ?? "Could not log dose");
   }
@@ -161,6 +172,7 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
       <div className="space-y-2">
         <p className="rounded-control bg-ok/10 px-3 py-2 text-sm font-medium text-ok">Logged ✓ {peptideName}</p>
         {rebase && <RebasePrompt rebase={rebase} />}
+        {advance && <TitrationAdvancePrompt advance={advance} />}
       </div>
     );
   }

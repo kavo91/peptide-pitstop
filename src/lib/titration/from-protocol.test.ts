@@ -52,10 +52,10 @@ describe("buildResolveInput", () => {
       { stepIndex: 0, dose: "8", doseInputUnit: "mg", durationDays: 14 },
       { stepIndex: 1, dose: "12", doseInputUnit: "mg", durationDays: null },
     ]);
-    // delivered mapped: id + Date(takenAt)
+    // delivered mapped: id + Date(takenAt) + frozen localDay (null when unstamped)
     expect(input.delivered).toEqual([
-      { id: "a", takenAt: d("2026-06-15") },
-      { id: "b", takenAt: d("2026-06-18") },
+      { id: "a", takenAt: d("2026-06-15"), localDay: null },
+      { id: "b", takenAt: d("2026-06-18"), localDay: null },
     ]);
   });
 

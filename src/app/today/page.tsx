@@ -5,6 +5,7 @@
  */
 import { getCurrentUser } from "@/lib/auth/owner";
 import { prisma } from "@/lib/db";
+import { viewerToday } from "@/lib/viewer-tz";
 import { getTodayDoses, getLoggedToday } from "@/lib/today";
 import { getStacks } from "@/lib/stacks/server";
 import { BackButton } from "@/components/BackButton";
@@ -21,7 +22,7 @@ function ymd(d: Date) {
 export default async function TodayPage({
   searchParams,
 }: {
-  searchParams: { date?: string };
+  searchParams: Promise<{ date?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) {
@@ -31,12 +32,17 @@ export default async function TodayPage({
       </main>
     );
   }
+  const query = await searchParams;
 
-  const todayKey = ymd(new Date());
+  // "Today" is the VIEWER's calendar day (device timezone via the pt_tz
+  // cookie), not the container's — while travelling west of home the two
+  // differ for part of the day and the server-clock version showed tomorrow.
+  const viewer = await viewerToday();
+  const todayKey = viewer.key;
   const viewDate =
-    searchParams.date && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.date)
-      ? new Date(searchParams.date + "T12:00:00")
-      : new Date();
+    query.date && /^\d{4}-\d{2}-\d{2}$/.test(query.date)
+      ? new Date(query.date + "T12:00:00")
+      : viewer.date;
   const viewKey = ymd(viewDate);
   const isToday = viewKey === todayKey;
 

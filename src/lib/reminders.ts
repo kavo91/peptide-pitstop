@@ -231,8 +231,13 @@ async function postToHa(url: string, payload: ReminderPayload): Promise<void> {
  * Channel preference per event: Web Push to every subscription the user has
  * (notifications come from the installed PWA and open it on tap); when the
  * user has no usable subscription — none registered, VAPID unconfigured, or
- * every send failed/pruned — fall back to the HA webhook relay. Claim BEFORE
- * dispatch: a claimed event is never retried (never-double-send by design).
+ * every send failed/pruned — fall back to the HA webhook relay.
+ *
+ * Claim BEFORE dispatch (never-double-send). The claim is RELEASED only when we
+ * are certain nothing went out — every available channel cleanly reported zero —
+ * so the next tick can retry while the event is still in its window. If a channel
+ * THROWS, delivery is unknown and the claim stands: never-double beats re-deliver.
+ * The channel is recorded after the send, so the ledger names what truly delivered.
  */
 export async function sendDueReminders(
   userId: string,
@@ -275,17 +280,27 @@ export async function sendDueReminders(
     // Atomic exactly-once claim: the unique (userId, dayKey, key) insert wins
     // or throws. Any failure (duplicate, DB down) skips the send — erring on
     // "never double" — so no push can ever fire twice for one event.
+    //
+    // The channel is recorded AFTER the send (below), never guessed here. It
+    // used to be written as `webPush ? "webpush" : "ha"` at claim time, so an
+    // event that actually fell back to HA was still filed as "webpush" — the
+    // ledger lied about which channel delivered, making delivery bugs
+    // undiagnosable from the table.
+    let claim;
     try {
-      await prisma.reminderSend.create({
-        data: { userId, dayKey: day, key: event.key, channel: webPush ? "webpush" : "ha" },
+      claim = await prisma.reminderSend.create({
+        data: { userId, dayKey: day, key: event.key, channel: "pending" },
       });
     } catch {
       continue;
     }
 
+    let channel: "webpush" | "ha" | null = null;
+    let certainNothingSent = false;
     try {
       let delivered = 0;
       if (webPush) delivered = await sendWebPush(userId, event);
+      if (delivered > 0) channel = "webpush";
       if (delivered === 0 && webhookUrl) {
         const base = publicAppUrl();
         await postToHa(webhookUrl, {
@@ -295,13 +310,30 @@ export async function sendDueReminders(
           ...(base ? { url: `${base}${event.url}` } : {}),
         });
         delivered = 1;
+        channel = "ha";
       }
       if (delivered > 0) sent++;
-      else console.error(`[reminders] no channel delivered "${event.key}" (claimed, not retried)`);
+      // Every available channel was tried and each cleanly reported zero, with
+      // no exception thrown — so we KNOW nothing went out and a retry cannot
+      // double-send.
+      else certainNothingSent = true;
     } catch (err) {
-      // Fail-safe: a down channel must never crash the tick. Claim stands (no retry).
+      // A channel threw mid-send: we cannot know whether it delivered, so the
+      // claim STANDS and is never retried (never-double still beats re-deliver).
+      // Fail-safe: a down channel must never crash the tick.
       console.error(`[reminders] failed to push "${event.key}":`, err);
     }
+
+    if (channel) {
+      await prisma.reminderSend.update({ where: { id: claim.id }, data: { channel } }).catch(() => {});
+    } else if (certainNothingSent) {
+      // Release the claim so the NEXT tick (15 min) retries while the event is
+      // still inside its window. Previously the claim stood and the reminder was
+      // lost forever — a silently missed dose reminder.
+      await prisma.reminderSend.delete({ where: { id: claim.id } }).catch(() => {});
+      console.error(`[reminders] no channel delivered "${event.key}" — claim released for retry`);
+    }
+    // else: exception path — claim stands as "pending" (delivery unconfirmed).
   }
   return sent;
 }

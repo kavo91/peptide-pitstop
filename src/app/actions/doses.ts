@@ -11,8 +11,10 @@ import { reconcileDoseEditRemaining } from "@/lib/dosing/recompute";
 import { encryptField } from "@/lib/crypto/fieldEncryption";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { computeRebaseSuggestion, type RebaseSuggestion } from "@/lib/schedule/rebase-suggest";
+import { computeTitrationAdvanceSuggestion, type TitrationAdvanceSuggestion } from "@/lib/titration/advance-suggest";
 import { plannedDayWindow, doseDeltaMinutes, pickNearestPlanned } from "@/lib/planned/match";
 import { slotInstantsOn } from "@/lib/schedule/slot-instants";
+import { sanitizeLocalDayTz } from "@/lib/tz-day";
 
 export interface LogDoseInput {
   protocolId?: string;
@@ -24,6 +26,14 @@ export interface LogDoseInput {
   injectionSite?: string;
   notes?: string;
   takenAtISO?: string;
+  /**
+   * DEVICE-local calendar day "YYYY-MM-DD" + IANA zone at log time. Freezes
+   * which day the dose belongs to (travel-proof bucketing); takenAt remains the
+   * authoritative instant. Absent (legacy client / outbox replay of an old
+   * entry) → stored null and readers fall back to runtime-TZ bucketing.
+   */
+  localDay?: string;
+  tz?: string;
   clientUuid?: string;
   /** "oral" routes the dose through the prep-less / syringe-less oral path. Default injection. */
   route?: "injection" | "oral";
@@ -37,6 +47,8 @@ export interface LogDoseResult {
   error?: string;
   /** Set when the dose landed off its protocol's grid day (weekly only) — drives the rebase prompt. */
   rebase?: RebaseSuggestion;
+  /** Set when the logged dose matches the NEXT titration step — drives the phase-advance prompt. */
+  advance?: TitrationAdvanceSuggestion;
 }
 
 /** The original fill volume of a preparation, used to clamp volume restoration. */
@@ -171,6 +183,10 @@ export async function logDose(input: LogDoseInput): Promise<LogDoseResult> {
   if (blocker) return { ok: false, error: blocker.message };
 
   const takenAt = await resolveLiveTakenAt(input.takenAtISO, user.id, effectiveProtocolId);
+  // Client-stamped local day/zone, validated server-side (malformed → nulls,
+  // never a rejection — a bad stamp must not block logging a dose). takenAt
+  // bounds the stamp: a well-formed but distant day can't hide the row.
+  const { localDay, tz } = sanitizeLocalDayTz(input, takenAt);
 
   const created = await prisma.$transaction(async (tx) => {
     // Link this log to the matching planned dose for the day so the cron stops
@@ -208,6 +224,8 @@ export async function logDose(input: LogDoseInput): Promise<LogDoseResult> {
         scheduledAt,
         deltaMinutes,
         takenAt,
+        localDay,
+        tz,
         doseMcg: draw.deliveredMassMcg.toString(),
         doseInputUnit: input.doseUnit,
         volumeMl: draw.deliveredVolumeMl.toString(),
@@ -243,7 +261,8 @@ export async function logDose(input: LogDoseInput): Promise<LogDoseResult> {
   revalidatePath("/inventory");
 
   const rebase = await computeRebaseSuggestion({ protocolId: effectiveProtocolId, userId: user.id, takenAt, matchedPlanned: created.plannedDoseId != null });
-  return { ok: true, doseLogId: created.id, rebase };
+  const advance = await computeTitrationAdvanceSuggestion({ protocolId: effectiveProtocolId, userId: user.id, doseLogId: created.id });
+  return { ok: true, doseLogId: created.id, rebase, advance };
 }
 
 
@@ -286,6 +305,8 @@ async function logOralDose(input: LogDoseInput, userId: string, clientUuid: stri
   }
 
   const takenAt = await resolveLiveTakenAt(input.takenAtISO, userId, effectiveProtocolId);
+  // Same validated client stamp as the injection path (see logDose).
+  const { localDay, tz } = sanitizeLocalDayTz(input, takenAt);
 
   const created = await prisma.$transaction(async (tx) => {
     // Link to the matching planned dose for the day (same nearest-slot rule as injection).
@@ -314,6 +335,8 @@ async function logOralDose(input: LogDoseInput, userId: string, clientUuid: stri
         scheduledAt,
         deltaMinutes,
         takenAt,
+        localDay,
+        tz,
         doseMcg: oral.doseMcg,
         doseInputUnit: oral.doseInputUnit,
         volumeMl: oral.volumeMl,
@@ -342,7 +365,8 @@ async function logOralDose(input: LogDoseInput, userId: string, clientUuid: stri
   revalidatePath("/");
 
   const rebase = await computeRebaseSuggestion({ protocolId: effectiveProtocolId, userId, takenAt, matchedPlanned: created.plannedDoseId != null });
-  return { ok: true, doseLogId: created.id, rebase };
+  const advance = await computeTitrationAdvanceSuggestion({ protocolId: effectiveProtocolId, userId, doseLogId: created.id });
+  return { ok: true, doseLogId: created.id, rebase, advance };
 }
 
 /**
@@ -398,8 +422,31 @@ export interface EditDoseLogInput {
   doseValue?: string;        // if changing the drawn amount
   doseUnit?: DoseUnit;
   takenAtISO?: string;       // if changing the time
+  /**
+   * Re-stamp of the local day/zone, sent ONLY when the editor actually touched
+   * the time field (an untouched edit must not re-bucket a frozen travel day —
+   * e.g. editing the site of a Chile-logged dose from Australia). Both absent →
+   * the stored localDay/tz are left untouched.
+   */
+  localDay?: string;
+  tz?: string;
   injectionSite?: string | null;
   notes?: string | null;
+}
+
+/**
+ * localDay/tz update for an edit. Only a TIME edit may re-bucket: when
+ * takenAtISO is present the validated stamp is applied (absent/invalid stamp →
+ * nulls, i.e. fall back to runtime-TZ bucketing of the new instant — a moved
+ * time must never keep a stale frozen day). No time edit → keep stored values.
+ */
+function editLocalDayStamp(
+  input: EditDoseLogInput,
+  log: { localDay: string | null; tz: string | null },
+  newTakenAt: Date,
+): { localDay: string | null; tz: string | null } {
+  if (!input.takenAtISO) return { localDay: log.localDay, tz: log.tz };
+  return sanitizeLocalDayTz(input, newTakenAt);
 }
 
 export async function editDoseLog(input: EditDoseLogInput): Promise<{ ok: boolean; error?: string }> {
@@ -431,6 +478,7 @@ export async function editDoseLog(input: EditDoseLogInput): Promise<{ ok: boolea
     }
     const oralTakenAt = input.takenAtISO ? new Date(input.takenAtISO) : log.takenAt;
     const oralDelta = doseDeltaMinutes(oralTakenAt, log.scheduledAt);
+    const oralStamp = editLocalDayStamp(input, log, oralTakenAt);
     try {
       await prisma.$transaction(async (tx) => {
         await tx.doseLog.update({
@@ -440,6 +488,7 @@ export async function editDoseLog(input: EditDoseLogInput): Promise<{ ok: boolea
             doseMcg: oralDoseMcgStr,
             takenAt: oralTakenAt,
             deltaMinutes: oralDelta,
+            ...oralStamp,
             notes: input.notes === undefined ? log.notes : (input.notes ? encryptField(input.notes) : null),
           },
         });
@@ -486,6 +535,7 @@ export async function editDoseLog(input: EditDoseLogInput): Promise<{ ok: boolea
 
   const takenAt = input.takenAtISO ? new Date(input.takenAtISO) : log.takenAt;
   const deltaMinutes = doseDeltaMinutes(takenAt, log.scheduledAt);
+  const stamp = editLocalDayStamp(input, log, takenAt);
 
   const remaining = reconcileDoseEditRemaining({
     remainingMl: prep.remainingMl.toString(),
@@ -505,6 +555,7 @@ export async function editDoseLog(input: EditDoseLogInput): Promise<{ ok: boolea
           syringeUnits: newSyringeUnits ? newSyringeUnits.toString() : null,
           takenAt,
           deltaMinutes,
+          ...stamp,
           injectionSite: input.injectionSite === undefined ? log.injectionSite : input.injectionSite,
           notes: input.notes === undefined ? log.notes : (input.notes ? encryptField(input.notes) : null),
         },

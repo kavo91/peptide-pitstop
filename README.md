@@ -93,8 +93,9 @@ The motorsport "pit-wall" dark theme ships alongside a clean light theme, and th
 - **Inventory & reorder.** Depletion forecasting (doses remaining / days of supply) and lead-time-aware reorder status so you restock before you run dry.
 
 ### Tracking & insight
-- **Today.** A single screen of what's due and what's been logged today, with one-tap actions.
-- **Doses timeline.** Week swimlanes, a month calendar, and day detail — with schedule rebasing (log off-schedule and snap the rest of the week back into line).
+- **Today.** A single screen of what's due and what's been logged today, with one-tap actions. Stays live on its own: the view refreshes when the app returns to the foreground, at local midnight, and when your device's timezone changes.
+- **Doses timeline.** Week swimlanes, a month calendar, and day detail — with schedule rebasing (log off-schedule and snap the rest of the week back into line) and catch-up rolling for interval protocols.
+- **Timezones & travel.** Every dose freezes its calendar day and timezone at the moment you log it, so a late-evening dose logged while travelling stays on the day you took it — regardless of the server's timezone. All screens anchor to your device's calendar day; reminders and schedule slots stay on the server's timezone.
 - **Bloodwork.** Biomarker panels with trends and a comparison matrix, backed by a curated biomarker library.
 - **Analytics & insights.** Adherence tracking, streaks, heatmaps, and derived insights.
 - **Plasma modelling.** Single-compartment, first-order-elimination plasma-level projections — quiet telemetry for your own regimen — from your dose history and each peptide's half-life (relative units — clearly labelled, not clinical serum levels).
@@ -228,7 +229,7 @@ docker compose up -d --build
 docker compose -f deploy/bundled/docker-compose.yml up -d --build
 ```
 
-Set your timezone with `TZ` (e.g. `TZ=America/New_York`) so local-midnight schedules read correctly. If you use Garmin sync, make sure `./garmin-tokens` is owned by uid 1001 (the in-container user).
+Set `TZ` to your home timezone (e.g. `TZ=America/New_York`) — it anchors schedule slots, reminders, and adherence. Which day a dose is *filed under* no longer depends on it: each dose freezes its own day and timezone at log time, and the UI follows your device's calendar day. If you use Garmin sync, make sure `./garmin-tokens` is owned by uid 1001 (the in-container user).
 
 ### Cloudflare Tunnel + Access
 
@@ -243,6 +244,7 @@ Set your timezone with `TZ` (e.g. `TZ=America/New_York`) so local-midnight sched
 | `PT_FIELD_KEY` | 32-byte base64 key for AES-256-GCM field encryption |
 | `AUTH_SECRET` | Session signing secret |
 | `DATABASE_URL` | SQLite path (maps to the `/data` volume) |
+| `TZ` | Home timezone — anchors schedule slots, reminders, and adherence (dose-day filing follows your device) |
 | `OWNER_EMAIL` | Optional authenticator label for the first-run owner bootstrap (defaults to `owner@example.com`) |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push keys (`npx web-push generate-vapid-keys`) |
 | `PUBLIC_APP_URL` | Absolute app URL used in relayed notification deep-links |
@@ -265,6 +267,8 @@ What you get:
 
 - **Per-slot reminders** — each scheduled time on a protocol reminds ±30 min
   around its own slot, including multi-time schedules (e.g. 08:00 + 20:00).
+  Reminder times follow the server's `TZ` (your home zone), not the device —
+  travelling doesn't shift when they fire.
 - **Doses without a set time** remind once at your chosen hour (default 08:00).
 - **Evening catch-up nag** — one summary of anything still unlogged (default
   18:00, or turn it off). Doses you've already logged never notify.

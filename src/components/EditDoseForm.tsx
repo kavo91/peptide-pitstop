@@ -2,12 +2,13 @@
 
 import { ChevronLeft, Save, Eye } from "lucide-react";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Decimal from "decimal.js";
 import { computeDraw } from "@/lib/dosing/engine";
 import { reconcileDoseEditRemaining } from "@/lib/dosing/recompute";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { editDoseLog } from "@/app/actions/doses";
+import { localDayOf, deviceTimeZone, toDeviceDatetimeLocal } from "@/lib/local-day";
 import { VisualSyringe } from "./VisualSyringe";
 
 interface SyringeDTO {
@@ -28,8 +29,10 @@ interface Props {
     doseInputUnit: DoseUnit;
     /** The current drawn volume on record (mL) — the old volume for reconciliation. */
     volumeMl: string;
-    /** datetime-local value "yyyy-MM-ddTHH:mm" for the takenAt prefill. */
+    /** datetime-local value "yyyy-MM-ddTHH:mm" for the takenAt prefill (SERVER TZ — swapped for the device-zone rendering on mount). */
     takenAtLocal: string;
+    /** ISO instant backing the prefill — the mount-time device-zone re-render source. */
+    takenAtISO: string;
     injectionSite: string;
     notes: string;
   };
@@ -51,6 +54,18 @@ export function EditDoseForm({ dose, prep, syringe, peptideName }: Props) {
   const [doseValue, setDoseValue] = useState(dose.amount);
   const [doseUnit, setDoseUnit] = useState<DoseUnit>(dose.doseInputUnit);
   const [takenAt, setTakenAt] = useState(dose.takenAtLocal);
+  // Only a TOUCHED time field is submitted: an untouched edit (site/notes only)
+  // must keep the stored takenAt AND its frozen localDay/tz — re-sending the
+  // server-TZ prefill would re-bucket a travel-day dose (see editDoseLog).
+  const [takenAtTouched, setTakenAtTouched] = useState(false);
+  // Swap the server-TZ prefill for the DEVICE-zone rendering of the same
+  // instant on mount (post-hydration, so no SSR mismatch): the value is parsed
+  // back with new Date() in the device zone on save, so display zone must
+  // equal parse zone or a touched edit made abroad shifts the instant by the
+  // zone offset and mis-stamps localDay.
+  useEffect(() => {
+    setTakenAt(toDeviceDatetimeLocal(new Date(dose.takenAtISO)));
+  }, [dose.takenAtISO]);
   const [site, setSite] = useState(dose.injectionSite);
   const [notes, setNotes] = useState(dose.notes);
 
@@ -106,7 +121,11 @@ export function EditDoseForm({ dose, prep, syringe, peptideName }: Props) {
       id: dose.id,
       doseValue,
       doseUnit,
-      takenAtISO: when.toISOString(),
+      // `when` parses the datetime-local string in the DEVICE zone, so the
+      // stamp freezes the day the editor actually typed.
+      ...(takenAtTouched
+        ? { takenAtISO: when.toISOString(), localDay: localDayOf(when), tz: deviceTimeZone() ?? undefined }
+        : {}),
       injectionSite: site || null,
       notes: notes || null,
     });
@@ -219,7 +238,7 @@ export function EditDoseForm({ dose, prep, syringe, peptideName }: Props) {
 
       <label className="block text-sm text-muted">
         Time taken
-        <input type="datetime-local" value={takenAt} onChange={(e) => setTakenAt(e.target.value)} className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-ink" />
+        <input type="datetime-local" value={takenAt} onChange={(e) => { setTakenAt(e.target.value); setTakenAtTouched(true); }} className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-ink" />
       </label>
 
       <label className="block text-sm text-muted">

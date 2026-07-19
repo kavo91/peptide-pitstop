@@ -6,6 +6,7 @@ import { OralLogForm } from "@/components/OralLogForm";
 import { BackButton } from "@/components/BackButton";
 import { buildProtocolDoseOptions, type ProtocolForOptions } from "@/lib/log/protocol-options";
 import { plannedDayWindow } from "@/lib/planned/match";
+import { viewerToday } from "@/lib/viewer-tz";
 import { PitstopHeading } from "@/components/PitstopHeading";
 import { PAGE_MAIN } from "@/lib/layout";
 
@@ -38,7 +39,12 @@ export default async function LogPage() {
     const pid = log.preparation?.vial.peptideId;
     if (pid && !lastLogByPeptide.has(pid)) lastLogByPeptide.set(pid, log.takenAt);
   }
-  const now = new Date();
+  // The VIEWER's day (v1.4.2): dose-option phase selection and the oral
+  // "Taken" chip must agree with /today, not the server clock. (hoursSinceLast
+  // degrades to noon-anchor math abroad — same documented tradeoff as the
+  // dashboard.)
+  const viewer = await viewerToday();
+  const now = viewer.date;
 
   const options = preps.map((p) => {
     const lastAt = lastLogByPeptide.get(p.vial.peptideId);
@@ -85,7 +91,7 @@ export default async function LogPage() {
   // Each protocol's FULL delivered history — the resolver's phase cursor needs it.
   const protocolLogs = await prisma.doseLog.findMany({
     where: { userId: user.id, protocolId: { in: protocols.map((p) => p.id) } },
-    select: { id: true, protocolId: true, takenAt: true },
+    select: { id: true, protocolId: true, takenAt: true, localDay: true },
   });
   // Most recent active prep per peptide (preps already ordered reconstitutedAt desc).
   const activePrepByPeptide = new Map<string, string>();
@@ -109,7 +115,7 @@ export default async function LogPage() {
       doseInputUnit: s.doseInputUnit,
       durationDays: s.durationDays,
     })),
-    deliveredLogs: protocolLogs.filter((l) => l.protocolId === p.id).map((l) => ({ id: l.id, takenAt: l.takenAt })),
+    deliveredLogs: protocolLogs.filter((l) => l.protocolId === p.id).map((l) => ({ id: l.id, takenAt: l.takenAt, localDay: l.localDay })),
     activePreparationId: activePrepByPeptide.get(p.peptideId),
   }));
   const protocolOptions = buildProtocolDoseOptions(protocolForOptions, now);
@@ -159,12 +165,15 @@ export default async function LogPage() {
   const oralProtocolIds = oralOptions.map((o) => o.protocolId).filter((id): id is string => Boolean(id));
   if (oralProtocolIds.length > 0) {
     const { dayStart, dayEnd } = plannedDayWindow(now);
+    // localDay-first bucketing (same shape as getLoggedToday): a stamped dose
+    // belongs to its FROZEN day only; legacy rows fall back to the instant
+    // window of the viewer's day.
     const todaysOralLogs = await prisma.doseLog.findMany({
       where: {
         userId: user.id,
         route: "oral",
         protocolId: { in: oralProtocolIds },
-        takenAt: { gte: dayStart, lt: dayEnd },
+        OR: [{ localDay: viewer.key }, { localDay: null, takenAt: { gte: dayStart, lt: dayEnd } }],
       },
       select: { protocolId: true },
     });

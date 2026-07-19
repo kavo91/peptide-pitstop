@@ -2,10 +2,11 @@
 
 import { Save } from "lucide-react";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Decimal from "decimal.js";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { editDoseLog } from "@/app/actions/doses";
+import { localDayOf, deviceTimeZone, toDeviceDatetimeLocal } from "@/lib/local-day";
 
 interface Props {
   dose: {
@@ -13,8 +14,10 @@ interface Props {
     /** The recorded mass in its input unit (mg = mcg/1000) — prefilled. */
     amount: string;
     doseInputUnit: DoseUnit;
-    /** datetime-local value "yyyy-MM-ddTHH:mm" for the takenAt prefill. */
+    /** datetime-local value "yyyy-MM-ddTHH:mm" for the takenAt prefill (SERVER TZ — swapped for the device-zone rendering on mount). */
     takenAtLocal: string;
+    /** ISO instant backing the prefill — the mount-time device-zone re-render source. */
+    takenAtISO: string;
     notes: string;
   };
   peptideName: string;
@@ -34,6 +37,14 @@ export function OralEditDoseForm({ dose, peptideName }: Props) {
     ORAL_UNITS.includes(dose.doseInputUnit) ? dose.doseInputUnit : "mg",
   );
   const [takenAt, setTakenAt] = useState(dose.takenAtLocal);
+  // Untouched time → omitted on submit, preserving the stored takenAt and its
+  // frozen localDay/tz (see EditDoseForm / editDoseLog).
+  const [takenAtTouched, setTakenAtTouched] = useState(false);
+  // Device-zone prefill re-render on mount — display zone must equal the zone
+  // the value is parsed back in (see EditDoseForm).
+  useEffect(() => {
+    setTakenAt(toDeviceDatetimeLocal(new Date(dose.takenAtISO)));
+  }, [dose.takenAtISO]);
   const [notes, setNotes] = useState(dose.notes);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
@@ -55,7 +66,9 @@ export function OralEditDoseForm({ dose, peptideName }: Props) {
       id: dose.id,
       doseValue,
       doseUnit,
-      takenAtISO: when.toISOString(),
+      ...(takenAtTouched
+        ? { takenAtISO: when.toISOString(), localDay: localDayOf(when), tz: deviceTimeZone() ?? undefined }
+        : {}),
       notes: notes || null,
     });
     setBusy(false);
@@ -95,7 +108,7 @@ export function OralEditDoseForm({ dose, peptideName }: Props) {
 
       <label className="block text-sm text-muted">
         Time taken
-        <input type="datetime-local" value={takenAt} onChange={(e) => setTakenAt(e.target.value)} className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-ink" />
+        <input type="datetime-local" value={takenAt} onChange={(e) => { setTakenAt(e.target.value); setTakenAtTouched(true); }} className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-ink" />
       </label>
 
       <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes (optional, encrypted)" className="w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-sm" />

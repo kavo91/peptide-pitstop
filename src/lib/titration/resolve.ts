@@ -68,13 +68,18 @@ export function resolveTitration(inp: ResolveInput): ResolveResult {
   // (Earlier this used a ±adherence-window test for timed slots, which falsely
   // flagged real same-day doses taken off-time as "missed"/"off-schedule".)
   const consumed = new Set<string>();
+  // A dose's calendar day: the client-stamped localDay when present (the day
+  // the dose was FROZEN to — a Chile-Friday dose whose instant is runtime-
+  // Saturday belongs to Friday), else the runtime-TZ day of takenAt (legacy).
+  const ymdKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const matches: ({ id: string; takenAt: Date } | null)[] = ordered.map(({ s, start }) => {
-    const slotDay = startOfDay(s.date).getTime();
+    const slotDayKey = ymdKey(startOfDay(s.date));
     let best: { id: string; takenAt: Date } | null = null;
     let bestDist = Infinity;
     for (const dz of delivered) {
       if (consumed.has(dz.id)) continue;
-      if (startOfDay(dz.takenAt).getTime() !== slotDay) continue; // same calendar day only
+      if ((dz.localDay ?? ymdKey(startOfDay(dz.takenAt))) !== slotDayKey) continue; // same calendar day only
       const dist = Math.abs(dz.takenAt.getTime() - start.getTime());
       if (dist < bestDist) { best = dz; bestDist = dist; }
     }

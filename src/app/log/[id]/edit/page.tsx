@@ -54,12 +54,13 @@ function deriveEnteredAmount(args: {
   }
 }
 
-export default async function EditDosePage({ params }: { params: { id: string } }) {
+export default async function EditDosePage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return null;
+  const { id } = await params;
 
   const log = await prisma.doseLog.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: { preparation: { include: { vial: { include: { peptide: true } } } }, syringe: true },
   });
   if (!log || log.userId !== user.id) notFound();
@@ -79,6 +80,10 @@ export default async function EditDosePage({ params }: { params: { id: string } 
       amount: oralAmount,
       doseInputUnit: unit,
       takenAtLocal: toLocalInput(log.takenAt),
+      // ISO instant for the client-side prefill re-render: the form swaps the
+      // server-TZ takenAtLocal for the DEVICE-zone rendering on mount, so the
+      // zone the user sees is the zone their edit is parsed back in.
+      takenAtISO: log.takenAt.toISOString(),
       notes: decryptField(log.notes) ?? "",
     };
     return (
@@ -105,6 +110,8 @@ export default async function EditDosePage({ params }: { params: { id: string } 
     doseInputUnit: unit,
     volumeMl: volumeMl.toString(),
     takenAtLocal: toLocalInput(log.takenAt),
+    // See oralDoseDTO: device-zone prefill re-render source.
+    takenAtISO: log.takenAt.toISOString(),
     injectionSite: log.injectionSite ?? "",
     notes: decryptField(log.notes) ?? "",
   };

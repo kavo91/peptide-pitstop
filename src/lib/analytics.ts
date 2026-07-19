@@ -228,13 +228,13 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
   // adherence resolve and the plasma forward curve. One query, grouped in memory.
   const fullLogs = await prisma.doseLog.findMany({
     where: { userId, protocolId: { not: null } },
-    select: { id: true, protocolId: true, takenAt: true },
+    select: { id: true, protocolId: true, takenAt: true, localDay: true },
   });
-  const fullLogsByProtocol = new Map<string, { id: string; takenAt: Date }[]>();
+  const fullLogsByProtocol = new Map<string, { id: string; takenAt: Date; localDay: string | null }[]>();
   for (const l of fullLogs) {
     if (!l.protocolId) continue;
     const arr = fullLogsByProtocol.get(l.protocolId) ?? [];
-    arr.push({ id: l.id, takenAt: new Date(l.takenAt) });
+    arr.push({ id: l.id, takenAt: new Date(l.takenAt), localDay: l.localDay });
     fullLogsByProtocol.set(l.protocolId, arr);
   }
 
@@ -460,7 +460,9 @@ export async function getInsightsData(
       orderBy: { takenAt: "asc" },
     }),
     prisma.wearableDaily.findMany({
-      where: { userId, date: { gte: window.from, lte: window.to } },
+      // Existing insight definitions are Garmin-specific. Native HRV/sleep
+      // sources are kept separate until P1 defines source-aware comparisons.
+      where: { userId, source: "garmin", date: { gte: window.from, lte: window.to } },
       select: {
         date: true,
         sleepSeconds: true,

@@ -10,6 +10,7 @@ import { formatSideEffects, deserializeSideEffects, resolveSymptomList } from "@
 import { mergeWellnessLog, type ManualDay } from "@/lib/wellness-log";
 import { getWearableWindow } from "@/lib/wearable";
 import { startOfDay } from "@/lib/schedule/schedule";
+import { viewerToday } from "@/lib/viewer-tz";
 import { BackButton } from "@/components/BackButton";
 import { WearableSection } from "@/components/wellness/WearableSection";
 import { TodayCard } from "@/components/wellness/TodayCard";
@@ -44,8 +45,10 @@ export default async function JournalPage() {
 
   // 7-day wearable window — the journal charts are summary-only; deeper ranges
   // live in the per-chart detail view. Rows are stored at local-midnight.
-  const wearTo = new Date();
-  const wearFrom = startOfDay(new Date());
+  // Anchored to the VIEWER's day (v1.4.2), not the server clock.
+  const viewer = await viewerToday();
+  const wearTo = viewer.date;
+  const wearFrom = startOfDay(viewer.date);
   wearFrom.setDate(wearFrom.getDate() - 7);
 
   const [entries, wearable] = await Promise.all([
@@ -80,7 +83,8 @@ export default async function JournalPage() {
   const logDays = mergeWellnessLog(manualDays, wearable);
 
   // Daily log shows today only — browse/edit past days in the month schedule.
-  const todayKey = dayKey(new Date());
+  // "Today" is the VIEWER's day (v1.4.2).
+  const todayKey = viewer.key;
   const todayLog = logDays.filter((d) => d.date === todayKey);
 
   return (

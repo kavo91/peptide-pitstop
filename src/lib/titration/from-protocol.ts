@@ -32,10 +32,12 @@ export interface ProtocolForResolve {
   }[];
 }
 
-/** A delivered DoseLog as the resolver consumes it (only id + takenAt matter). */
+/** A delivered DoseLog as the resolver consumes it (id + takenAt + optional frozen localDay). */
 export interface DeliveredLogInput {
   id: string;
   takenAt: Date | string;
+  /** Client-stamped frozen day — overrides the runtime-TZ day for slot matching (see DeliveredDose). */
+  localDay?: string | null;
 }
 
 export interface BuildResolveInputArgs {
@@ -63,7 +65,7 @@ export function buildResolveInput(args: BuildResolveInputArgs): ResolveInput {
     startDate: protocol.startDate,
     endDate: protocol.endDate,
     injectionsPerWeek: dosesPerWeek(protocol.scheduleRule),
-    delivered: deliveredLogs.map((l) => ({ id: l.id, takenAt: new Date(l.takenAt) })),
+    delivered: deliveredLogs.map((l) => ({ id: l.id, takenAt: new Date(l.takenAt), localDay: l.localDay ?? null })),
     skipped: [], // no skip UI yet (Phase 2)
     range,
     now,

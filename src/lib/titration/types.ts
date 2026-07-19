@@ -6,6 +6,14 @@ export type ResolvedStatus = "taken" | "missed" | "pending" | "projected" | "ski
 export interface DeliveredDose {
   id: string;
   takenAt: Date;
+  /**
+   * Client-stamped local calendar day ("YYYY-MM-DD") — the day the dose was
+   * FROZEN to at log time (v1.4.x travel-proofing). When present it overrides
+   * the runtime-TZ day of takenAt for slot matching: a dose taken Friday night
+   * in Chile (whose instant is Saturday in the runtime TZ) must satisfy
+   * FRIDAY's slot, not Saturday's. Null/absent = legacy row → runtime-TZ day.
+   */
+  localDay?: string | null;
 }
 
 export interface SkippedSlot {

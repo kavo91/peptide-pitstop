@@ -285,6 +285,15 @@ model DoseLog {
   route           String?     // injection | oral  (snapshot; null = legacy injection)
   source          String      @default("app") // app | ha_action | import
   notes           String? // ENCRYPTED
+  // Device-local calendar day ("YYYY-MM-DD") + IANA zone stamped by the CLIENT
+  // at log time — the travel-proof day bucket. takenAt stays the authoritative
+  // instant; localDay freezes which day the dose belongs to, so a dose logged
+  // late evening west of the server's zone files under the day it was taken,
+  // regardless of the server TZ or where it's later viewed from.
+  // Null = legacy row or legacy client → readers fall back to server-TZ
+  // bucketing of takenAt (the pre-1.3.0 behaviour, identical when zones match).
+  localDay        String?
+  tz              String?
   createdAt       DateTime    @default(now())
 }
 

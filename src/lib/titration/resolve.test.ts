@@ -98,7 +98,7 @@ describe("resolveTitration", () => {
     expect(r.phaseProgress).toEqual({ phaseIndex: 1, deliveredInPhase: 1, phaseCount: 3, targetInPhase: 4 });
   });
 
-  // B1b (Reta prod bug) — a dose logged EARLIER on the now-day must count toward
+  // B1b (regression) — a dose logged EARLIER on the now-day must count toward
   // phaseProgress. today.ts passes `now` as local midnight (startOfDay), so a strict
   // `takenAt <= now` dropped a dose already taken today → the card read "0/10" right
   // after logging. Progress is counted through the END of the now-day instead.
@@ -202,7 +202,7 @@ describe("resolveTitration", () => {
     expect(r.slots.find((s) => s.time === "20:00")?.matchedLogId).toBe("pm");
   });
 
-  // GHK Sat-dose prod bug — a fixed_anchor TIMED slot REBASED onto a dose's actual
+  // Regression — a fixed_anchor TIMED slot REBASED onto a dose's actual
   // day must match that dose by same-calendar-day even when it's >adherenceWindow
   // from the retained clock time. A dose taken Tue 17:39 (off the Mon/Thu @20:00
   // grid) rebases the Mon slot onto Tue; 17:39 is 141min from 20:00 (> 120 window),
@@ -222,7 +222,7 @@ describe("resolveTitration", () => {
     expect(tue?.matchedLogId).toBe("T");
   });
 
-  // Reta prod bug (2026-06-28) — the DB returns steps in arbitrary order (editing a
+  // Regression (2026-06-28) — the DB returns steps in arbitrary order (editing a
   // step reorders the rows). phaseTargets sorts internally, but the per-slot dose
   // lookup was a raw inp.steps[phaseIndex] → it rendered array-position-1 (the 2mg
   // step) while the phase cursor was on stepIndex 1 (the 1mg step). The per-slot
@@ -243,5 +243,44 @@ describe("resolveTitration", () => {
     const phase1 = r.slots.filter((s) => s.phaseIndex === 1);
     expect(phase1.length).toBeGreaterThan(0);
     expect(phase1.every((s) => s.perInjectionValue === "1")).toBe(true); // the 1mg step, NOT "2"
+  });
+});
+
+describe("resolveTitration — frozen localDay slot matching (v1.4.1)", () => {
+  // Regression case: daily 21:00 protocol; a dose taken Friday 22:09 in a
+  // UTC-4 zone has a runtime-TZ (Brisbane) instant of SATURDAY 12:09 but is
+  // frozen to Friday via localDay. It must satisfy FRIDAY's slot, not Saturday's.
+  const daily2100 = JSON.stringify([{ dayPattern: { kind: "daily" }, times: ["21:00"] }]);
+  const base = {
+    doseBasis: "per_injection" as const, steps: [], fallbackDose: "250", fallbackUnit: "mcg" as const,
+    scheduleRule: daily2100, rebaseMode: "rolling" as const, startDate: d("2026-07-13"), endDate: null,
+    injectionsPerWeek: 7, skipped: [], adherenceWindowMin: 120,
+  };
+
+  it("a localDay-frozen dose satisfies its frozen day's slot, not the instant's runtime day", () => {
+    const r = resolveTitration(input({
+      ...base,
+      // Runtime instant Saturday 18th 12:09 — frozen to Friday the 17th.
+      delivered: [{ id: "bpc", takenAt: dt("2026-07-18T12:09:00"), localDay: "2026-07-17" }],
+      range: { start: d("2026-07-17"), end: d("2026-07-18") },
+      now: dt("2026-07-18T20:00:00"),
+    }));
+    const friday = r.slots.find((s) => s.date.getDate() === 17);
+    const saturday = r.slots.find((s) => s.date.getDate() === 18);
+    expect(friday?.status).toBe("taken");
+    expect(saturday?.status).not.toBe("taken");
+  });
+
+  it("legacy rows (no localDay) keep the runtime-day product rule byte-identically", () => {
+    const r = resolveTitration(input({
+      ...base,
+      delivered: [{ id: "legacy", takenAt: dt("2026-07-18T12:09:00") }],
+      range: { start: d("2026-07-17"), end: d("2026-07-18") },
+      now: dt("2026-07-18T20:00:00"),
+    }));
+    const friday = r.slots.find((s) => s.date.getDate() === 17);
+    const saturday = r.slots.find((s) => s.date.getDate() === 18);
+    expect(saturday?.status).toBe("taken");
+    expect(friday?.status).not.toBe("taken");
   });
 });

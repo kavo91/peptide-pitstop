@@ -10,6 +10,7 @@ import { vialLabelStrengthMg, perInjectionMcg, DAILY_SCHEDULE_RULE } from "@/lib
 import { normaliseScheduleRule } from "@/lib/schedule/normalise";
 import { encryptField } from "@/lib/crypto/fieldEncryption";
 import { getTodayDoses } from "@/lib/today";
+import { sanitizeLocalDayTz, dayAnchor } from "@/lib/tz-day";
 import { runPlannedDoseGeneration } from "@/lib/planned/run";
 import { peptideTokens } from "@/lib/stacks/server";
 import { logDose } from "./doses";
@@ -208,7 +209,7 @@ export async function createStack(input: CreateStackInput) {
  * (so depletion / doseMcg are identical to logging each individually). Skips
  * components already logged today — idempotent for the day.
  */
-export async function logStack(stackId: string) {
+export async function logStack(stackId: string, stamp?: { localDay?: string; tz?: string }) {
   const user = await getCurrentUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
   const stack = await prisma.stack.findFirst({
@@ -217,11 +218,19 @@ export async function logStack(stackId: string) {
   });
   if (!stack) return { ok: false as const, error: "Stack not found." };
 
+  // Validate the client stamp first — "today" below must be the SAME day the
+  // /today page used to show the button, or the page (viewer day) and this
+  // action (runtime day) disagree for ~14 h/day while travelling: the due
+  // check would refuse a legitimately shown stack, and the dedup window would
+  // let a second tap double-log across the runtime midnight.
+  const { localDay: stampDay, tz: stampTz } = sanitizeLocalDayTz(stamp ?? {}, new Date());
+  const dayRef = stampDay ? dayAnchor(stampDay) : new Date();
+
   // Only log components actually DUE today — reuse the same authority that
   // drives the today view (getTodayDoses applies the start/end window, the
   // schedule, and override rebasing). A component whose protocol has not started
   // or is not scheduled for today is skipped, never logged.
-  const dueProtocolIds = new Set((await getTodayDoses(user.id)).map((d) => d.protocolId));
+  const dueProtocolIds = new Set((await getTodayDoses(user.id, dayRef)).map((d) => d.protocolId));
 
   // Stack components are premixed injections, so every logDose call needs a
   // syringe (logDose returns ok:false without one). Resolve the user's default
@@ -232,10 +241,13 @@ export async function logStack(stackId: string) {
   });
   if (!syringe) return { ok: false as const, error: "Add a syringe before logging a stack." };
 
-  const startOfDay = new Date();
+  const startOfDay = new Date(dayRef);
   startOfDay.setHours(0, 0, 0, 0);
   const nextDay = new Date(startOfDay.getTime() + 86_400_000);
-  const dayKey = startOfDay.toISOString().slice(0, 10);
+  // Idempotency-key day: the stamped viewer day when present (legacy
+  // expression otherwise). A key change across the deploy boundary is safe —
+  // the already-logged count below still dedups.
+  const dayKey = stampDay ?? startOfDay.toISOString().slice(0, 10);
 
   let logged = 0;
   let firstError: string | null = null;
@@ -244,8 +256,16 @@ export async function logStack(stackId: string) {
       firstError ??= "No components are due today.";
       continue;
     }
+    // Already-logged dedup on the SAME day bucket the views use: stamped rows
+    // by localDay, legacy rows by the instant window of that day.
     const already = await prisma.doseLog.count({
-      where: { protocolId: p.id, userId: user.id, takenAt: { gte: startOfDay, lt: nextDay } },
+      where: stampDay
+        ? {
+            protocolId: p.id,
+            userId: user.id,
+            OR: [{ localDay: stampDay }, { localDay: null, takenAt: { gte: startOfDay, lt: nextDay } }],
+          }
+        : { protocolId: p.id, userId: user.id, takenAt: { gte: startOfDay, lt: nextDay } },
     });
     if (already > 0) {
       firstError ??= "Already logged today.";
@@ -266,6 +286,11 @@ export async function logStack(stackId: string) {
       syringeId: syringe.id,
       doseValue: p.targetDose?.toString() ?? "0",
       doseUnit: "ml",
+      // Device-local day/zone from the StackCard client — same travel-proof
+      // stamp the individual log forms send (already validated above; logDose
+      // re-validates against its own takenAt).
+      localDay: stampDay ?? undefined,
+      tz: stampTz ?? undefined,
       clientUuid: `stack-${stackId}-${p.id}-${dayKey}`,
     });
     if (res.ok) logged++;

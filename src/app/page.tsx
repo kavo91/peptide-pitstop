@@ -16,6 +16,7 @@ import { cache } from "react";
 import { getCurrentUser } from "@/lib/auth/owner";
 import { prisma } from "@/lib/db";
 import { getTodayDoses, getLoggedToday } from "@/lib/today";
+import { viewerToday } from "@/lib/viewer-tz";
 import { getNextDose } from "@/lib/next-dose";
 import { getReorderStatus } from "@/lib/reorder";
 import { getAnalyticsData } from "@/lib/analytics";
@@ -141,8 +142,11 @@ export default async function DashboardPage() {
     );
   }
 
-  // Dashboard always summarises TODAY; the day-nav + full list live on /today.
-  const viewDate = new Date();
+  // Dashboard always summarises TODAY — the VIEWER's calendar day (device
+  // timezone via the pt_tz cookie), so a traveller sees their own today, not
+  // the container's. The day-nav + full list live on /today.
+  const viewer = await viewerToday();
+  const viewDate = viewer.date;
 
   // ~30-day wearable window for the latest recovery snapshot (local-midnight rows).
   const wearFrom = startOfDay(new Date(viewDate));
@@ -244,7 +248,7 @@ export default async function DashboardPage() {
               that previously sat above the right rail, so mobile/laptop stacking
               stays byte-identical: Today, stats, plasma, Recovery. */}
           <div className="mt-6 max-[640px]:mt-3">
-            <WellnessTile trend={wellness} snapshot={wearable.latestSnapshot} />
+            <WellnessTile trend={wellness} snapshot={wearable.latestSnapshot} todayKey={viewer.key} />
           </div>
         </div>
 

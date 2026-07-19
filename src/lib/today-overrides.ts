@@ -77,7 +77,7 @@ export function classifyOverrideDays(
     // A STRANDED row is a stale projection artefact, never a rebase override —
     // counting it as off-grid would make the override branch of dueSlotsForDay
     // bypass the start/end-date gate and show a not-yet-started dose as due
-    // (BPC+TB4 prod bug, 2026-07-02). Two shapes are stranded (mirrors
+    // (regression, 2026-07-02). Two shapes are stranded (mirrors
     // materialize.ts isStale — keep in sync):
     //   - BEFORE startDate: categorically stale (a genuine confirmRebase row
     //     derives from a real logged dose inside the started window).

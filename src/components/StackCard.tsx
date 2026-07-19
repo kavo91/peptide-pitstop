@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Layers, Check, FileText, X } from "lucide-react";
 import { logStack, addStackPrescription, deleteStack, type StackView } from "@/app/actions/stacks";
+import { localDayOf, deviceTimeZone } from "@/lib/local-day";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { StackScheduleEditor } from "@/components/StackScheduleEditor";
 
@@ -34,7 +35,7 @@ export function StackCard({ stack, manage = false }: { stack: StackView; manage?
   async function log() {
     setBusy(true);
     setMsg(null);
-    const res = await logStack(stack.id);
+    const res = await logStack(stack.id, { localDay: localDayOf(new Date()), tz: deviceTimeZone() ?? undefined });
     setBusy(false);
     if (!res.ok) {
       setMsg(res.error ?? "Could not log.");

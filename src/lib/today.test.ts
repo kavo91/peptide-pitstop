@@ -27,7 +27,9 @@ describe("today protocol selection", () => {
           doseLogs: {
             some: {
               userId: "user-1",
-              takenAt: { gte: day, lt: nextDay },
+              // v1.4.1: localDay-first day bucketing with the legacy
+              // instant-window fallback (same shape as getLoggedToday).
+              OR: [{ localDay: "2026-07-05" }, { localDay: null, takenAt: { gte: day, lt: nextDay } }],
             },
           },
         },
@@ -158,7 +160,7 @@ describe("phaseProgress for the Today label", () => {
 });
 
 // ── WS6: today.ts rebase-override classifier — TZ hardening ───────────────────
-// Regression for the prod bug fixed by container TZ=Australia/Brisbane: under a
+// Regression for the bug fixed by pinning the runtime TZ: under a
 // UTC runtime a Monday-local-midnight PlannedDose read back as Sunday, so an
 // on-grid M/W/F routine row was misclassified as an off-grid rebase override and
 // the dose showed "due" a day early. We force process.env.TZ so the assertion is
@@ -216,7 +218,7 @@ describe("rebase-override classifier — TZ hardening (WS6)", () => {
     expect(sundaySlots).toHaveLength(1); // the symptom: "due" a day early
   });
 
-  // BPC+TB4 prod bug (2026-07-02): moving a stack's start date FORWARD leaves
+  // Regression (2026-07-02): moving a stack's start date FORWARD leaves
   // already-materialised "planned" rows behind (daily rows for Jul 2–5 written
   // while the stack started immediately). Those rows now sit outside the
   // window-gated grid, so the classifier misread them as fixed_anchor rebase
@@ -311,7 +313,7 @@ describe("rebase-override classifier — TZ hardening (WS6)", () => {
     expect(dueSlotsForDay(moTh, overrideDays.get("p-live"), tue, started.startDate, started.endDate)).toHaveLength(1);
   });
 
-  // GHK-Cu prod bug (2026-06-26): a stray OFF-grid planned row sitting alongside
+  // Regression (2026-06-26): a stray OFF-grid planned row sitting alongside
   // a valid ON-grid row in the same week must NOT be treated as a rebase. A real
   // confirmRebase deletes the on-grid rows, so a genuine rebase week is purely
   // off-grid. Previously a single off-grid row made the override set REPLACE the

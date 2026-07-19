@@ -5,6 +5,7 @@ import { getPeptideOptions, getPrescriptionOptions, getSyringeOptions } from "@/
 import { ProtocolForm } from "@/components/ProtocolForm";
 import { StepsEditor } from "@/components/StepsEditor";
 import { dosesPerWeek } from "@/lib/schedule/frequency";
+import { viewerToday } from "@/lib/viewer-tz";
 import { type DoseUnit } from "@/lib/dosing/types";
 
 export const dynamic = "force-dynamic";
@@ -13,12 +14,14 @@ function toDateInput(d: Date | null): string | undefined {
   return d ? new Date(d).toISOString().slice(0, 10) : undefined;
 }
 
-export default async function EditProtocolPage({ params }: { params: { id: string } }) {
+export default async function EditProtocolPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return null;
+  const { id } = await params;
 
-  const protocol = await prisma.protocol.findFirst({ where: { id: params.id, userId: user.id }, include: { steps: { orderBy: { stepIndex: "asc" } } } });
+  const protocol = await prisma.protocol.findFirst({ where: { id, userId: user.id }, include: { steps: { orderBy: { stepIndex: "asc" } } } });
   if (!protocol) notFound();
+  const viewerNow = (await viewerToday()).date;
 
   const peptides = await getPeptideOptions(user.id);
   const prescriptions = await getPrescriptionOptions(user.id);
@@ -67,8 +70,10 @@ export default async function EditProtocolPage({ params }: { params: { id: strin
           injectionsPerWeek={dosesPerWeek(protocol.scheduleRule)}
           startDate={protocol.startDate ? new Date(protocol.startDate).toISOString() : null}
           nowWeek={
+            // Viewer-day anchored (v1.4.2) so the highlighted current step
+            // matches /today across the server-midnight boundary.
             protocol.startDate
-              ? (Date.now() - new Date(protocol.startDate).getTime()) / (7 * 86_400_000)
+              ? (viewerNow.getTime() - new Date(protocol.startDate).getTime()) / (7 * 86_400_000)
               : null
           }
         />

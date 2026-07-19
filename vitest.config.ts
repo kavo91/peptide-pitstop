@@ -13,5 +13,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    // Pin the suite's timezone: several schedule/reminder tests assert local
+    // wall-clock behaviour, so results must be deterministic regardless of the
+    // developer machine's timezone.
+    env: { TZ: "Australia/Brisbane" },
   },
 });

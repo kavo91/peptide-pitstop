@@ -7,6 +7,8 @@ import { assertPeptideUsable, assertPrescriptionCompatible, assertPrescriptionOw
 import { normaliseScheduleRule } from "@/lib/schedule/normalise";
 import { parsePositiveDecimal, parseDateOrder } from "@/lib/validation/domain";
 import { runPlannedDoseGeneration } from "@/lib/planned/run";
+import { computeAdvance } from "@/lib/titration/advance-suggest";
+import { dosesPerWeek } from "@/lib/schedule/frequency";
 
 function optDecimal(v?: string | null): string | null {
   const s = (v ?? "").toString().trim();
@@ -284,6 +286,66 @@ export async function removeProtocolStep(stepId: string) {
     console.error("removeProtocolStep failed", e);
     return { ok: false as const, error: "Could not remove step." };
   }
+  return { ok: true as const };
+}
+
+/**
+ * Confirm a titration phase-advance offered at log time: the user logged a
+ * dose matching the NEXT step, and accepted bringing that phase forward. The
+ * suggestion is RECOMPUTED here from the dose log — client-carried numbers are
+ * never trusted — then the current step's durationDays is truncated so its
+ * dose-count target ends exactly before the matching dose. Audited.
+ */
+export async function advanceTitrationPhase(input: { protocolId: string; doseLogId: string }) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const log = await prisma.doseLog.findFirst({ where: { id: input.doseLogId, userId: user.id, protocolId: input.protocolId } });
+  if (!log) return { ok: false as const, error: "Dose log not found." };
+  const protocol = await prisma.protocol.findFirst({
+    where: { id: input.protocolId, userId: user.id, status: "active" },
+    include: { steps: true },
+  });
+  if (!protocol) return { ok: false as const, error: "Protocol not found." };
+
+  const deliveredBeforeCount = await prisma.doseLog.count({
+    where: { userId: user.id, protocolId: protocol.id, takenAt: { lt: log.takenAt } },
+  });
+  const computed = computeAdvance({
+    steps: protocol.steps,
+    doseBasis: protocol.doseBasis === "per_week" ? "per_week" : "per_injection",
+    injectionsPerWeek: dosesPerWeek(protocol.scheduleRule),
+    deliveredBeforeCount,
+    loggedDoseMcg: log.doseMcg.toString(),
+  });
+  if (!computed) return { ok: false as const, error: "No phase advance applies to that dose." };
+
+  const step = protocol.steps.find((s) => s.stepIndex === computed.stepIndex);
+  if (!step) return { ok: false as const, error: "Step not found." };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.protocolStep.update({ where: { id: step.id }, data: { durationDays: computed.newDurationDays } });
+      await tx.auditLog.create({
+        data: {
+          userId: user.id,
+          entityType: "ProtocolStep",
+          entityId: step.id,
+          field: "advance-titration",
+          oldValue: `phase ${computed.fromPhase}/${computed.phaseCount} durationDays ${step.durationDays ?? "∞"}`,
+          newValue: `durationDays ${computed.newDurationDays} — phase ${computed.toPhase} brought forward at dose ${log.id}`,
+        },
+      });
+    });
+  } catch (e) {
+    console.error("advanceTitrationPhase failed", e);
+    return { ok: false as const, error: "Could not advance the phase." };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/today");
+  revalidatePath("/doses");
+  revalidatePath(`/protocols/${protocol.id}/edit`);
   return { ok: true as const };
 }
 

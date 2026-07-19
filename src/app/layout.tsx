@@ -8,6 +8,9 @@ import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistratio
 import { VersionHeartbeat } from "@/components/VersionHeartbeat";
 import { getCurrentUser } from "@/lib/auth/owner";
 import { getTodayDoseStatus, type TodayDoseStatus } from "@/lib/today";
+import { ActiveRefresh } from "@/components/ActiveRefresh";
+import { viewerToday, viewerTimeZone } from "@/lib/viewer-tz";
+import { timeInTz } from "@/lib/tz-day";
 
 // Peptide Pitstop typefaces — self-hosted by next/font (downloaded at build,
 // served from this origin), so there is NO runtime call to Google Fonts and no
@@ -90,7 +93,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Today dose-status for the header chip. Skipped when no user is signed in.
   let doseStatus: TodayDoseStatus | undefined;
   const user = await getCurrentUser();
-  if (user) doseStatus = await getTodayDoseStatus(user.id);
+  // The day this render is anchored to (viewer tz via pt_tz cookie, else the
+  // server TZ) — ActiveRefresh compares it against the device day on mount to
+  // correct a wrong-day first paint (no-cookie load abroad, midnight-spanning
+  // hydration).
+  const vt = await viewerToday();
+  if (user) {
+    // Chip counts the VIEWER's day; the overdue compare needs the viewer's
+    // real wall clock (viewerToday().date is a noon anchor abroad).
+    const vtz = await viewerTimeZone();
+    doseStatus = await getTodayDoseStatus(user.id, vt.date, vtz ? timeInTz(new Date(), vtz) : undefined);
+  }
   return (
     // suppressHydrationWarning: the inline script above sets data-theme before
     // React hydrates, so server-rendered <html> (no attribute) differs from the
@@ -106,6 +119,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="flex min-h-screen flex-col font-sans antialiased lg:flex-row">
         <ServiceWorkerRegistration />
         <VersionHeartbeat />
+        <ActiveRefresh serverDayKey={vt.key} />
         <SideNav envLabel={ENV_LABEL} brand="Peptide Pitstop" doseStatus={doseStatus} />
         {/* Content column: fills the space beside the desktop sidebar; on mobile
             it is the whole viewport with the bottom nav pinned underneath.

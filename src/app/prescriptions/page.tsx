@@ -9,6 +9,7 @@ import { getCurrentUser } from "@/lib/auth/owner";
 import { decryptField } from "@/lib/crypto/fieldEncryption";
 import { BackButton } from "@/components/BackButton";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
+import { viewerToday } from "@/lib/viewer-tz";
 import { PitstopHeading } from "@/components/PitstopHeading";
 import { PAGE_MAIN } from "@/lib/layout";
 import { deletePrescription } from "@/app/actions/prescriptions";
@@ -49,7 +50,9 @@ export default async function PrescriptionsPage() {
     orderBy: [{ status: "asc" }, { expiration: "asc" }],
   });
 
-  const now = new Date();
+  // Expiry/refill badges flip at day granularity — anchor to the VIEWER's day
+  // (v1.4.2), not the server clock.
+  const now = (await viewerToday()).date;
 
   return (
     <main className={PAGE_MAIN}>

@@ -258,7 +258,7 @@ describe("rebase-override week suppression", () => {
     expect(keys).toEqual(["2026-06-22", "2026-06-24", "2026-06-26"]);
   });
 
-  // GHK-Cu prod bug (2026-06-26): a week with BOTH an on-grid row and a stray
+  // Regression (2026-06-26): a week with BOTH an on-grid row and a stray
   // off-grid one is NOT a genuine rebase (confirmRebase deletes the on-grid rows)
   // — the stray off-grid row must not suppress and lose the live grid for the week.
   it("does NOT suppress a week that has BOTH on-grid and off-grid planned rows (stale artefact)", () => {
@@ -512,7 +512,7 @@ describe("JSON scheduleRule (custom-schedules engine)", () => {
 });
 
 // ─── suite 6: stale out-of-window rows (start date moved forward) ─────────
-// BPC+TB4 prod bug (2026-07-02): pushing a protocol's start date into the
+// Regression (2026-07-02): pushing a protocol's start date into the
 // future strands the already-materialised daily rows before it. They must be
 // DELETED — not marked missed (adherence pollution), not treated as rebase
 // overrides (Today showed the doses due), not left to fire midnight reminders.

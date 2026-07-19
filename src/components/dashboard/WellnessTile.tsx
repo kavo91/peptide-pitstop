@@ -12,6 +12,7 @@ import Link from "next/link";
 import type { WellnessTrend } from "@/lib/wellness";
 import type { WearableSnapshot } from "@/lib/wearable-series";
 import { activityDisplay, fmtActivityDuration } from "@/lib/garmin-activity";
+import { asOfLabel } from "@/lib/wellness-label";
 import { GaugeRing } from "../GaugeRing";
 
 const SPARK_W = 120;
@@ -47,23 +48,9 @@ function hasWearableRecovery(s: WearableSnapshot | null | undefined): s is Weara
   );
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/**
- * "Today" / "Yesterday" / "D Mon" for the snapshot's as-of day, vs the local
- * (server-TZ) today. Anything older than today is `stale` so the card can flag
- * it — otherwise a sync gap silently shows yesterday's recovery as if current.
- */
-function asOfLabel(asOf: string): { text: string; stale: boolean } {
-  const dk = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const now = new Date();
-  if (asOf === dk(now)) return { text: "Today", stale: false };
-  const y = new Date(now);
-  y.setDate(y.getDate() - 1);
-  if (asOf === dk(y)) return { text: "Yesterday", stale: true };
-  const [, m, d] = asOf.split("-").map(Number);
-  return { text: `${d ?? ""} ${MONTHS[(m ?? 1) - 1] ?? ""}`.trim(), stale: true };
-}
+// "Today"/"Yesterday"/"D Mon" labelling lives in @/lib/wellness-label — pure
+// and compared against the VIEWER's day key, never the server clock (a viewer
+// west of the server's zone must not see today's data labelled "Yesterday").
 
 /**
  * Apex-Line radial gauge ring. The coloured arc length is proportional to
@@ -78,8 +65,8 @@ function asOfLabel(asOf: string): { text: string; stale: boolean } {
  *  Apex-Line radial gauges: Body Battery / Sleep / HRV / RHR each render as an
  *  arc ring (race-orange primary + green/cyan accents) with the value in the
  *  centre; Exercise stays a text line. */
-function RecoverySnapshot({ snapshot }: { snapshot: WearableSnapshot }) {
-  const a = asOfLabel(snapshot.asOf);
+function RecoverySnapshot({ snapshot, todayKey }: { snapshot: WearableSnapshot; todayKey: string }) {
+  const a = asOfLabel(snapshot.asOf, todayKey);
   const gauges = [
     snapshot.bodyBattery != null && (
       <GaugeRing key="bb" label="Body Bat" value={snapshot.bodyBattery} display={snapshot.bodyBattery} min={0} max={100} color="rgb(var(--accent))" />
@@ -113,7 +100,7 @@ function RecoverySnapshot({ snapshot }: { snapshot: WearableSnapshot }) {
         const more = snapshot.activities.length - 1;
         // The workout's OWN day — labelled only when it isn't today, so a ride
         // logged yesterday reads "· Yesterday" instead of as today's exercise.
-        const actDay = snapshot.activitiesAsOf ? asOfLabel(snapshot.activitiesAsOf) : null;
+        const actDay = snapshot.activitiesAsOf ? asOfLabel(snapshot.activitiesAsOf, todayKey) : null;
         return (
           <span className="mt-auto inline-flex items-center gap-1 text-xs text-muted">
             Exercise
@@ -130,13 +117,16 @@ function RecoverySnapshot({ snapshot }: { snapshot: WearableSnapshot }) {
 export function WellnessTile({
   trend,
   snapshot,
+  todayKey,
 }: {
   trend: WellnessTrend;
   snapshot?: WearableSnapshot | null;
+  /** The VIEWER's day key (viewerToday().key) — anchors Today/Yesterday labels. */
+  todayKey: string;
 }) {
   // Wearable recovery takes precedence over the manual journal trend.
   if (hasWearableRecovery(snapshot)) {
-    return <RecoverySnapshot snapshot={snapshot} />;
+    return <RecoverySnapshot snapshot={snapshot} todayKey={todayKey} />;
   }
 
   if (!trend.hasData) {
