@@ -60,8 +60,14 @@ export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAt
     if (!useLiveTakenAt || takenAtTouched || busy || done) return;
     const update = () => setTakenAt(toLocalInput(new Date()));
     update();
+    // The interval FREEZES while iOS suspends the PWA and only resumes up to
+    // 30s after wake — a tap in that window would submit a value from the
+    // previous session (a resumed page can be DAYS old). Resync immediately
+    // on visibility resume so the untouched field can never go stale.
+    const onVisible = () => { if (document.visibilityState === "visible") update(); };
     const id = window.setInterval(update, 30_000);
-    return () => window.clearInterval(id);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { window.clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
   }, [useLiveTakenAt, takenAtTouched, busy, done]);
 
   async function onConfirm() {

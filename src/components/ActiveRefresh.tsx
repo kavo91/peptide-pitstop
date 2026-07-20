@@ -70,7 +70,17 @@ export function ActiveRefresh({ serverDayKey }: {
 
     const onActive = () => {
       const tzChanged = syncTz();
-      if (tzChanged || dayRolled(renderedDay, localDayOf(new Date())) || shouldRefreshOnActive(Date.now(), lastRefresh)) {
+      // Day rolled since this page was rendered → FULL reload, not a soft
+      // refresh: router.refresh() re-renders server components but PRESERVES
+      // client-component state, so a PWA page resumed days later would keep
+      // stale form prefills and a frozen outbox pipeline (a Sunday dose once
+      // filed onto Saturday exactly this way). Remounting everything is the
+      // only reliable reset at a day boundary.
+      if (dayRolled(renderedDay, localDayOf(new Date()))) {
+        window.location.reload();
+        return;
+      }
+      if (tzChanged || shouldRefreshOnActive(Date.now(), lastRefresh)) {
         refresh();
       }
     };
@@ -81,8 +91,9 @@ export function ActiveRefresh({ serverDayKey }: {
 
     // Minute tick: catch the local-midnight rollover while the app stays
     // foregrounded (the visibility/focus listeners only fire on re-entry).
+    // Same full-reload rationale as onActive.
     const tick = window.setInterval(() => {
-      if (document.visibilityState === "visible" && dayRolled(renderedDay, localDayOf(new Date()))) refresh();
+      if (document.visibilityState === "visible" && dayRolled(renderedDay, localDayOf(new Date()))) window.location.reload();
     }, 60_000);
 
     // Mount: mirror the zone, then correct a wrong-day first paint — either

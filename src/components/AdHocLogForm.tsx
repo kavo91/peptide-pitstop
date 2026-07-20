@@ -93,8 +93,12 @@ export function AdHocLogForm({
     if (takenAtTouched || busy || done) return;
     const update = () => setTakenAt(nowLocalInput());
     update();
+    // Resync on visibility resume too — the interval freezes while the PWA is
+    // suspended, and a resumed page can be days old (see LogDoseForm).
+    const onVisible = () => { if (document.visibilityState === "visible") update(); };
     const id = window.setInterval(update, 30_000);
-    return () => window.clearInterval(id);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { window.clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
   }, [takenAtTouched, busy, done]);
 
   // Derive current peptideId from prepId for the recentSites lookup.
