@@ -15,7 +15,7 @@
  * recovers the intended day when the runtime TZ matches the TZ the row was
  * written in (the container's TZ).
  *
- * PROD BUG (fixed 2026-06-21 by setting the container's `TZ`): under a UTC
+ * Regression (fixed 2026-06-21 by setting the container's `TZ`): under a UTC
  * runtime a Monday-local-midnight row (`…T00:00+10:00` = `…T14:00Z`) reads back
  * as the *Sunday* 14:00Z → `startOfDay` → Sunday → off the M/W/F grid → wrongly
  * classified as a rebase override → the dose shows "due" a day early.
