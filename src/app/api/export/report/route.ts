@@ -101,6 +101,7 @@ async function buildReportData(
   });
   const doses: ReportDoseRow[] = doseLogs.map((d) => ({
     takenAt: d.takenAt,
+    tz: d.tz,
     peptide: d.preparation?.vial?.peptide?.name ?? d.protocol?.peptide?.name ?? null,
     // The CSV exports doseMcg + doseInputUnit; mirror that here.
     doseValue: decStr(d.doseMcg),

@@ -116,6 +116,20 @@ describe("heatmapBuckets", () => {
     expect(total).toBe(1);
   });
 
+  it("buckets a stamped late-night dose by its phone-local tracking day", () => {
+    const logs = [
+      {
+        // Runtime day is June 2, but the phone's 01:03 grace-period stamp is June 1.
+        takenAt: new Date("2026-06-02T15:03:00"),
+        localDay: "2026-06-01",
+      },
+    ];
+    const buckets = heatmapBuckets({ logs, window });
+    const byKey = Object.fromEntries(buckets.map((b) => [b.dateKey, b.count]));
+    expect(byKey["2026-06-01"]).toBe(1);
+    expect(byKey["2026-06-02"]).toBe(0);
+  });
+
   it("dateKey uses the Monday-first KEY convention (YYYY-MM-DD, zero-padded)", () => {
     const buckets = heatmapBuckets({ logs: [], window: { from: new Date("2026-06-09T00:00:00"), to: new Date("2026-06-09T23:59:59") } });
     expect(buckets[0].dateKey).toMatch(/^\d{4}-\d{2}-\d{2}$/);

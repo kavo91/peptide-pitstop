@@ -45,10 +45,11 @@ export default async function LogPage() {
   // dashboard.)
   const viewer = await viewerToday();
   const now = viewer.date;
+  const intervalNow = new Date();
 
   const options = preps.map((p) => {
     const lastAt = lastLogByPeptide.get(p.vial.peptideId);
-    const hoursSinceLast = lastAt ? (now.getTime() - lastAt.getTime()) / 3_600_000 : null;
+    const hoursSinceLast = lastAt ? (intervalNow.getTime() - lastAt.getTime()) / 3_600_000 : null;
     return {
       peptideId: p.vial.peptideId,
       peptideName: p.vial.peptide.name,

@@ -11,7 +11,7 @@ import type { DoseUnit } from "@/lib/dosing/types";
 import { logDose } from "@/app/actions/doses";
 import { enqueue } from "@/lib/offline/outbox";
 import { safeUuid } from "@/lib/uuid";
-import { localDayOf, deviceTimeZone } from "@/lib/local-day";
+import { trackingDayOf, deviceTimeZone } from "@/lib/local-day";
 import { VisualSyringe } from "./VisualSyringe";
 import { RebasePrompt } from "./RebasePrompt";
 import type { RebaseSuggestion } from "@/lib/schedule/rebase-suggest";
@@ -128,7 +128,8 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
     setError(null);
 
     const uuid = safeUuid();
-    const logTime = useLiveTakenAt && !takenAtTouched ? new Date() : new Date(takenAt);
+    const logNow = useLiveTakenAt && !takenAtTouched;
+    const logTime = logNow ? new Date() : new Date(takenAt);
     const input = {
       protocolId,
       preparationId: preparation.id,
@@ -138,11 +139,11 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
       injectionSite: site || undefined,
       notes: notes || undefined,
       takenAtISO: logTime.toISOString(),
-      // Freeze the DEVICE's calendar day + zone: a dose taken Friday night in
-      // Chile stays Friday even when the server (or a later viewer) is a day
-      // ahead. logTime is device-local, so localDayOf reads the intended day
-      // for both the live path and a manually typed time.
-      localDay: localDayOf(logTime),
+      useServerTime: logNow,
+      // Freeze the DEVICE's tracking day + zone: a dose taken before 02:00 in
+      // Chile stays on the preceding late-night day even when Brisbane is a
+      // day ahead. trackingDayOf handles live and manually typed times alike.
+      localDay: trackingDayOf(logTime),
       tz: deviceTimeZone() ?? undefined,
       clientUuid: uuid,
     };
@@ -152,7 +153,9 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
       res = await logDose(input);
     } catch {
       // Network failure or offline — enqueue for replay when reconnected.
-      await enqueue({ ...input, clientUuid: uuid });
+      // Replay must retain the instant captured above, not use the later
+      // reconnect time as a fresh server-now event.
+      await enqueue({ ...input, useServerTime: false, clientUuid: uuid });
       setBusy(false);
       setDone(true); // optimistic: show success; the outbox will sync on reconnect
       return;

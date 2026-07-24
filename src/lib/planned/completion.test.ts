@@ -23,6 +23,15 @@ describe("protocol auto-completion", () => {
     }), d("2026-07-06"))).toBe(true);
   });
 
+  it("counts an after-midnight dose on its frozen phone tracking day", () => {
+    expect(protocolShouldAutoComplete(proto({
+      deliveredLogs: [{
+        takenAt: new Date("2026-07-07T15:03:00"),
+        localDay: "2026-07-06",
+      }],
+    }), d("2026-07-06"))).toBe(true);
+  });
+
   it("completes an active protocol on the first day after endDate", () => {
     expect(protocolShouldAutoComplete(proto(), d("2026-07-07"))).toBe(true);
   });

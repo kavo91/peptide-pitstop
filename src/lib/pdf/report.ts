@@ -11,12 +11,15 @@
  * production image (no system-font dependency).
  */
 import PDFDocument from "pdfkit";
+import { dayKeyInTz, timeInTz } from "@/lib/tz-day";
 
 // ── Public data shape ───────────────────────────────────────────────────────
 
 export interface ReportDoseRow {
   /** When the dose was taken. */
   takenAt: Date;
+  /** IANA timezone captured from the logging phone, or null for legacy rows. */
+  tz: string | null;
   /** Peptide display name, or null if unresolved. */
   peptide: string | null;
   /** Dose value in the input unit (already a number/string), or null. */
@@ -94,6 +97,16 @@ function fmtDateTime(d: Date): string {
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${fmtDate(d)} ${hh}:${mm}`;
+}
+
+/** Dose time in its logging phone timezone; legacy rows use the runtime zone. */
+export function formatDoseDateTime(d: Date, tz: string | null): string {
+  if (!tz) return fmtDateTime(d);
+  try {
+    return `${dayKeyInTz(d, tz)} ${timeInTz(d, tz)}`;
+  } catch {
+    return fmtDateTime(d);
+  }
 }
 
 /** "+12m" / "−5m" / "on time" / "—". */
@@ -406,7 +419,7 @@ function writeDoses(doc: Doc, data: ReportData): void {
     return;
   }
   const rows = data.doses.map((d) => [
-    fmtDateTime(d.takenAt),
+    formatDoseDateTime(d.takenAt, d.tz),
     d.peptide ?? "—",
     fmtDose(d.doseValue, d.doseUnit),
     d.site ?? "—",

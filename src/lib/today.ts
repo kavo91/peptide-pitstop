@@ -156,7 +156,9 @@ export interface TodayDoseStatus {
  * No DB writes, no extra queries beyond getTodayDoses.
  */
 export async function getTodayDoseStatus(userId: string, now = new Date(), nowHHMMOverride?: string): Promise<TodayDoseStatus> {
-  const due = await getTodayDoses(userId, now);
+  // `now` may be a noon day-anchor while travelling / during the 02:00 grace
+  // window. Dose intervals still use the real server instant.
+  const due = await getTodayDoses(userId, now, new Date());
   const total = due.length;
   const remainingItems = due.filter((d) => !d.alreadyLoggedToday);
   const remaining = remainingItems.length;
@@ -171,7 +173,11 @@ export async function getTodayDoseStatus(userId: string, now = new Date(), nowHH
   return { status, overdue, remaining, logged };
 }
 
-export async function getTodayDoses(userId: string, date = new Date()): Promise<DueDose[]> {
+export async function getTodayDoses(
+  userId: string,
+  date = new Date(),
+  intervalNow = date,
+): Promise<DueDose[]> {
   const day = startOfDay(date);
   const nextDay = new Date(day.getTime() + 86_400_000);
 
@@ -301,15 +307,16 @@ export async function getTodayDoses(userId: string, date = new Date()): Promise<
       : null;
 
     // Half-life timing: most recent DoseLog for this peptide (any protocol).
-    // Same value for every slot; measuring from the actual reference time (not
-    // midnight) avoids understating elapsed hours.
+    // Same value for every slot. `date` can be a tracking-day noon anchor;
+    // `intervalNow` stays the real UTC/server instant for clinically relevant
+    // elapsed-time and half-life warnings.
     const lastDoseLog = await prisma.doseLog.findFirst({
       where: { userId, preparation: { vial: { peptideId: p.peptideId } } },
       orderBy: { takenAt: "desc" },
     });
     // Clamp negatives (a just-logged dose).
     const hoursSinceLast = lastDoseLog
-      ? Math.max(0, (date.getTime() - new Date(lastDoseLog.takenAt).getTime()) / 3_600_000)
+      ? Math.max(0, (intervalNow.getTime() - new Date(lastDoseLog.takenAt).getTime()) / 3_600_000)
       : null;
 
     const halfLifeHours = p.peptide.halfLifeHours != null ? Number(p.peptide.halfLifeHours.toString()) : null;

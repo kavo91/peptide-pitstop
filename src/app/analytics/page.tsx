@@ -9,13 +9,9 @@ import { PitstopHeading } from "@/components/PitstopHeading";
 import { activeDesign } from "@/lib/design";
 import { PAGE_MAIN } from "@/lib/layout";
 import { redirect } from "next/navigation";
+import { viewerToday } from "@/lib/viewer-tz";
 
 export const dynamic = "force-dynamic";
-
-/** YYYY-MM-DD for a Date in local time. */
-function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 export default async function AnalyticsPage() {
   const user = await getCurrentUser();
@@ -23,7 +19,7 @@ export default async function AnalyticsPage() {
 
   const data = await getAnalyticsData(user.id);
   const insights = await getInsightsData(user.id, data.overallAdherence.adherencePct);
-  const nowKey = ymd(data.now);
+  const nowKey = (await viewerToday()).key;
   const design = activeDesign();
 
   const heatmapFromLabel = data.heatmapFrom.toLocaleDateString(undefined, {

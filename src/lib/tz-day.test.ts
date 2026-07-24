@@ -1,5 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { isValidTimeZone, dayKeyInTz, timeInTz, dayAnchor, sanitizeLocalDayTz, localeTimeLabel, LOCAL_DAY_RE } from "./tz-day";
+import {
+  isValidTimeZone,
+  dayKeyInTz,
+  timeInTz,
+  dayAnchor,
+  sanitizeLocalDayTz,
+  resolveTrackingDayStamp,
+  trackingDayKeyInTz,
+  previousDayKey,
+  localeTimeLabel,
+  LOCAL_DAY_RE,
+} from "./tz-day";
 
 // Example instant: 22:09 in America/Santiago (UTC-4 in July) = 2026-07-18
 // 02:09 UTC = 2026-07-18 12:09 in Australia/Brisbane (UTC+10) — an evening
@@ -27,6 +38,24 @@ describe("timeInTz", () => {
   });
   it("uses h23 (no 24:xx, no 12h clock) at midnight", () => {
     expect(timeInTz(new Date("2026-07-18T00:05:00Z"), "UTC")).toBe("00:05");
+  });
+});
+
+describe("trackingDayKeyInTz", () => {
+  it("uses the phone timezone for the two-hour midnight buffer", () => {
+    // 05:59:59Z is 01:59:59 in Santiago but 15:59:59 in Brisbane.
+    const instant = new Date("2026-07-24T05:59:59Z");
+    expect(trackingDayKeyInTz(instant, "America/Santiago")).toBe("2026-07-23");
+    expect(trackingDayKeyInTz(instant, "Australia/Brisbane")).toBe("2026-07-24");
+  });
+
+  it("rolls to the new phone-local day exactly at 02:00", () => {
+    expect(trackingDayKeyInTz(new Date("2026-07-24T06:00:00Z"), "America/Santiago")).toBe("2026-07-24");
+  });
+
+  it("crosses month, year and leap-day boundaries safely", () => {
+    expect(previousDayKey("2026-01-01")).toBe("2025-12-31");
+    expect(previousDayKey("2028-03-01")).toBe("2028-02-29");
   });
 });
 
@@ -98,6 +127,27 @@ describe("sanitizeLocalDayTz", () => {
     // A well-formed but absurd relabel is rejected (would be invisible in every view).
     expect(sanitizeLocalDayTz({ localDay: "0001-01-01", tz: "UTC" }, takenAt).localDay).toBeNull();
     expect(sanitizeLocalDayTz({ localDay: "2026-07-25", tz: "UTC" }, takenAt).localDay).toBeNull();
+  });
+});
+
+describe("resolveTrackingDayStamp", () => {
+  it("server-corrects a calendar-day client stamp using takenAt + phone timezone", () => {
+    const takenAt = new Date("2026-07-24T05:03:00Z"); // 01:03 in Santiago
+    expect(resolveTrackingDayStamp(
+      { localDay: "2026-07-24", tz: "America/Santiago" },
+      takenAt,
+    )).toEqual({
+      localDay: "2026-07-23",
+      tz: "America/Santiago",
+    });
+  });
+
+  it("keeps the sanitized client day as a fallback when no valid timezone exists", () => {
+    const takenAt = new Date("2026-07-24T05:03:00Z");
+    expect(resolveTrackingDayStamp({ localDay: "2026-07-24" }, takenAt)).toEqual({
+      localDay: "2026-07-24",
+      tz: null,
+    });
   });
 });
 

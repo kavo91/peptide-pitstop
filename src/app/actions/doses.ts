@@ -8,13 +8,20 @@ import { getCurrentUser } from "@/lib/auth/owner";
 import { computeDraw } from "@/lib/dosing/engine";
 import { buildOralDoseRecord, isOralDoseUnit } from "@/lib/dosing/oral";
 import { reconcileDoseEditRemaining } from "@/lib/dosing/recompute";
+import { doseTakenAt } from "@/lib/dose-clock";
 import { encryptField } from "@/lib/crypto/fieldEncryption";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { computeRebaseSuggestion, type RebaseSuggestion } from "@/lib/schedule/rebase-suggest";
 import { computeTitrationAdvanceSuggestion, type TitrationAdvanceSuggestion } from "@/lib/titration/advance-suggest";
-import { plannedDayWindow, doseDeltaMinutes, pickNearestPlanned } from "@/lib/planned/match";
+import {
+  plannedDayWindow,
+  plannedMatchDay,
+  doseDeltaMinutes,
+  pickNearestPlanned,
+  unlinkedPlannedStatus,
+} from "@/lib/planned/match";
 import { slotInstantsOn } from "@/lib/schedule/slot-instants";
-import { sanitizeLocalDayTz } from "@/lib/tz-day";
+import { resolveTrackingDayStamp } from "@/lib/tz-day";
 
 export interface LogDoseInput {
   protocolId?: string;
@@ -27,10 +34,16 @@ export interface LogDoseInput {
   notes?: string;
   takenAtISO?: string;
   /**
-   * DEVICE-local calendar day "YYYY-MM-DD" + IANA zone at log time. Freezes
-   * which day the dose belongs to (travel-proof bucketing); takenAt remains the
-   * authoritative instant. Absent (legacy client / outbox replay of an old
-   * entry) → stored null and readers fall back to runtime-TZ bucketing.
+   * True only for an untouched "Log now" control. The server clock becomes the
+   * authoritative UTC instant; manual/historical times and offline replays use
+   * takenAtISO instead.
+   */
+  useServerTime?: boolean;
+  /**
+   * DEVICE-local tracking day "YYYY-MM-DD" + IANA zone at log time. A tracking
+   * day rolls at 02:00 phone-local. takenAt remains the authoritative instant.
+   * Absent (legacy client / outbox replay of an old entry) → stored null and
+   * readers fall back to runtime-TZ bucketing.
    */
   localDay?: string;
   tz?: string;
@@ -75,11 +88,16 @@ function prepFillMl(prep: { prepType: string; bacWaterMl: Decimal | null; totalM
  * indistinguishable from an echo and also becomes "now"; log 06:01 to record
  * a deliberate at-slot time.
  */
-async function resolveLiveTakenAt(inputTakenAtISO: string | undefined, userId: string, protocolId: string | undefined): Promise<Date> {
-  const submitted = inputTakenAtISO ? new Date(inputTakenAtISO) : new Date();
-  if (!inputTakenAtISO || !protocolId || Number.isNaN(submitted.getTime())) return submitted;
-
+async function resolveLiveTakenAt(
+  inputTakenAtISO: string | undefined,
+  useServerTime: boolean,
+  userId: string,
+  protocolId: string | undefined,
+): Promise<Date> {
   const now = new Date();
+  const submitted = doseTakenAt(inputTakenAtISO, useServerTime, now);
+  if (useServerTime || !inputTakenAtISO || !protocolId || Number.isNaN(submitted.getTime())) return submitted;
+
   const { dayStart, dayEnd } = plannedDayWindow(now);
   if (submitted < dayStart || submitted >= dayEnd) return submitted;
 
@@ -182,26 +200,29 @@ export async function logDose(input: LogDoseInput): Promise<LogDoseResult> {
   const blocker = draw.warnings.find((w) => w.severity === "block");
   if (blocker) return { ok: false, error: blocker.message };
 
-  const takenAt = await resolveLiveTakenAt(input.takenAtISO, user.id, effectiveProtocolId);
+  const takenAt = await resolveLiveTakenAt(input.takenAtISO, input.useServerTime === true, user.id, effectiveProtocolId);
   // Client-stamped local day/zone, validated server-side (malformed → nulls,
   // never a rejection — a bad stamp must not block logging a dose). takenAt
   // bounds the stamp: a well-formed but distant day can't hide the row.
-  const { localDay, tz } = sanitizeLocalDayTz(input, takenAt);
+  const { localDay, tz } = resolveTrackingDayStamp(input, takenAt);
 
   const created = await prisma.$transaction(async (tx) => {
     // Link this log to the matching planned dose for the day so the cron stops
     // falsely marking logged doses as "missed" (the link was never set — a real
-    // bug). Among the still-planned, unlinked slots on takenAt's day, pick the
-    // one nearest in time to takenAt (e.g. an evening log links to the PM slot,
-    // not the AM one) so the delta + adherence reflect the intended slot.
+    // bug). Among the still-unfulfilled, unlinked slots on the tracking day
+    // (including one already marked missed by Brisbane's cron), pick the one
+    // nearest in time so delta + adherence reflect the intended slot.
     let plannedDoseId: string | null = null;
     let scheduledAt: Date | null = null;
     if (effectiveProtocolId) {
-      const { dayStart, dayEnd } = plannedDayWindow(takenAt);
+      // Use the frozen tracking day for the candidate window. A 01:00 dose is
+      // still eligible for the preceding day's unfulfilled planned row.
+      const plannedDay = plannedMatchDay(takenAt, localDay);
+      const { dayStart, dayEnd } = plannedDayWindow(plannedDay);
       const candidates = await tx.plannedDose.findMany({
         where: {
           protocolId: effectiveProtocolId,
-          status: "planned",
+          status: { in: ["planned", "missed"] },
           scheduledAt: { gte: dayStart, lt: dayEnd },
           doseLog: null,
         },
@@ -210,6 +231,10 @@ export async function logDose(input: LogDoseInput): Promise<LogDoseResult> {
       if (planned) {
         plannedDoseId = planned.id;
         scheduledAt = planned.scheduledAt;
+        await tx.plannedDose.update({
+          where: { id: planned.id },
+          data: { status: "taken" },
+        });
       }
     }
     const deltaMinutes = doseDeltaMinutes(takenAt, scheduledAt);
@@ -304,23 +329,33 @@ async function logOralDose(input: LogDoseInput, userId: string, clientUuid: stri
     if (active.length === 1) effectiveProtocolId = active[0].id;
   }
 
-  const takenAt = await resolveLiveTakenAt(input.takenAtISO, userId, effectiveProtocolId);
+  const takenAt = await resolveLiveTakenAt(input.takenAtISO, input.useServerTime === true, userId, effectiveProtocolId);
   // Same validated client stamp as the injection path (see logDose).
-  const { localDay, tz } = sanitizeLocalDayTz(input, takenAt);
+  const { localDay, tz } = resolveTrackingDayStamp(input, takenAt);
 
   const created = await prisma.$transaction(async (tx) => {
     // Link to the matching planned dose for the day (same nearest-slot rule as injection).
     let plannedDoseId: string | null = null;
     let scheduledAt: Date | null = null;
     if (effectiveProtocolId) {
-      const { dayStart, dayEnd } = plannedDayWindow(takenAt);
+      const plannedDay = plannedMatchDay(takenAt, localDay);
+      const { dayStart, dayEnd } = plannedDayWindow(plannedDay);
       const candidates = await tx.plannedDose.findMany({
-        where: { protocolId: effectiveProtocolId, status: "planned", scheduledAt: { gte: dayStart, lt: dayEnd }, doseLog: null },
+        where: {
+          protocolId: effectiveProtocolId,
+          status: { in: ["planned", "missed"] },
+          scheduledAt: { gte: dayStart, lt: dayEnd },
+          doseLog: null,
+        },
       });
       const planned = pickNearestPlanned(candidates, takenAt);
       if (planned) {
         plannedDoseId = planned.id;
         scheduledAt = planned.scheduledAt;
+        await tx.plannedDose.update({
+          where: { id: planned.id },
+          data: { status: "taken" },
+        });
       }
     }
     const deltaMinutes = doseDeltaMinutes(takenAt, scheduledAt);
@@ -387,6 +422,18 @@ export async function deleteDoseLog(input: { id: string }): Promise<{ ok: boolea
       // Delete first; only restore volume if a row was actually removed (no double-restore).
       const removed = await tx.doseLog.deleteMany({ where: { id: log.id } });
       if (removed.count === 1) {
+        if (log.plannedDoseId) {
+          const planned = await tx.plannedDose.findFirst({
+            where: { id: log.plannedDoseId, userId: user.id },
+            select: { id: true, scheduledAt: true },
+          });
+          if (planned) {
+            await tx.plannedDose.update({
+              where: { id: planned.id },
+              data: { status: unlinkedPlannedStatus(planned.scheduledAt, new Date()) },
+            });
+          }
+        }
         // Oral doses have no preparation → no vial volume to restore.
         const prep = log.preparationId
           ? await tx.preparation.findUnique({ where: { id: log.preparationId } })
@@ -446,7 +493,7 @@ function editLocalDayStamp(
   newTakenAt: Date,
 ): { localDay: string | null; tz: string | null } {
   if (!input.takenAtISO) return { localDay: log.localDay, tz: log.tz };
-  return sanitizeLocalDayTz(input, newTakenAt);
+  return resolveTrackingDayStamp(input, newTakenAt);
 }
 
 export async function editDoseLog(input: EditDoseLogInput): Promise<{ ok: boolean; error?: string }> {

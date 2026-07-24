@@ -10,6 +10,8 @@ import { buildResolveInput } from "@/lib/titration/from-protocol";
 import { forwardDosePoints } from "@/lib/plasma-projection";
 import { decryptField } from "@/lib/crypto/fieldEncryption";
 import { deserializeSideEffects } from "@/lib/side-effects";
+import { dayAnchor } from "@/lib/tz-day";
+import { dayKey } from "@/lib/today-overrides";
 import {
   computeInsights,
   type Insight,
@@ -124,7 +126,9 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
     prisma.doseLog.findMany({
       where: {
         userId,
-        takenAt: { gte: adherenceWindow.from }, // full 90-day window (heatmap); plasma filters to its own 30-day slice below
+        // One-day edge buffer: a stamped tracking day can precede its runtime
+        // takenAt day. In-memory filtering below clips the actual 90-day view.
+        takenAt: { gte: addDays(adherenceWindow.from, -1) },
       },
       include: {
         preparation: { include: { vial: { include: { peptide: true } } } },
@@ -208,15 +212,21 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
   // bounded by the 90-day lookback so it grows over time rather than showing a
   // wall of empty cells. Empty (no grid) until the first dose is logged.
   const adherenceWindowLogs = doseLogs.filter(
-    (l) => new Date(l.takenAt) >= adherenceWindow.from,
+    (l) => l.localDay
+      ? l.localDay >= dayKey(adherenceWindow.from)
+      : new Date(l.takenAt) >= adherenceWindow.from,
   );
-  const earliestLog = adherenceWindowLogs.length
-    ? startOfDay(new Date(adherenceWindowLogs[0].takenAt)) // logs are ordered asc
-    : null;
+  const earliestKey = adherenceWindowLogs
+    .map((l) => l.localDay ?? dayKey(new Date(l.takenAt)))
+    .sort()[0];
+  const earliestLog = earliestKey ? dayAnchor(earliestKey) : null;
   const heatmapStart = earliestLog ?? todayStart;
   const heatmap = earliestLog
     ? heatmapBuckets({
-        logs: adherenceWindowLogs.map((l) => ({ takenAt: new Date(l.takenAt) })),
+        logs: adherenceWindowLogs.map((l) => ({
+          takenAt: new Date(l.takenAt),
+          localDay: l.localDay,
+        })),
         window: { from: heatmapStart, to: now },
       })
     : [];

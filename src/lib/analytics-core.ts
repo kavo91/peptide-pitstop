@@ -18,6 +18,8 @@ export interface PlannedDoseRow {
 
 export interface LogRow {
   takenAt: Date;
+  /** Frozen phone-local tracking day (02:00 rollover), when available. */
+  localDay?: string | null;
 }
 
 export interface AdherenceResult {
@@ -73,7 +75,8 @@ export interface HeatmapBucket {
 
 /**
  * Build one bucket per calendar day in the window (inclusive), counting how many
- * logs fell on each day by their takenAt local date.
+ * logs fell on each tracking day. A frozen phone-local localDay wins; legacy
+ * rows fall back to the runtime-local date of takenAt.
  */
 export function heatmapBuckets(args: {
   logs: LogRow[];
@@ -96,8 +99,11 @@ export function heatmapBuckets(args: {
   // Count logs into buckets
   const bucketIndex = new Map(buckets.map((b, i) => [b.dateKey, i]));
   for (const log of logs) {
-    if (log.takenAt < window.from || log.takenAt > end) continue;
-    const key = KEY(log.takenAt);
+    // Stamped rows may sit on the previous tracking day even though their UTC
+    // instant falls just outside that day's runtime window. Bucket membership,
+    // not the server-local instant, is authoritative for those rows.
+    if (!log.localDay && (log.takenAt < window.from || log.takenAt > end)) continue;
+    const key = log.localDay ?? KEY(log.takenAt);
     const idx = bucketIndex.get(key);
     if (idx !== undefined) buckets[idx].count++;
   }

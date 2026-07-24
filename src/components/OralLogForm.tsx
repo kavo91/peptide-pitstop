@@ -9,7 +9,7 @@ import type { DoseUnit } from "@/lib/dosing/types";
 import { logDose } from "@/app/actions/doses";
 import { enqueue } from "@/lib/offline/outbox";
 import { safeUuid } from "@/lib/uuid";
-import { localDayOf, deviceTimeZone } from "@/lib/local-day";
+import { trackingDayOf, deviceTimeZone } from "@/lib/local-day";
 import { RebasePrompt } from "./RebasePrompt";
 import type { RebaseSuggestion } from "@/lib/schedule/rebase-suggest";
 import { TitrationAdvancePrompt } from "./TitrationAdvancePrompt";
@@ -75,7 +75,8 @@ export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAt
     setError(null);
 
     const uuid = safeUuid();
-    const logTime = useLiveTakenAt && !takenAtTouched ? new Date() : new Date(takenAt);
+    const logNow = useLiveTakenAt && !takenAtTouched;
+    const logTime = logNow ? new Date() : new Date(takenAt);
     const input = {
       protocolId,
       route: "oral" as const,
@@ -84,8 +85,9 @@ export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAt
       doseUnit,
       notes: notes || undefined,
       takenAtISO: logTime.toISOString(),
-      // Freeze the device's calendar day + zone (see LogDoseForm).
-      localDay: localDayOf(logTime),
+      useServerTime: logNow,
+      // Freeze the device's 02:00-rollover tracking day + zone (see LogDoseForm).
+      localDay: trackingDayOf(logTime),
       tz: deviceTimeZone() ?? undefined,
       clientUuid: uuid,
     };
@@ -95,7 +97,7 @@ export function OralLogForm({ protocolId, peptideId, peptideName, defaultTakenAt
       res = await logDose(input);
     } catch {
       // Network failure or offline — enqueue for replay when reconnected.
-      await enqueue({ ...input, clientUuid: uuid });
+      await enqueue({ ...input, useServerTime: false, clientUuid: uuid });
       setBusy(false);
       setDone(true); // optimistic: show success; the outbox will sync on reconnect
       return;

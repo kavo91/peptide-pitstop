@@ -154,7 +154,7 @@ export default async function DashboardPage() {
 
   // Cheap data — fetched before render, never delayed by analytics.
   const [due, logged, reorderItems, journalEntries, wearable, upcomingDose] = await Promise.all([
-    getTodayDoses(user.id, viewDate),
+    getTodayDoses(user.id, viewDate, new Date()),
     getLoggedToday(user.id, viewDate),
     getReorderStatus(user.id),
     prisma.journalEntry.findMany({ where: { userId: user.id }, orderBy: { date: "desc" }, take: 30 }),

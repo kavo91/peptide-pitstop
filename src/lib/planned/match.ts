@@ -8,12 +8,13 @@
  * the matching contract is unit-testable without a database.
  */
 import { startOfDay, addDays } from "../schedule/schedule";
+import { dayAnchor } from "../tz-day";
 
 /** A candidate PlannedDose row, as the matcher consumes it. */
 export interface PlannableSlot {
   id: string;
   scheduledAt: Date;
-  status: string;       // only "planned" rows are eligible
+  status: string;       // "planned" or unlinked "missed" rows are eligible
   hasDoseLog: boolean;  // already-linked rows are not eligible
 }
 
@@ -32,9 +33,19 @@ export function plannedDayWindow(takenAt: Date): { dayStart: Date; dayEnd: Date 
 }
 
 /**
+ * Day reference for planned-dose lookup. A stamped tracking day overrides the
+ * instant's runtime calendar day, so a phone-local 01:00 dose can consume the
+ * preceding day's still-unfulfilled plan while travelling.
+ */
+export function plannedMatchDay(takenAt: Date, localDay: string | null): Date {
+  return localDay ? dayAnchor(localDay) : takenAt;
+}
+
+/**
  * Pick the planned dose a log taken at `takenAt` should link to: the earliest
- * still-planned, unlinked slot on the same local day. Mirrors the action's
- * `where: { status: "planned", scheduledAt: { gte, lt }, doseLog: null }`,
+ * still-unfulfilled, unlinked slot on the same local day. A row the Brisbane
+ * cron already marked missed remains reclaimable during a traveller's 02:00
+ * grace window. Mirrors the action's `planned|missed` query.
  * `orderBy: { scheduledAt: "asc" }`. Returns null when nothing matches.
  */
 export function matchPlannedDose(takenAt: Date, slots: PlannableSlot[]): PlannedMatch | null {
@@ -42,7 +53,7 @@ export function matchPlannedDose(takenAt: Date, slots: PlannableSlot[]): Planned
   const eligible = slots
     .filter(
       (s) =>
-        s.status === "planned" &&
+        (s.status === "planned" || s.status === "missed") &&
         !s.hasDoseLog &&
         s.scheduledAt.getTime() >= dayStart.getTime() &&
         s.scheduledAt.getTime() < dayEnd.getTime(),
@@ -51,6 +62,11 @@ export function matchPlannedDose(takenAt: Date, slots: PlannableSlot[]): Planned
   const planned = eligible[0];
   if (!planned) return null;
   return { plannedDoseId: planned.id, scheduledAt: planned.scheduledAt };
+}
+
+/** Status to restore when a linked log is deleted. */
+export function unlinkedPlannedStatus(scheduledAt: Date, now: Date): "planned" | "missed" {
+  return scheduledAt < plannedDayWindow(now).dayStart ? "missed" : "planned";
 }
 
 /** Minimal shape the nearest-slot picker needs from an already-filtered candidate row. */

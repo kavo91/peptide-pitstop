@@ -93,9 +93,9 @@ The motorsport "pit-wall" dark theme ships alongside a clean light theme, and th
 - **Inventory & reorder.** Depletion forecasting (doses remaining / days of supply) and lead-time-aware reorder status so you restock before you run dry.
 
 ### Tracking & insight
-- **Today.** A single screen of what's due and what's been logged today, with one-tap actions. Stays live on its own: the view refreshes when the app returns to the foreground, at local midnight, and when your device's timezone changes.
+- **Today.** A single screen of what's due and what's been logged today, with one-tap actions. Stays live on its own: the view refreshes when the app returns to the foreground, at the phone-local 02:00 tracking-day boundary, and when your device's timezone changes.
 - **Doses timeline.** Week swimlanes, a month calendar, and day detail — with schedule rebasing (log off-schedule and snap the rest of the week back into line) and catch-up rolling for interval protocols.
-- **Timezones & travel.** Every dose freezes its calendar day and timezone at the moment you log it, so a late-evening dose logged while travelling stays on the day you took it — regardless of the server's timezone. All screens anchor to your device's calendar day; reminders and schedule slots stay on the server's timezone.
+- **Timezones & travel.** “Log now” stores the server's authoritative UTC instant while the UI renders the logging phone's local time. Every dose freezes its phone-local tracking day and timezone; 00:00–01:59 remains on the preceding tracking day and 02:00 starts the next one. Reminders and schedule slots stay anchored to the server's configured home timezone.
 - **Bloodwork.** Biomarker panels with trends and a comparison matrix, backed by a curated biomarker library.
 - **Analytics & insights.** Adherence tracking, streaks, heatmaps, and derived insights.
 - **Plasma modelling.** Single-compartment, first-order-elimination plasma-level projections — quiet telemetry for your own regimen — from your dose history and each peptide's half-life (relative units — clearly labelled, not clinical serum levels).
@@ -229,7 +229,7 @@ docker compose up -d --build
 docker compose -f deploy/bundled/docker-compose.yml up -d --build
 ```
 
-Set `TZ` to your home timezone (e.g. `TZ=America/New_York`) — it anchors schedule slots, reminders, and adherence. Which day a dose is *filed under* no longer depends on it: each dose freezes its own day and timezone at log time, and the UI follows your device's calendar day. If you use Garmin sync, make sure `./garmin-tokens` is owned by uid 1001 (the in-container user).
+Set `TZ` to your home timezone (e.g. `TZ=America/New_York`) — it anchors schedule slots and reminders. Which day a dose is *filed under* no longer depends on it: each dose freezes its phone-local tracking day and timezone, with a 02:00 rollover, while elapsed-time calculations retain the authoritative UTC instant. If you use Garmin sync, make sure `./garmin-tokens` is owned by uid 1001 (the in-container user).
 
 ### Cloudflare Tunnel + Access
 
@@ -244,7 +244,7 @@ Set `TZ` to your home timezone (e.g. `TZ=America/New_York`) — it anchors sched
 | `PT_FIELD_KEY` | 32-byte base64 key for AES-256-GCM field encryption |
 | `AUTH_SECRET` | Session signing secret |
 | `DATABASE_URL` | SQLite path (maps to the `/data` volume) |
-| `TZ` | Home timezone — anchors schedule slots, reminders, and adherence (dose-day filing follows your device) |
+| `TZ` | Home timezone — anchors schedule slots and reminders (dose-day filing follows the phone-local 02:00 tracking-day boundary) |
 | `OWNER_EMAIL` | Optional authenticator label for the first-run owner bootstrap (defaults to `owner@example.com`) |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push keys (`npx web-push generate-vapid-keys`) |
 | `PUBLIC_APP_URL` | Absolute app URL used in relayed notification deep-links |
@@ -312,6 +312,7 @@ sqlite3 /path/to/peptides.db \
 ## 📚 Further documentation
 
 - [Dose reminder notifications](docs/ha-reminder-automation.md) — Web Push setup (VAPID + device enrolment) and the optional Home Assistant fallback relay.
+- [Dose timestamps, tracking days, and timezones](docs/tracking-day-timezones.md) — authoritative instants, phone-local display, the 02:00 rollover, manual entries, and offline replay.
 
 > Apple Health is intentionally **not** a built-in integration: HealthKit is device-only and a self-hosted web app cannot write to it.
 

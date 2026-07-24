@@ -55,7 +55,7 @@ async function buildDoses(userId: string): Promise<CsvData> {
   });
   return {
     headers: [
-      "takenAt", "peptide", "route", "doseMcg", "doseInputUnit", "volumeMl", "syringeUnits",
+      "takenAt", "localDay", "tz", "peptide", "route", "doseMcg", "doseInputUnit", "volumeMl", "syringeUnits",
       "injectionSite", "source", "scheduledAt", "deltaMinutes", "notes",
     ],
     // Oral doses have no preparation → name resolves via the protocol; route/site
@@ -63,6 +63,8 @@ async function buildDoses(userId: string): Promise<CsvData> {
     // are injection by definition.
     rows: logs.map((d) => [
       iso(d.takenAt),
+      d.localDay,
+      d.tz,
       d.preparation?.vial?.peptide?.name ?? d.protocol?.peptide?.name ?? null,
       d.route ?? "injection",
       dec(d.doseMcg),

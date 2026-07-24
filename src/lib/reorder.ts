@@ -46,16 +46,16 @@ export async function getReorderStatus(userId: string, now = new Date()): Promis
   // The resolver's phase cursor counts delivered doses, so each protocol needs
   // its full DoseLog history. Loaded once, grouped by protocolId.
   const protocolIds = [...protoByPeptide.values()].map((p) => p.id);
-  const logsByProtocol = new Map<string, { id: string; takenAt: Date }[]>();
+  const logsByProtocol = new Map<string, { id: string; takenAt: Date; localDay: string | null }[]>();
   if (protocolIds.length > 0) {
     const logs = await prisma.doseLog.findMany({
       where: { userId, protocolId: { in: protocolIds } },
-      select: { id: true, takenAt: true, protocolId: true },
+      select: { id: true, takenAt: true, localDay: true, protocolId: true },
     });
     for (const l of logs) {
       if (!l.protocolId) continue;
       const arr = logsByProtocol.get(l.protocolId) ?? [];
-      arr.push({ id: l.id, takenAt: l.takenAt });
+      arr.push({ id: l.id, takenAt: l.takenAt, localDay: l.localDay });
       logsByProtocol.set(l.protocolId, arr);
     }
   }

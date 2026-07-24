@@ -47,16 +47,16 @@ describe("classifyTimeline", () => {
         { date: "2026-06-17", time: "08:00" },
         { date: "2026-06-17", time: "20:00" },
       ])],
-      logs: [{ protocolId: "pr1", peptideId: "p", peptideName: "Tα1", doseLabel: "1.5 mg", dateKey: "2026-06-17", doseLogId: "l1" }],
+      logs: [{ protocolId: "pr1", peptideId: "p", peptideName: "Tα1", doseLabel: "1.5 mg", dateKey: "2026-06-17", doseLogId: "l1", time: "21:03" }],
     });
     // Two entries for the same date
     const dayEntries = out.filter((e) => e.date === "2026-06-17");
     expect(dayEntries).toHaveLength(2);
     const statuses = dayEntries.map((e) => e.status).sort();
     expect(statuses).toEqual(["missed", "taken_ontime"]);
-    // time is preserved on entries
+    // A taken entry shows its actual phone-local time, not the scheduled slot.
     const takenEntry = dayEntries.find((e) => e.status === "taken_ontime")!;
-    expect(["08:00", "20:00"]).toContain(takenEntry.time);
+    expect(takenEntry.time).toBe("21:03");
   });
 
   it("carries time through to the TimelineEntry", () => {

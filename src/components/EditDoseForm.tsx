@@ -8,7 +8,7 @@ import { computeDraw } from "@/lib/dosing/engine";
 import { reconcileDoseEditRemaining } from "@/lib/dosing/recompute";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { editDoseLog } from "@/app/actions/doses";
-import { localDayOf, deviceTimeZone, toDeviceDatetimeLocal } from "@/lib/local-day";
+import { trackingDayOf, deviceTimeZone, toDeviceDatetimeLocal } from "@/lib/local-day";
 import { VisualSyringe } from "./VisualSyringe";
 
 interface SyringeDTO {
@@ -124,7 +124,7 @@ export function EditDoseForm({ dose, prep, syringe, peptideName }: Props) {
       // `when` parses the datetime-local string in the DEVICE zone, so the
       // stamp freezes the day the editor actually typed.
       ...(takenAtTouched
-        ? { takenAtISO: when.toISOString(), localDay: localDayOf(when), tz: deviceTimeZone() ?? undefined }
+        ? { takenAtISO: when.toISOString(), localDay: trackingDayOf(when), tz: deviceTimeZone() ?? undefined }
         : {}),
       injectionSite: site || null,
       notes: notes || null,

@@ -59,7 +59,10 @@ export function classifyTimeline(args: {
       if (log) {
         consumed.add(log.doseLogId);
         entries.push({
-          date, time, protocolId: occ.protocolId, peptideId: occ.peptideId, peptideName: occ.peptideName,
+          // A taken entry displays the ACTUAL phone-local clock stored on the
+          // log, not the scheduled slot clock. The slot still determines its
+          // planned/taken classification.
+          date, time: log.time ?? time, protocolId: occ.protocolId, peptideId: occ.peptideId, peptideName: occ.peptideName,
           stackId: occ.stackId, stackName: occ.stackName,
           doseLabel: occ.doseLabel, status: "taken_ontime", doseLogId: log.doseLogId,
         });

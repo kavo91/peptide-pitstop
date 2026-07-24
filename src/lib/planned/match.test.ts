@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { matchPlannedDose, doseDeltaMinutes, plannedDayWindow, pickNearestPlanned, type PlannableSlot } from "./match";
+import {
+  matchPlannedDose,
+  doseDeltaMinutes,
+  plannedDayWindow,
+  plannedMatchDay,
+  pickNearestPlanned,
+  unlinkedPlannedStatus,
+  type PlannableSlot,
+} from "./match";
 
 /** Midnight-local Date from YYYY-MM-DD (avoids UTC-offset skew). */
 const d = (s: string): Date => new Date(s + "T00:00:00");
@@ -36,9 +44,14 @@ describe("matchPlannedDose", () => {
     expect(m).toBeNull();
   });
 
-  it("ignores non-planned slots (taken/missed/skipped)", () => {
+  it("reclaims an unlinked row the cron already marked missed", () => {
     const m = matchPlannedDose(dt("2026-06-22T09:00:00"), [slot({ id: "missed", status: "missed" })]);
-    expect(m).toBeNull();
+    expect(m?.plannedDoseId).toBe("missed");
+  });
+
+  it("ignores taken and skipped rows", () => {
+    expect(matchPlannedDose(dt("2026-06-22T09:00:00"), [slot({ status: "taken" })])).toBeNull();
+    expect(matchPlannedDose(dt("2026-06-22T09:00:00"), [slot({ status: "skipped" })])).toBeNull();
   });
 
   it("ignores slots on a different day", () => {
@@ -92,6 +105,19 @@ describe("plannedDayWindow", () => {
     expect(dayStart).toEqual(d("2026-06-22"));
     expect(dayEnd).toEqual(d("2026-06-23"));
   });
+
+  it("uses the frozen tracking day instead of takenAt's runtime day", () => {
+    const takenAt = dt("2026-07-24T15:03:00");
+    const reference = plannedMatchDay(takenAt, "2026-07-23");
+    const { dayStart, dayEnd } = plannedDayWindow(reference);
+    expect(dayStart).toEqual(d("2026-07-23"));
+    expect(dayEnd).toEqual(d("2026-07-24"));
+  });
+
+  it("falls back to the actual instant for legacy unstamped logs", () => {
+    const takenAt = dt("2026-07-24T15:03:00");
+    expect(plannedMatchDay(takenAt, null)).toBe(takenAt);
+  });
 });
 
 describe("doseDeltaMinutes", () => {
@@ -102,5 +128,18 @@ describe("doseDeltaMinutes", () => {
 
   it("returns null when there is no scheduled time", () => {
     expect(doseDeltaMinutes(dt("2026-06-22T09:30:00"), null)).toBeNull();
+  });
+});
+
+describe("unlinkedPlannedStatus", () => {
+  const now = dt("2026-07-24T15:00:00");
+
+  it("restores a past row to missed", () => {
+    expect(unlinkedPlannedStatus(dt("2026-07-23T12:00:00"), now)).toBe("missed");
+  });
+
+  it("restores a current/future row to planned", () => {
+    expect(unlinkedPlannedStatus(dt("2026-07-24T00:00:00"), now)).toBe("planned");
+    expect(unlinkedPlannedStatus(dt("2026-07-25T00:00:00"), now)).toBe("planned");
   });
 });

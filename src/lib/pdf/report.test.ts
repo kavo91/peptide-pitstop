@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { buildReportPdf, summariseSideEffects, safe, buildLabComparison, type ReportData, type ReportLabPanel } from "./report";
+import {
+  buildReportPdf,
+  formatDoseDateTime,
+  summariseSideEffects,
+  safe,
+  buildLabComparison,
+  type ReportData,
+  type ReportLabPanel,
+} from "./report";
 
 const PDF_MAGIC = "%PDF";
 
@@ -15,6 +23,7 @@ function sampleData(): ReportData {
     doses: [
       {
         takenAt: d("2026-06-20T07:30:00"),
+        tz: "Australia/Brisbane",
         peptide: "BPC-157",
         doseValue: "250",
         doseUnit: "mcg",
@@ -23,6 +32,7 @@ function sampleData(): ReportData {
       },
       {
         takenAt: d("2026-06-21T07:00:00"),
+        tz: null,
         peptide: "TB-500",
         doseValue: "2",
         doseUnit: "mg",
@@ -88,6 +98,15 @@ describe("buildReportPdf", () => {
     const buf = await buildReportPdf(emptyData());
     expect(buf.length).toBeGreaterThan(0);
     expect(buf.subarray(0, 4).toString("ascii")).toBe(PDF_MAGIC);
+  });
+});
+
+describe("formatDoseDateTime", () => {
+  it("renders a UTC baseline instant in the logging phone timezone", () => {
+    expect(formatDoseDateTime(
+      new Date("2026-07-24T05:03:00Z"),
+      "America/Santiago",
+    )).toBe("2026-07-24 01:03");
   });
 });
 

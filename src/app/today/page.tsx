@@ -47,7 +47,7 @@ export default async function TodayPage({
   const isToday = viewKey === todayKey;
 
   const [due, logged] = await Promise.all([
-    getTodayDoses(user.id, viewDate),
+    getTodayDoses(user.id, viewDate, isToday ? new Date() : viewDate),
     getLoggedToday(user.id, viewDate),
   ]);
 

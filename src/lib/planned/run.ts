@@ -32,18 +32,19 @@ export async function runPlannedDoseGeneration(userId: string): Promise<{
     include: { steps: true },
   });
 
-  // Load this user's FULL delivered DoseLog history (id + takenAt only) so the
+  // Load this user's FULL delivered DoseLog history so the
   // materializer can drive the titration phase cursor per protocol. One query,
   // grouped in memory — the phase cursor counts delivered doses, so it needs the
-  // whole history, not just the horizon. Logs with no protocol are skipped.
+  // whole history, not just the horizon. localDay preserves the phone tracking
+  // day for after-midnight travel doses. Logs with no protocol are skipped.
   const allLogs = await prisma.doseLog.findMany({
     where: { userId, protocolId: { not: null } },
-    select: { id: true, takenAt: true, protocolId: true },
+    select: { id: true, takenAt: true, localDay: true, protocolId: true },
   });
-  const logsByProtocol = new Map<string, { id: string; takenAt: Date }[]>();
+  const logsByProtocol = new Map<string, { id: string; takenAt: Date; localDay: string | null }[]>();
   for (const l of allLogs) {
     const list = logsByProtocol.get(l.protocolId!) ?? [];
-    list.push({ id: l.id, takenAt: l.takenAt });
+    list.push({ id: l.id, takenAt: l.takenAt, localDay: l.localDay });
     logsByProtocol.set(l.protocolId!, list);
   }
 

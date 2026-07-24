@@ -1,5 +1,6 @@
 import { parseSchedule, slotsInRange } from "@/lib/schedule/entries";
 import { startOfDay } from "@/lib/schedule/schedule";
+import { dayAnchor } from "@/lib/tz-day";
 
 export interface CompletionProtocolInput {
   id: string;
@@ -7,7 +8,7 @@ export interface CompletionProtocolInput {
   scheduleRule: string | null;
   startDate: Date | null;
   endDate: Date | null;
-  deliveredLogs: { takenAt: Date | string }[];
+  deliveredLogs: { takenAt: Date | string; localDay?: string | null }[];
 }
 
 /**
@@ -34,7 +35,9 @@ export function protocolShouldAutoComplete(protocol: CompletionProtocolInput, to
   );
   if (slots.length === 0) return todayDay >= endDay;
 
-  const deliveredDays = new Set(protocol.deliveredLogs.map((l) => startOfDay(new Date(l.takenAt)).getTime()));
+  const deliveredDays = new Set(protocol.deliveredLogs.map((l) =>
+    startOfDay(l.localDay ? dayAnchor(l.localDay) : new Date(l.takenAt)).getTime()
+  ));
   const remaining = slots.some((slot) => {
     const day = startOfDay(slot.date);
     return day >= todayDay && !deliveredDays.has(day.getTime());

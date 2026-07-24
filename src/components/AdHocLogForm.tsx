@@ -11,7 +11,7 @@ import type { ProtocolDoseOption } from "@/lib/log/protocol-options";
 import { logDose } from "@/app/actions/doses";
 import { enqueue } from "@/lib/offline/outbox";
 import { safeUuid } from "@/lib/uuid";
-import { localDayOf, deviceTimeZone } from "@/lib/local-day";
+import { trackingDayOf, deviceTimeZone } from "@/lib/local-day";
 import { VisualSyringe } from "./VisualSyringe";
 import { RebasePrompt } from "./RebasePrompt";
 import { TitrationAdvancePrompt } from "./TitrationAdvancePrompt";
@@ -193,7 +193,8 @@ export function AdHocLogForm({
     setError(null);
 
     const uuid = safeUuid();
-    const logTime = takenAtTouched ? new Date(takenAt) : new Date();
+    const logNow = !takenAtTouched;
+    const logTime = logNow ? new Date() : new Date(takenAt);
     const input = {
       preparationId: opt.preparation.id,
       syringeId: syr.id,
@@ -202,8 +203,9 @@ export function AdHocLogForm({
       injectionSite: site || undefined,
       notes: notes || undefined,
       takenAtISO: logTime.toISOString(),
-      // Freeze the device's calendar day + zone (see LogDoseForm).
-      localDay: localDayOf(logTime),
+      useServerTime: logNow,
+      // Freeze the device's 02:00-rollover tracking day + zone (see LogDoseForm).
+      localDay: trackingDayOf(logTime),
       tz: deviceTimeZone() ?? undefined,
       clientUuid: uuid,
     };
@@ -213,7 +215,7 @@ export function AdHocLogForm({
       res = await logDose(input);
     } catch {
       // Network failure or offline — enqueue for replay when reconnected.
-      await enqueue({ ...input, clientUuid: uuid });
+      await enqueue({ ...input, useServerTime: false, clientUuid: uuid });
       setBusy(false);
       setDone(true); // optimistic: show success; outbox syncs on reconnect
       return;

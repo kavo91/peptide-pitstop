@@ -10,7 +10,7 @@ import { vialLabelStrengthMg, perInjectionMcg, DAILY_SCHEDULE_RULE } from "@/lib
 import { normaliseScheduleRule } from "@/lib/schedule/normalise";
 import { encryptField } from "@/lib/crypto/fieldEncryption";
 import { getTodayDoses } from "@/lib/today";
-import { sanitizeLocalDayTz, dayAnchor } from "@/lib/tz-day";
+import { resolveTrackingDayStamp, dayAnchor } from "@/lib/tz-day";
 import { runPlannedDoseGeneration } from "@/lib/planned/run";
 import { peptideTokens } from "@/lib/stacks/server";
 import { logDose } from "./doses";
@@ -223,14 +223,15 @@ export async function logStack(stackId: string, stamp?: { localDay?: string; tz?
   // action (runtime day) disagree for ~14 h/day while travelling: the due
   // check would refuse a legitimately shown stack, and the dedup window would
   // let a second tap double-log across the runtime midnight.
-  const { localDay: stampDay, tz: stampTz } = sanitizeLocalDayTz(stamp ?? {}, new Date());
-  const dayRef = stampDay ? dayAnchor(stampDay) : new Date();
+  const loggedAt = new Date();
+  const { localDay: stampDay, tz: stampTz } = resolveTrackingDayStamp(stamp ?? {}, loggedAt);
+  const dayRef = stampDay ? dayAnchor(stampDay) : loggedAt;
 
   // Only log components actually DUE today — reuse the same authority that
   // drives the today view (getTodayDoses applies the start/end window, the
   // schedule, and override rebasing). A component whose protocol has not started
   // or is not scheduled for today is skipped, never logged.
-  const dueProtocolIds = new Set((await getTodayDoses(user.id, dayRef)).map((d) => d.protocolId));
+  const dueProtocolIds = new Set((await getTodayDoses(user.id, dayRef, loggedAt)).map((d) => d.protocolId));
 
   // Stack components are premixed injections, so every logDose call needs a
   // syringe (logDose returns ok:false without one). Resolve the user's default
@@ -291,6 +292,7 @@ export async function logStack(stackId: string, stamp?: { localDay?: string; tz?
       // re-validates against its own takenAt).
       localDay: stampDay ?? undefined,
       tz: stampTz ?? undefined,
+      takenAtISO: loggedAt.toISOString(),
       clientUuid: `stack-${stackId}-${p.id}-${dayKey}`,
     });
     if (res.ok) logged++;

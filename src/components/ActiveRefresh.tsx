@@ -10,7 +10,7 @@
  * Three triggers re-render the server tree here:
  *   1. App comes to the foreground (visibilitychange→visible / window focus),
  *      throttled so rapid app-switching doesn't hammer the server.
- *   2. The device-local calendar day rolls over while the app sits open
+ *   2. The device-local tracking day rolls over at 02:00 while the app sits open
  *      (minute tick) — otherwise the Today list still shows yesterday.
  *   3. The device timezone CHANGES (travel): the pt_tz cookie is re-mirrored
  *      and the tree refreshed so day-keyed pages re-anchor immediately.
@@ -23,7 +23,7 @@
  */
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { localDayOf, deviceTimeZone } from "@/lib/local-day";
+import { trackingDayOf, deviceTimeZone } from "@/lib/local-day";
 import { shouldRefreshOnActive, dayRolled } from "@/lib/active-refresh";
 import { TZ_COOKIE } from "@/lib/tz-cookie";
 
@@ -45,13 +45,13 @@ export function ActiveRefresh({ serverDayKey }: {
   useEffect(() => {
     let lastRefresh = Date.now();
     // What the server actually rendered — NOT the mount-time device day. A
-    // load spanning local midnight, or a no-cookie render abroad, makes the
+    // load spanning the 02:00 tracking boundary, or a no-cookie render abroad, makes the
     // two differ, and the mount check below corrects both immediately.
     let renderedDay = serverDayKey;
 
     const refresh = () => {
       lastRefresh = Date.now();
-      renderedDay = localDayOf(new Date());
+      renderedDay = trackingDayOf(new Date());
       router.refresh();
     };
 
@@ -76,7 +76,7 @@ export function ActiveRefresh({ serverDayKey }: {
       // stale form prefills and a frozen outbox pipeline (a Sunday dose once
       // filed onto Saturday exactly this way). Remounting everything is the
       // only reliable reset at a day boundary.
-      if (dayRolled(renderedDay, localDayOf(new Date()))) {
+      if (dayRolled(renderedDay, trackingDayOf(new Date()))) {
         window.location.reload();
         return;
       }
@@ -89,18 +89,18 @@ export function ActiveRefresh({ serverDayKey }: {
       if (document.visibilityState === "visible") onActive();
     };
 
-    // Minute tick: catch the local-midnight rollover while the app stays
+    // Minute tick: catch the phone-local 02:00 tracking-day rollover while the app stays
     // foregrounded (the visibility/focus listeners only fire on re-entry).
     // Same full-reload rationale as onActive.
     const tick = window.setInterval(() => {
-      if (document.visibilityState === "visible" && dayRolled(renderedDay, localDayOf(new Date()))) window.location.reload();
+      if (document.visibilityState === "visible" && dayRolled(renderedDay, trackingDayOf(new Date()))) window.location.reload();
     }, 60_000);
 
     // Mount: mirror the zone, then correct a wrong-day first paint — either
     // the cookie was absent/stale (server rendered its own day abroad) or the
-    // page load spanned local midnight.
+    // page load spanned the phone-local 02:00 boundary.
     const tzChangedOnMount = syncTz();
-    if (tzChangedOnMount || dayRolled(renderedDay, localDayOf(new Date()))) refresh();
+    if (tzChangedOnMount || dayRolled(renderedDay, trackingDayOf(new Date()))) refresh();
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("focus", onActive);
     return () => {

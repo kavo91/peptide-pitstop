@@ -10,6 +10,13 @@
 export const LOCAL_DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
+ * Peptide Pitstop's tracking day rolls at 02:00, not midnight. This gives
+ * late-night doses a two-hour phone-local grace period: 00:00–01:59 belongs
+ * to the preceding tracking day; 02:00 starts the new one.
+ */
+export const TRACKING_DAY_ROLLOVER_HOUR = 2;
+
+/**
  * True when `tz` is an IANA zone the runtime's Intl accepts. The pre-check
  * regex bounds length/charset so an arbitrary cookie value can't reach Intl
  * with junk (Intl throws RangeError on unknown zones — caught here).
@@ -42,6 +49,23 @@ export function timeInTz(d: Date, tz: string): string {
     minute: "2-digit",
     hourCycle: "h23",
   }).format(d);
+}
+
+/** The ISO calendar day immediately before `key`. */
+export function previousDayKey(key: string): string {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day - 1)).toISOString().slice(0, 10);
+}
+
+/**
+ * Tracking-day key for instant `d` in the PHONE's IANA timezone. The instant
+ * remains unchanged; only its day bucket rolls back during the 00:00–01:59
+ * grace period.
+ */
+export function trackingDayKeyInTz(d: Date, tz: string): string {
+  const calendarDay = dayKeyInTz(d, tz);
+  const rollover = `${String(TRACKING_DAY_ROLLOVER_HOUR).padStart(2, "0")}:00`;
+  return timeInTz(d, tz) < rollover ? previousDayKey(calendarDay) : calendarDay;
 }
 
 /**
@@ -101,6 +125,28 @@ export function sanitizeLocalDayTz(
     if (!plausible) localDay = null;
   }
   return { localDay, tz };
+}
+
+/**
+ * Resolve the authoritative tracking-day stamp for a dose write. A valid
+ * phone timezone wins: the server derives the day from the real takenAt
+ * instant and the shared 02:00 rule instead of trusting a possibly stale
+ * client day. Legacy clients without a usable timezone retain the sanitized
+ * localDay fallback.
+ */
+export function resolveTrackingDayStamp(
+  input: { localDay?: unknown; tz?: unknown },
+  takenAt: Date,
+): {
+  localDay: string | null;
+  tz: string | null;
+} {
+  const sanitized = sanitizeLocalDayTz(input, takenAt);
+  if (!sanitized.tz || Number.isNaN(takenAt.getTime())) return sanitized;
+  return {
+    localDay: trackingDayKeyInTz(takenAt, sanitized.tz),
+    tz: sanitized.tz,
+  };
 }
 
 /**

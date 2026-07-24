@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import Decimal from "decimal.js";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { editDoseLog } from "@/app/actions/doses";
-import { localDayOf, deviceTimeZone, toDeviceDatetimeLocal } from "@/lib/local-day";
+import { trackingDayOf, deviceTimeZone, toDeviceDatetimeLocal } from "@/lib/local-day";
 
 interface Props {
   dose: {
@@ -67,7 +67,7 @@ export function OralEditDoseForm({ dose, peptideName }: Props) {
       doseValue,
       doseUnit,
       ...(takenAtTouched
-        ? { takenAtISO: when.toISOString(), localDay: localDayOf(when), tz: deviceTimeZone() ?? undefined }
+        ? { takenAtISO: when.toISOString(), localDay: trackingDayOf(when), tz: deviceTimeZone() ?? undefined }
         : {}),
       notes: notes || null,
     });
