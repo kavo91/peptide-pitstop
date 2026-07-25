@@ -4,4 +4,4 @@
  * sync with package.json's "version" (display form may omit the patch, e.g.
  * package 1.0.0 → display "1.0").
  */
-export const APP_VERSION = "1.3.2";
+export const APP_VERSION = "1.3.3";

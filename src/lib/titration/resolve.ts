@@ -1,5 +1,6 @@
 import { parseSchedule, slotsInRange, weeklyDays, type DatedSlot } from "../schedule/entries";
 import { startOfDay, addDays } from "../schedule/schedule";
+import { dayAnchor } from "../tz-day";
 import { perInjectionDose } from "./dose-basis";
 import { phaseTargets, activePhaseAt } from "./phase";
 import { reconstructRebasedSlots } from "./rebase-slots";
@@ -40,7 +41,13 @@ export function resolveTitration(inp: ResolveInput): ResolveResult {
       const out: DatedSlot[] = [];
       for (const [k, wkSlots] of byWeek) {
         const ws = new Date(k);
-        const deliveredInWeek = inp.delivered.filter((dz) => weekKey(dz.takenAt) === k);
+        // Bucket by the FROZEN tracking day, matching both the on-grid test in
+        // reconstructRebasedSlots and the slot matcher below. Bucketing by the raw
+        // instant puts a dose logged while travelling in the wrong week and hands the
+        // reconstructor a dose it will treat as off-grid. Legacy rows keep the instant.
+        const deliveredInWeek = inp.delivered.filter(
+          (dz) => weekKey(dz.localDay ? dayAnchor(dz.localDay) : dz.takenAt) === k,
+        );
         out.push(...reconstructRebasedSlots({
           weekSlots: wkSlots, weekStart: ws, plannedDays: pdays,
           rebaseMode: inp.rebaseMode, freq: "WEEKLY", delivered: deliveredInWeek,

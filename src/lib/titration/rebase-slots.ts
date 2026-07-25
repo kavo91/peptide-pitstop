@@ -2,6 +2,7 @@ import type { DatedSlot } from "../schedule/entries";
 import type { WeekdayCode } from "../schedule/schedule";
 import { rebaseWeek } from "../schedule/rebase";
 import { WEEKDAYS, addDays, startOfDay } from "../schedule/schedule";
+import { dayAnchor } from "../tz-day";
 
 export interface ReconstructArgs {
   weekSlots: DatedSlot[];           // this week's standing-grid slots
@@ -9,7 +10,15 @@ export interface ReconstructArgs {
   plannedDays: WeekdayCode[];
   rebaseMode: "fixed_anchor" | "rolling";
   freq: "DAILY" | "WEEKLY";
-  delivered: { id: string; takenAt: Date }[];
+  /**
+   * `localDay` is the tracking day FROZEN on the device that logged the dose.
+   * It must drive the on-grid test: a dose logged while travelling can sit on a
+   * different runtime-TZ calendar day than the day it belongs to, and judging
+   * "off-grid" by the raw instant makes an on-grid dose trigger a rebase that
+   * DELETES the very slot it should have filled. Falls back to the instant for
+   * legacy rows logged before day-stamping existed.
+   */
+  delivered: { id: string; takenAt: Date; localDay?: string | null }[];
   /** Inclusive protocol end date. Rebased display slots must not cross it. */
   endDate?: Date | null;
 }
@@ -43,11 +52,28 @@ export function reconstructRebasedSlots(args: ReconstructArgs): DatedSlot[] {
   // or time-edited dose breaks insertion order), and anchoring off the wrong dose
   // re-creates the garbled week this function exists to prevent.
   const delivered = [...args.delivered].sort((a, b) => a.takenAt.getTime() - b.takenAt.getTime());
+  const doseDay = (dz: { takenAt: Date; localDay?: string | null }) =>
+    dz.localDay ? startOfDay(dayAnchor(dz.localDay)) : startOfDay(dz.takenAt);
+
+  // A grid day that ALREADY has its own delivered dose is satisfied and cannot be
+  // re-anchored: taking it as the anchor drops it (and every later grid day), so the
+  // dose sitting on it loses its slot. Example — a five-day weekly grid dosed on all
+  // five days plus one extra off-grid day: the extra dose would anchor on its nearest
+  // grid neighbour and wipe that day's dose plus everything after it.
+  const satisfied = new Set(delivered.map((dz) => doseDay(dz).getTime()));
+  const anchorable = grid.filter((g) => !satisfied.has(g.getTime()));
+
   for (const dose of delivered) {
-    const actual = startOfDay(dose.takenAt);
-    const nearest = grid.reduce((best, dte) =>
-      Math.abs(dte.getTime() - actual.getTime()) < Math.abs(best.getTime() - actual.getTime()) ? dte : best, grid[0]);
-    if (nearest.getTime() === actual.getTime()) continue; // on grid — nothing to do
+    const actual = doseDay(dose);
+    // When every grid day is already dosed there is nothing to re-anchor onto: keep
+    // the plain grid and let the genuinely extra dose render as off-schedule.
+    if (anchorable.length === 0) break;
+    const nearest = anchorable.reduce((best, dte) =>
+      Math.abs(dte.getTime() - actual.getTime()) < Math.abs(best.getTime() - actual.getTime()) ? dte : best, anchorable[0]);
+    // Membership of the FULL grid, not equality with `nearest`: `nearest` comes from
+    // the filtered candidate list, so an on-grid dose would never match it and would
+    // falsely trigger a rebase.
+    if (grid.some((g) => g.getTime() === actual.getTime())) continue; // on grid — nothing to do
 
     // Slide the grid days AFTER the satisfied slot. weekStart as `today` so NO
     // in-week day is filtered out (this is a full-week reconstruction, not the
