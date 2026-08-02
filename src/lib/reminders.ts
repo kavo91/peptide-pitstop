@@ -27,6 +27,13 @@
  * TZ: the container's TZ env must be YOUR local zone so Date maths is local.
  */
 
+// The ONLY static import here, and deliberately so: the pure planner must stay
+// free of the impure deps (prisma / today / push), which is why the impure half
+// below uses dynamic `await import`. `tz-day` is pure Intl arithmetic with no
+// imports and no side effects of its own, so pulling it in statically costs a
+// consumer of the planner nothing.
+import { isValidTimeZone, timeInTz } from "./tz-day";
+
 // ── Tuning ───────────────────────────────────────────────────────────────────
 //
 // An event is eligible from `GRACE` minutes before to `LOOKAHEAD` minutes after
@@ -55,6 +62,14 @@ export interface ReminderOptions {
   untimedTime?: string;
   /** "HH:MM" nag anchor, or null to disable the nag. Default NAG_TIME. */
   nagTime?: string | null;
+  /**
+   * IANA zone of the device the user is actually carrying, when it differs from
+   * the runtime zone. Reminder TIMING stays anchored to the runtime zone (the
+   * schedule grid is defined there); this only makes the notification TEXT
+   * honest, so a push that lands at 07:00 on a travelling phone stops claiming
+   * "21:00" with no explanation. Null/absent/equal-to-runtime → the bare time.
+   */
+  viewerTz?: string | null;
 }
 
 /** Well-formed 24h "HH:MM"? (Settings validates too — this is the belt-and-braces.) */
@@ -95,6 +110,52 @@ export interface ReminderEvent {
  * PURE — the local instant an event anchors to, on `day`'s date:
  * a slot's own time, or the untimed anchor (default UNTIMED_REMINDER_TIME).
  */
+/**
+ * PURE — how a slot's time is written in a notification. Schedule time, plus the
+ * same instant on the user's own device clock when they differ:
+ * `"21:00 (07:00 your time)"`. Without this a reminder fired at 21:00 runtime
+ * time reaches a UTC−4 phone at 07:00 while insisting it is "Scheduled for
+ * 21:00". Falls back to the bare time when the zone is absent, invalid, or
+ * agrees with the runtime zone — so a user at home sees no change at all.
+ */
+export function slotTimeLabel(
+  day: Date,
+  time: string,
+  viewerTz: string | null | undefined,
+  untimedTime: string = UNTIMED_REMINDER_TIME,
+): string {
+  const local = deviceTime(day, time, viewerTz, untimedTime);
+  return local === null ? time : `${time} (${local} your time)`;
+}
+
+/**
+ * PURE — compact form for the nag's summary list, which already wraps the time in
+ * its own parentheses: `"Peptide A (04:00 your time)"`. Nesting the two-clock
+ * label there would read `"Peptide A (18:00 (04:00 your time))"`, so when the
+ * zones differ the device clock alone wins — it is the one matching the phone.
+ */
+export function slotTimeCompact(
+  day: Date,
+  time: string,
+  viewerTz: string | null | undefined,
+  untimedTime: string = UNTIMED_REMINDER_TIME,
+): string {
+  const local = deviceTime(day, time, viewerTz, untimedTime);
+  return local === null ? time : `${local} your time`;
+}
+
+/** The slot's instant on the device clock, or null when that adds nothing. */
+function deviceTime(
+  day: Date,
+  time: string,
+  viewerTz: string | null | undefined,
+  untimedTime: string,
+): string | null {
+  if (!viewerTz || !isValidTimeZone(viewerTz)) return null;
+  const local = timeInTz(reminderMoment(day, time, untimedTime), viewerTz);
+  return local === time ? null : local;
+}
+
 export function reminderMoment(day: Date, time: string | null, untimedTime: string = UNTIMED_REMINDER_TIME): Date {
   const anchor = time ?? (validTime(untimedTime) ? untimedTime : UNTIMED_REMINDER_TIME);
   const [h, m] = anchor.split(":").map(Number);
@@ -143,7 +204,9 @@ export function buildReminderEvents(
     events.push({
       key,
       title: `💉 ${d.peptideName} due`,
-      body: d.time ? `Scheduled for ${d.time}.` : "Daily dose — not logged yet today.",
+      body: d.time
+        ? `Scheduled for ${slotTimeLabel(now, d.time, opts.viewerTz, untimedTime)}.`
+        : "Daily dose — not logged yet today.",
       tag: `peptide-${d.protocolId}`,
       url: "/today",
     });
@@ -163,7 +226,9 @@ export function buildReminderEvents(
       if (reminderMoment(now, d.time, untimedTime).getTime() > now.getTime()) continue; // future slot — reminded later
       if (pendingProtocols.has(d.protocolId)) continue;
       pendingProtocols.add(d.protocolId);
-      labels.push(d.time ? `${d.peptideName} (${d.time})` : d.peptideName);
+      labels.push(
+        d.time ? `${d.peptideName} (${slotTimeCompact(now, d.time, opts.viewerTz, untimedTime)})` : d.peptideName,
+      );
     }
     if (labels.length > 0) {
       events.push({
@@ -256,9 +321,29 @@ export async function sendDueReminders(
     where: { id: userId },
     select: { untimedReminderTime: true, nagTime: true, nagEnabled: true },
   });
+  // Best available signal for which zone the user's phone is in: the tz frozen on
+  // their most recent dose. There is no User.timezone column, and a cron tick has
+  // no viewer cookie to read — but every dose stamps its logging device's zone,
+  // so the newest stamp tracks travel on its own. Notification TEXT only;
+  // reminder timing stays anchored to the runtime zone.
+  //
+  // Cosmetic — it must NEVER be able to stop a dose reminder going out, so a
+  // failure here degrades to the bare schedule time rather than throwing the tick.
+  let viewerTz: string | null = null;
+  try {
+    const lastStamped = await prisma.doseLog.findFirst({
+      where: { userId, tz: { not: null } },
+      orderBy: { takenAt: "desc" },
+      select: { tz: true },
+    });
+    viewerTz = lastStamped?.tz ?? null;
+  } catch {
+    viewerTz = null;
+  }
   const events = buildReminderEvents(await getTodayDoses(userId, now), now, lookaheadMinutes, {
     untimedTime: prefs?.untimedReminderTime,
     nagTime: prefs && !prefs.nagEnabled ? null : prefs?.nagTime,
+    viewerTz,
   });
   if (events.length === 0) return 0;
 

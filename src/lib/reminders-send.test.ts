@@ -25,12 +25,15 @@ const h = vi.hoisted(() => ({
   getTodayDoses: vi.fn(),
   webPushAvailable: vi.fn(),
   sendWebPush: vi.fn(),
+  doseFindFirst: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findUnique: h.findUnique },
     reminderSend: { create: h.create, update: h.update, delete: h.del },
+    // Device-zone lookup for notification TEXT. Default: no stamped dose.
+    doseLog: { findFirst: h.doseFindFirst },
   },
 }));
 vi.mock("@/lib/push", () => ({
@@ -49,6 +52,7 @@ describe("sendDueReminders — channel ledger + claim release", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     h.findUnique.mockResolvedValue(null); // default reminder anchors
+    h.doseFindFirst.mockResolvedValue(null); // no stamped device zone by default
     h.getTodayDoses.mockResolvedValue(DUE);
     h.create.mockResolvedValue({ id: "claim1" });
     h.update.mockResolvedValue({});
