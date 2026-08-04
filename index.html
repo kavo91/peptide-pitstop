@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Self-Hosted Peptide Tracker, Open Source · Peptide Pitstop</title>
 <meta name="description" content="Free, open-source, self-hosted peptide & GLP-1 tracker. Reconstitution math, dose logging, titration stacks, bloodwork, plasma modelling. One Docker container, no telemetry." />
 <meta property="og:title" content="Peptide Pitstop — Free, self-hosted peptide & GLP-1 tracker" />
@@ -36,7 +36,7 @@
   "applicationSubCategory": "Self-hosted peptide & GLP-1 therapy tracker",
   "operatingSystem": "Web browser (Chrome, Firefox, Safari, Edge); self-hosted via Docker on Linux, Windows, macOS",
   "browserRequirements": "Requires JavaScript. Modern browser. Installable as a PWA.",
-  "softwareVersion": "1.0",
+  "softwareVersion": "1.3.4",
   "isAccessibleForFree": true,
   "license": "https://github.com/kavo91/peptide-pitstop/blob/main/LICENSE",
   "downloadUrl": "https://github.com/kavo91/peptide-pitstop",
@@ -92,10 +92,14 @@
   ]
 }
 </script>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Teko:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+<!-- Fonts are genuinely self-hosted: no preconnect, no CDN, no third-party request. -->
 <style>
+  @font-face{
+    font-family:'Teko';
+    src:url('assets/fonts/Teko.ttf') format('truetype');
+    font-weight:500 700; font-display:swap;
+  }
   :root{
     --bg:#121211; --bg2:#0c0c0b; --surface:#1b1b19; --surface2:#222220;
     --line:rgba(255,255,255,.08); --ink:#ededeb; --muted:#9b9b95;
@@ -105,17 +109,18 @@
   html{scroll-behavior:smooth}
   body{
     margin:0; background:var(--bg); color:var(--ink);
-    font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif; line-height:1.6;
+    font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; line-height:1.6;
     background-image:radial-gradient(circle, rgba(255,255,255,.045) 1px, transparent 1px);
     background-size:18px 18px;
   }
   a{color:var(--accent2); text-decoration:none}
   a:hover{text-decoration:underline}
   .wrap{max-width:1100px; margin:0 auto; padding:0 24px}
-  .teko{font-family:Teko,Inter,sans-serif; font-weight:600; letter-spacing:.5px; line-height:.95; text-transform:uppercase}
+  .teko{font-family:Teko,system-ui,sans-serif; font-weight:600; letter-spacing:.5px; line-height:.95; text-transform:uppercase}
   .slash{color:var(--accent)}
-  /* nav */
-  header.nav{position:sticky; top:0; z-index:10; backdrop-filter:blur(8px);
+
+  /* ---------- nav (unchanged from the live site) ---------- */
+  header.nav{position:sticky; top:0; z-index:30; backdrop-filter:blur(8px);
     background:rgba(18,18,17,.72); border-bottom:1px solid var(--line)}
   .nav .wrap{display:flex; align-items:center; gap:14px; height:60px}
   .logo{display:flex; align-items:center; gap:10px; font-family:Teko; font-size:26px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; color:var(--ink)}
@@ -129,46 +134,143 @@
   .btn.primary{background:var(--accent); color:#140a04; border-color:var(--accent)}
   .btn.primary:hover{background:var(--accent2)}
   .btn.coffee{background:#ffdd00; color:#171000; border-color:#ffdd00}
-  /* hero */
-  .hero{padding:64px 0 28px; text-align:center}
-  .hero h1{font-size:clamp(54px,11vw,128px); margin:0}
+
+  /* ---------- flythrough spine ---------- */
+  .spine{position:relative}
+  .stage{position:sticky; top:0; height:100svh; overflow:hidden; background:var(--bg2)}
+  .stage video, .stage .posterfall{
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; display:block;
+  }
+  /* must match the specificity of the `.stage .posterfall` rule above, or the
+     still sits on top of the video and the flight looks frozen */
+  .stage .posterfall{display:none}
+  /* vignette keeps Teko legible over the brightest orange spill */
+  .stage::after{content:''; position:absolute; inset:0; pointer-events:none;
+    background:radial-gradient(120% 80% at 50% 45%, transparent 40%, rgba(9,9,8,.55) 100%),
+               linear-gradient(180deg, rgba(9,9,8,.55) 0%, transparent 22%, transparent 62%, rgba(9,9,8,.72) 100%)}
+
+  .panels{position:absolute; inset:0; z-index:2; pointer-events:none}
+  .panel{
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center;
+    padding:0 24px; opacity:0; transform:translateY(18px);
+    transition:opacity .45s ease, transform .45s ease;
+  }
+  .panel.on{opacity:1; transform:none}
+  /* soft scrim directly behind the copy — the garage set itself carries orange
+     signage and trace panels, which otherwise ghost through the headline */
+  .panel::before{content:''; position:absolute; inset:0; z-index:-1; pointer-events:none;
+    background:radial-gradient(58% 44% at 50% 50%, rgba(8,8,7,.82) 0%, rgba(8,8,7,.62) 45%, transparent 75%)}
+  .panel > *{max-width:820px; pointer-events:auto; position:relative}
+  .panel h1,.panel h2{text-shadow:0 4px 30px rgba(0,0,0,.85), 0 1px 3px rgba(0,0,0,.6)}
+  /* real product UI shown DURING the flight, so the screens aren't buried
+     behind the whole cinematic */
+  .panel.split{flex-direction:row; gap:44px; text-align:left; max-width:none;
+    align-items:center; justify-content:center; padding:0 48px}
+  .panel.split .copy{max-width:520px; flex:0 1 520px; min-width:0}
+  .panel.split .copy p{margin-left:0; margin-right:0}
+  .panel.split .ui{flex:0 1 560px; max-width:560px; min-width:0}
+  /* the global .panel h2 clamp tops out at 58px, which cannot fit a two-word
+     Teko heading in a ~520px column — size split headings to their own column,
+     and let long words break rather than overflow under the screenshot */
+  .panel.split h2{font-size:clamp(30px,2.6vw,44px); overflow-wrap:break-word; hyphens:auto}
+  .panel.split .copy .eyebrow{margin-bottom:2px}
+  /* the centre-weighted radial leaves the copy column sitting over whatever the
+     flight is doing; split panels need a flat scrim across the whole frame */
+  .panel.split::before{background:linear-gradient(90deg,
+    rgba(8,8,7,.93) 0%, rgba(8,8,7,.88) 45%, rgba(8,8,7,.66) 100%)}
+  .panel.split .ui img{width:100%; height:auto; display:block; border-radius:12px;
+    border:1px solid rgba(255,255,255,.14); box-shadow:0 30px 80px rgba(0,0,0,.7)}
+  .panel.split .ui .cap{font-size:12px; color:var(--muted); padding-top:8px}
+  /* side-by-side needs 520 + 44 gap + 560 + 96 padding = 1220px before it is
+     cramped, and a cramped split reads as the screenshot crowding the copy */
+  @media (max-width:1220px){
+    .panel.split{flex-direction:column; gap:20px; text-align:center; padding:0 24px}
+    .panel.split .copy,.panel.split .ui{flex:0 1 auto; max-width:560px}
+    .panel.split .ui{max-width:min(78vw,420px)}
+    .panel.split h2{font-size:clamp(26px,7vw,38px)}
+    .panel.split .copy p{font-size:15px}
+  }
+  .panel h1{font-size:clamp(54px,11vw,128px); margin:0}
+  .panel h2{font-size:clamp(34px,6vw,58px); margin:0 0 10px}
+  .panel p{color:#cfcfc9; font-size:clamp(16px,1.9vw,19px); margin:12px auto 0; text-shadow:0 2px 18px rgba(0,0,0,.7)}
+  .panel p strong{color:var(--ink)}
   .kicker{display:inline-block; font-family:Teko; text-transform:uppercase; letter-spacing:3px;
     color:var(--accent); font-size:18px; border:1px solid rgba(255,91,20,.4); border-radius:999px; padding:2px 14px; margin-bottom:18px}
-  .lede{max-width:680px; margin:14px auto 0; color:var(--muted); font-size:19px}
-  .lede strong{color:var(--ink)}
-  .cta{display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:26px}
-  .heroshot{margin:44px auto 0; max-width:980px}
-  .heroshot img{width:100%; height:auto; border-radius:14px; border:1px solid var(--line); box-shadow:0 30px 80px rgba(0,0,0,.55)}
-  /* sections — note: section also carries .wrap (which sets padding:0 24px), so
-     this selector must out-specify .wrap to restore vertical rhythm */
-  section.wrap{padding:56px 24px}
   .eyebrow{font-family:Teko; text-transform:uppercase; letter-spacing:2px; color:var(--accent); font-size:20px; margin:0 0 6px}
+  .cta{display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:26px}
+
+  /* sector rail — progress through the flight */
+  .rail{position:absolute; left:18px; top:50%; transform:translateY(-50%); z-index:3;
+    display:flex; flex-direction:column; gap:9px; pointer-events:none}
+  .rail i{display:block; width:3px; height:22px; border-radius:2px; background:rgba(255,255,255,.16); transition:background .3s ease}
+  .rail i.lit{background:var(--accent)}
+  .scrollcue{position:absolute; left:50%; bottom:22px; transform:translateX(-50%); z-index:3;
+    font-family:Teko; letter-spacing:2px; text-transform:uppercase; font-size:15px; color:var(--muted);
+    transition:opacity .4s ease}
+
+  /* ---------- conventional sections below the spine ---------- */
+  section.wrap{padding:56px 24px}
   h2.title{font-size:clamp(34px,6vw,58px); margin:0 0 8px}
   .sub{color:var(--muted); max-width:720px; margin:0 0 28px; font-size:17px}
-  /* privacy band */
   .band{background:linear-gradient(180deg,var(--surface),var(--bg2)); border-top:1px solid var(--line); border-bottom:1px solid var(--line)}
   .privacy{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:18px; margin-top:8px}
   .privacy div{background:rgba(255,255,255,.02); border:1px solid var(--line); border-radius:12px; padding:16px 18px}
   .privacy h3{margin:0 0 4px; font-size:16px; color:var(--ink)}
   .privacy p{margin:0; color:var(--muted); font-size:14px}
-  /* features */
   .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:18px}
   .card{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:22px}
   .card .tag{font-family:Teko; text-transform:uppercase; letter-spacing:1px; color:var(--accent); font-size:18px}
   .card h3{margin:2px 0 8px; font-size:20px}
   .card p{margin:0; color:var(--muted); font-size:15px}
-  /* gallery */
   .pair{display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:10px}
   .shot{border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--surface)}
   .shot img{display:block; width:100%; height:auto}
   .shot .cap{font-size:13px; color:var(--muted); padding:8px 12px; border-top:1px solid var(--line)}
   .mobiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-top:22px}
   .mobiles .shot img{max-height:560px; object-fit:cover; object-position:top}
-  /* footer */
   footer{border-top:1px solid var(--line); padding:36px 0; color:var(--muted); font-size:14px}
   footer .wrap{display:flex; gap:18px; flex-wrap:wrap; align-items:center; justify-content:space-between}
   .disclaimer{font-size:13px; color:#76766f; max-width:640px}
-  @media (max-width:640px){ .pair{grid-template-columns:1fr} .nav a.navlink{display:none} }
+
+  /* restrained reveal for the conventional sections */
+  .rise{opacity:0; transform:translateY(20px); transition:opacity .6s ease, transform .6s ease}
+  .rise.on{opacity:1; transform:none}
+
+  @media (max-width:640px){
+    .pair{grid-template-columns:1fr}
+    .nav a.navlink{display:none}
+    .rail{left:10px}
+    .panel p{font-size:16px}
+    /* portrait crops the 16:9 frame to its centre, which is exactly where the
+       set's own orange signage sits — the desktop scrim isn't enough there */
+    .panel::before{background:radial-gradient(90% 52% at 50% 50%, rgba(8,8,7,.9) 0%, rgba(8,8,7,.78) 55%, transparent 85%)}
+  }
+  /* narrow phones: the nav must not overflow — shrink the wordmark and buttons */
+  @media (max-width:430px){
+    .nav .wrap{gap:8px; padding:0 14px}
+    .logo{font-size:21px}
+    .logo .mark{width:24px;height:24px}
+    .btn{padding:8px 11px; font-size:13px}
+    .kicker{font-size:15px; letter-spacing:2px}
+  }
+
+  /* ---------- reduced motion: no scrubbing, stacked stills instead ---------- */
+  @media (prefers-reduced-motion: reduce){
+    html{scroll-behavior:auto}
+    .spine{height:auto !important}
+    .stage{position:static; height:auto}
+    .stage video{display:none}
+    .stage .posterfall{display:block; position:static; height:auto; object-fit:cover; aspect-ratio:16/9}
+    .stage::after{display:none}
+    .panels{position:static; inset:auto}
+    .panel{position:static; opacity:1; transform:none; padding:56px 24px; min-height:0}
+    .panel.split{flex-direction:column; text-align:center; padding:56px 24px; gap:22px}
+    .panel.split .copy,.panel.split .ui{flex:0 1 auto; max-width:640px}
+    .rail,.scrollcue{display:none}
+    .rise{opacity:1; transform:none}
+  }
 </style>
 </head>
 <body>
@@ -182,103 +284,131 @@
   <a class="btn coffee" href="https://buymeacoffee.com/peptidepitstop">☕ Coffee</a>
 </div></header>
 
-<div class="hero wrap">
-  <span class="kicker">Self-hosted · open source · Docker · no telemetry</span>
-  <h1 class="teko">Peptide<span class="slash">/</span>Pitstop</h1>
-  <p class="lede"><strong>The free, open-source, self-hosted peptide &amp; GLP-1 tracker.</strong> Reconstitution and draw-volume math, dose logging, titration stacks, bloodwork, and plasma-level modelling — one Docker container, installable as an offline PWA, living entirely on infrastructure you own.</p>
-  <div class="cta">
-    <a class="btn primary" href="https://github.com/kavo91/peptide-pitstop">View on GitHub →</a>
-    <a class="btn" href="https://github.com/kavo91/peptide-pitstop#-deploy-self-hosted">Self-host it</a>
-    <a class="btn coffee" href="https://buymeacoffee.com/peptidepitstop">☕ Buy me a coffee</a>
+<!-- ============ FLYTHROUGH SPINE ============ -->
+<div class="spine" id="spine">
+  <div class="stage">
+    <video id="flight" playsinline muted preload="auto" poster="assets/poster/p1.jpg" aria-hidden="true"></video>
+    <img class="posterfall" src="assets/poster/p1.jpg" alt="Peptide Pitstop race garage — the flythrough, shown as a still because reduced motion is enabled." />
+    <div class="rail" id="rail" aria-hidden="true"></div>
+    <div class="scrollcue" id="cue">Scroll</div>
+    <div class="panels" id="panels">
+
+      <div class="panel" data-in="0.00" data-out="0.10">
+        <span class="kicker">Self-hosted · open source · Docker · no telemetry</span>
+        <h1 class="teko">Peptide<span class="slash">/</span>Pitstop</h1>
+        <p><strong>The free, open-source, self-hosted peptide &amp; GLP-1 tracker.</strong> Reconstitution and draw-volume math, dose logging, titration stacks, bloodwork, and plasma-level modelling — one Docker container, installable as an offline PWA, living entirely on infrastructure you own.</p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/kavo91/peptide-pitstop">View on GitHub →</a>
+          <a class="btn" href="https://github.com/kavo91/peptide-pitstop#-deploy-self-hosted">Self-host it</a>
+        </div>
+      </div>
+
+      <div class="panel" data-in="0.135" data-out="0.235">
+        <p class="eyebrow">Own your own data</p>
+        <h2 class="teko">Your data never leaves your&nbsp;server</h2>
+        <p>It runs on a machine you own. There's no account to sign up for, nothing phones home, and there's no company in the middle who could be breached or change the terms. Your notes and lab results are encrypted before they're saved, and you can export or delete the lot whenever you like.</p>
+      </div>
+
+      <div class="panel split" data-in="0.36" data-out="0.49">
+        <div class="copy">
+          <p class="eyebrow">Dosing</p>
+          <h2 class="teko">Reconstitution engine</h2>
+          <p>Concentration, draw volume and syringe markings computed in exact decimal math. Handles reconstituted and premixed vials, and shows the markings against the barrel you're actually drawing into.</p>
+        </div>
+        <div class="ui">
+          <img src="docs/screenshots/dosing.png" alt="Reconstitution and draw-volume dose calculator in the dark carbon theme (demo data)" />
+          <div class="cap">Log a dose</div>
+        </div>
+      </div>
+
+      <div class="panel split" data-in="0.50" data-out="0.62">
+        <div class="copy">
+          <p class="eyebrow">Bloodwork</p>
+          <h2 class="teko">Biomarker trends</h2>
+          <p>Lab panels over time, in-range summaries and a comparison matrix backed by a curated biomarker library. Doses, labs, journal and wearables all export to CSV or PDF.</p>
+        </div>
+        <div class="ui">
+          <img src="docs/screenshots/bloodwork.png" alt="Bloodwork and biomarker trends over time (demo data)" loading="lazy" />
+          <div class="cap">Bloodwork</div>
+        </div>
+      </div>
+
+      <div class="panel split" data-in="0.63" data-out="0.75">
+        <div class="copy">
+          <p class="eyebrow">Analytics</p>
+          <h2 class="teko">Plasma-level modelling</h2>
+          <p>Single-compartment plasma estimates from your own dose history and each peptide's half-life, plus adherence and a dose-history heatmap. Computed locally from your database.</p>
+        </div>
+        <div class="ui">
+          <img src="docs/screenshots/analytics.png" alt="Analytics and single-compartment plasma-level modelling chart (demo data)" loading="lazy" />
+          <div class="cap">Analytics &amp; plasma</div>
+        </div>
+      </div>
+
+      <div class="panel" data-in="0.77" data-out="0.87">
+        <p class="eyebrow">Travel</p>
+        <h2 class="teko">Your day, not the&nbsp;server's</h2>
+        <p>Each dose freezes the calendar day and timezone it was logged in, so history stays on the days you actually dosed. Today re-anchors on wake, at local midnight, and when the device changes zone.</p>
+      </div>
+
+      <div class="panel" data-in="0.90" data-out="1.01">
+        <h2 class="teko">Run it yourself</h2>
+        <p>Deployment is a single container. Bring your own database file, point a tunnel at it, and you're running.</p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/kavo91/peptide-pitstop#-deploy-self-hosted">Read the setup guide →</a>
+          <a class="btn coffee" href="https://buymeacoffee.com/peptidepitstop">☕ Buy me a coffee</a>
+        </div>
+      </div>
+
+    </div>
   </div>
-  <div class="heroshot"><img src="docs/screenshots/today.png" alt="Peptide Pitstop self-hosted peptide tracker — Today dashboard with dose log and adherence heatmap (demo data)" width="980" height="683" loading="eager" fetchpriority="high" /></div>
 </div>
 
-<div class="band"><section class="wrap">
-  <p class="eyebrow">Own your own data</p>
-  <h2 class="title teko">Your data never leaves your&nbsp;server</h2>
-  <p class="sub">A private, self-hosted, encrypted peptide tracker: no cloud account, no telemetry, no third party between you and your health record. You host it, back it up, export it, and delete it — on your terms.</p>
-  <div class="privacy">
-    <div><h3>Runs on your machine</h3><p>A single Docker container on your own server. No SaaS, no managed backend that can change terms or get breached.</p></div>
-    <div><h3>Encrypted in depth</h3><p>Identifying free-text and lab values are encrypted with AES-256-GCM before they ever touch disk.</p></div>
-    <div><h3>No tracking, no CDN</h3><p>No analytics SDKs, no telemetry. Fonts self-hosted. Analytics computed locally from your own database.</p></div>
-    <div><h3>Yours to export</h3><p>One-click CSV + PDF export for doses, labs, journal, and wearables. Portable by design — never locked in.</p></div>
-  </div>
-</section></div>
-
-<section class="wrap" id="features">
-  <p class="eyebrow">Under the hood</p>
-  <h2 class="title teko">Built for the&nbsp;bench</h2>
-  <p class="sub">Everything a self-hosted peptide tracker needs — and the dosing engine, the highest-stakes part, is dialled in: 600+ tests, pure decimal math, no floating-point drift.</p>
+<!-- ============ conventional sections ============ -->
+<div class="band"><section class="wrap" id="features">
+  <p class="eyebrow rise">Everything it does</p>
+  <h2 class="title teko rise">The full&nbsp;garage</h2>
+  <p class="sub rise">Everything a self-hosted peptide tracker needs — and a few things that only matter once you've been running one for a while.</p>
   <div class="grid">
-    <div class="card"><div class="tag">Dosing</div><h3>Reconstitution engine</h3><p>Concentration, draw volume, and syringe markings computed with decimal math. Handles reconstituted and premixed vials.</p></div>
-    <div class="card"><div class="tag">Protocols</div><h3>Titration &amp; stacks</h3><p>Multi-peptide schedules with ramping/titration steps and a live calc-chart showing exactly how each phase is computed.</p></div>
-    <div class="card"><div class="tag">Bloodwork</div><h3>Biomarker trends</h3><p>Lab panels over time, in-range summaries, and a comparison matrix backed by a curated biomarker library.</p></div>
-    <div class="card"><div class="tag">Analytics</div><h3>Plasma modelling</h3><p>Adherence, a dose-history heatmap, and single-compartment plasma-level estimates from your history and each peptide's half-life.</p></div>
-    <div class="card"><div class="tag">Integrations</div><h3>HA &amp; Garmin</h3><p>Optional Home Assistant dose reminders and Garmin wellness sync — your webhook, your credentials, your schedule.</p></div>
-    <div class="card"><div class="tag">Experience</div><h3>Installable PWA</h3><p>Add to your home screen and it works offline. Self-hosted on your hardware — and on your phone, with dark and light themes.</p></div>
-  </div>
-</section>
-
-<div class="band"><section class="wrap" id="screens">
-  <p class="eyebrow">A look inside</p>
-  <h2 class="title teko">Dark &amp; light. Desk &amp; phone.</h2>
-  <p class="sub">A motorsport-inspired “pit-wall” design — carbon and race-orange — with a clean light theme. All screenshots use demo data only.</p>
-  <div class="pair">
-    <div class="shot"><img src="docs/screenshots/analytics.png" alt="Analytics and single-compartment plasma-level modelling chart in the dark carbon theme (demo data)" loading="lazy" /><div class="cap">Analytics &amp; plasma — dark</div></div>
-    <div class="shot"><img src="docs/screenshots/analytics-light.png" alt="Analytics and plasma-level modelling chart in the light theme (demo data)" loading="lazy" /><div class="cap">Analytics &amp; plasma — light</div></div>
-  </div>
-  <div class="pair" style="margin-top:18px">
-    <div class="shot"><img src="docs/screenshots/bloodwork.png" alt="Bloodwork and biomarker trend tracking over time, dark theme (demo data)" loading="lazy" /><div class="cap">Bloodwork — dark</div></div>
-    <div class="shot"><img src="docs/screenshots/dosing-light.png" alt="Peptide reconstitution and draw-volume dose calculator, light theme (demo data)" loading="lazy" /><div class="cap">Log a dose — light</div></div>
-  </div>
-  <p class="eyebrow" style="margin-top:34px">On your phone</p>
-  <div class="mobiles">
-    <div class="shot"><img src="docs/screenshots/today-mobile.png" alt="Peptide Pitstop installable PWA — Today screen on mobile (demo data)" loading="lazy" /></div>
-    <div class="shot"><img src="docs/screenshots/dosing-mobile.png" alt="Logging a peptide dose on mobile with reconstitution math (demo data)" loading="lazy" /></div>
-    <div class="shot"><img src="docs/screenshots/analytics-mobile.png" alt="Adherence heatmap and plasma-level analytics on mobile (demo data)" loading="lazy" /></div>
-    <div class="shot"><img src="docs/screenshots/bloodwork-mobile-light.png" alt="Bloodwork and biomarker trends on mobile in the light theme (demo data)" loading="lazy" /></div>
+    <div class="card rise"><div class="tag">Dosing</div><h3>Reconstitution engine</h3><p>Concentration, draw volume, and syringe markings computed with decimal math. Handles reconstituted and premixed vials.</p></div>
+    <div class="card rise"><div class="tag">Protocols</div><h3>Titration &amp; stacks</h3><p>Multi-peptide schedules with ramping steps and a live calc-chart showing how each phase is computed. Log a dose that matches the next step and it offers to bring that phase forward.</p></div>
+    <div class="card rise"><div class="tag">Schedules</div><h3>Roll from a late dose</h3><p>Take an every-N-days dose late and rolling protocols offer to re-base the schedule from the day you actually dosed, with the new dates previewed. Fixed-anchor protocols keep their rigid grid.</p></div>
+    <div class="card rise"><div class="tag">Bloodwork</div><h3>Biomarker trends</h3><p>Lab panels over time, in-range summaries, and a comparison matrix backed by a curated biomarker library.</p></div>
+    <div class="card rise"><div class="tag">Analytics</div><h3>Plasma modelling</h3><p>Adherence, a dose-history heatmap, and single-compartment plasma-level estimates from your history and each peptide's half-life.</p></div>
+    <div class="card rise"><div class="tag">Travel</div><h3>Timezone-proof days</h3><p>Each dose freezes its calendar day and zone at log time. Every date-driven screen anchors to your day, not the server's — abroad, the app stops highlighting tomorrow's column.</p></div>
+    <div class="card rise"><div class="tag">Integrations</div><h3>HA &amp; Garmin</h3><p>Optional Home Assistant dose reminders and Garmin wellness sync — your webhook, your credentials, your schedule. Reminders name your device's clock when you're travelling.</p></div>
+    <div class="card rise"><div class="tag">Experience</div><h3>Installable PWA</h3><p>Add to your home screen and it works offline. A version heartbeat picks up new deploys on its own, so an installed app can't sit on a stale bundle for days.</p></div>
   </div>
 </section></div>
 
-<section class="wrap" style="text-align:center">
-  <h2 class="title teko">Run it yourself</h2>
-  <p class="sub" style="margin-left:auto;margin-right:auto">Deployment is a single container. Bring your own database file, point a tunnel at it, and you're running. Full setup — Docker, env vars, demo seed — is in the README.</p>
-  <div class="cta">
-    <a class="btn primary" href="https://github.com/kavo91/peptide-pitstop#-deploy-self-hosted">Read the setup guide →</a>
-    <a class="btn coffee" href="https://buymeacoffee.com/peptidepitstop">☕ Support development</a>
+<section class="wrap" id="screens">
+  <p class="eyebrow rise">A look inside</p>
+  <h2 class="title teko rise">Dark &amp; light. Desk &amp;&nbsp;phone.</h2>
+  <p class="sub rise">A motorsport-inspired “pit-wall” design — carbon and race-orange — with a clean light theme. Dark desktop screens appear in the flythrough above. All screenshots use demo data only.</p>
+  <div class="pair">
+    <div class="shot rise"><img src="docs/screenshots/analytics-light.png" alt="Analytics and plasma-level modelling chart in the light theme (demo data)" loading="lazy" /><div class="cap">Analytics &amp; plasma — light</div></div>
+    <div class="shot rise"><img src="docs/screenshots/today.png" alt="Today dashboard with dose log and adherence heatmap (demo data)" loading="lazy" /><div class="cap">Today — dark</div></div>
+  </div>
+  <p class="eyebrow rise" style="margin-top:34px">On your phone</p>
+  <div class="mobiles">
+    <div class="shot rise"><img src="docs/screenshots/today-mobile.png" alt="Peptide Pitstop installable PWA — Today screen on mobile (demo data)" loading="lazy" /></div>
+    <div class="shot rise"><img src="docs/screenshots/dosing-mobile.png" alt="Logging a peptide dose on mobile with reconstitution math (demo data)" loading="lazy" /></div>
+    <div class="shot rise"><img src="docs/screenshots/analytics-mobile.png" alt="Adherence heatmap and plasma-level analytics on mobile (demo data)" loading="lazy" /></div>
+    <div class="shot rise"><img src="docs/screenshots/bloodwork-mobile-light.png" alt="Bloodwork and biomarker trends on mobile in the light theme (demo data)" loading="lazy" /></div>
   </div>
 </section>
 
 <div class="band"><section class="wrap" id="faq">
-  <p class="eyebrow">Common questions</p>
-  <h2 class="title teko">Self-hosted, open source, yours</h2>
-  <p class="sub">Straight answers for self-hosters comparing a free, open-source, Docker-deployable peptide &amp; GLP-1 tracker.</p>
+  <p class="eyebrow rise">Common questions</p>
+  <h2 class="title teko rise">Self-hosted, open source,&nbsp;yours</h2>
+  <p class="sub rise">Straight answers for self-hosters comparing a free, open-source, Docker-deployable peptide &amp; GLP-1 tracker.</p>
   <div class="privacy">
-    <div>
-      <h3>Is there a self-hosted peptide tracker?</h3>
-      <p>Yes — Peptide Pitstop is a self-hosted peptide &amp; GLP-1 tracker that runs entirely on your own hardware as a single Docker container. No cloud account, no managed backend: you host it, back it up, and control it yourself.</p>
-    </div>
-    <div>
-      <h3>Is it free and open source?</h3>
-      <p>100% free and open source under AGPL-3.0. No subscriptions, accounts, or paywalls — read, audit, and fork the full source on <a href="https://github.com/kavo91/peptide-pitstop">GitHub</a>.</p>
-    </div>
-    <div>
-      <h3>How do I deploy it with Docker?</h3>
-      <p>Deployment is a single Docker container. Pull the image, point it at a database file, and open it in any browser — full Docker, env-var, and demo-seed steps are in the README. Installs as a PWA for offline use too.</p>
-    </div>
-    <div>
-      <h3>Is my peptide &amp; GLP-1 data private?</h3>
-      <p>Your data never leaves your server. Identifying free-text and lab values are encrypted with AES-256-GCM before they touch disk, there is no telemetry, and fonts are self-hosted — nothing reaches a third party.</p>
-    </div>
-    <div>
-      <h3>Can it do reconstitution math?</h3>
-      <p>Yes — the reconstitution engine computes concentration, draw volume, and syringe markings with exact decimal math (no floating-point drift), for both reconstituted and premixed vials.</p>
-    </div>
-    <div>
-      <h3>What can I track?</h3>
-      <p>Reconstitution and draw-volume math, dose logs, titration and multi-peptide stacks, bloodwork and biomarker trends, single-compartment plasma-level modelling, and an adherence heatmap. Everything exports to CSV or PDF.</p>
-    </div>
+    <div class="rise"><h3>Is there a self-hosted peptide tracker?</h3><p>Yes — Peptide Pitstop is a self-hosted peptide &amp; GLP-1 tracker that runs entirely on your own hardware as a single Docker container. No cloud account, no managed backend: you host it, back it up, and control it yourself.</p></div>
+    <div class="rise"><h3>Is it free and open source?</h3><p>100% free and open source under AGPL-3.0. No subscriptions, accounts, or paywalls — read, audit, and fork the full source on <a href="https://github.com/kavo91/peptide-pitstop">GitHub</a>.</p></div>
+    <div class="rise"><h3>How do I deploy it with Docker?</h3><p>Deployment is a single Docker container. Pull the image, point it at a database file, and open it in any browser — full Docker, env-var, and demo-seed steps are in the README. Installs as a PWA for offline use too.</p></div>
+    <div class="rise"><h3>Is my peptide &amp; GLP-1 data private?</h3><p>Your data never leaves your server. Identifying free-text and lab values are encrypted with AES-256-GCM before they touch disk, there is no telemetry, and fonts are self-hosted — nothing reaches a third party.</p></div>
+    <div class="rise"><h3>Can it do reconstitution math?</h3><p>Yes — the reconstitution engine computes concentration, draw volume, and syringe markings with exact decimal math (no floating-point drift), for both reconstituted and premixed vials.</p></div>
+    <div class="rise"><h3>Does it work if I travel?</h3><p>Yes. Each dose freezes the calendar day and timezone it was logged in, so your history stays on the days you actually dosed. The Today view tracks your device's day and refreshes on wake, at local midnight, and when your timezone changes.</p></div>
   </div>
 </section></div>
 
@@ -286,6 +416,123 @@
   <span>© Peptide Pitstop · <a href="https://github.com/kavo91/peptide-pitstop">GitHub</a> · <a href="https://github.com/kavo91/peptide-pitstop/blob/main/LICENSE">AGPL-3.0</a> · <a href="https://buymeacoffee.com/peptidepitstop">Buy me a coffee</a></span>
   <span class="disclaimer">A personal tracking tool, not a medical device, and not a substitute for professional medical advice. It does not diagnose, treat, or make dosing recommendations.</span>
 </div></footer>
+
+<script>
+(function(){
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var spine  = document.getElementById('spine');
+  var video  = document.getElementById('flight');
+  var panels = Array.prototype.slice.call(document.querySelectorAll('.panel'));
+  var rail   = document.getElementById('rail');
+  var cue    = document.getElementById('cue');
+
+  /* ---- restrained reveals for the conventional sections (always on) ---- */
+  var io = new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('on'); io.unobserve(e.target); } });
+  }, {rootMargin:'0px 0px -12% 0px'});
+  document.querySelectorAll('.rise').forEach(function(el,i){
+    el.style.transitionDelay = (Math.min(i,6)*40)+'ms'; io.observe(el);
+  });
+
+  if (reduce) return;   /* stacked stills; no scrubbing, no video fetch */
+
+  /* ---- pick the encode by DEVICE class, not window width ----
+     window.innerWidth is unreliable here: the script runs before layout settles,
+     so a desktop opening in a narrow pane would latch onto the mobile encode and
+     never upgrade. screen.width reflects the hardware and doesn't move. */
+  var deviceW = Math.max(screen.width || 0, window.innerWidth || 0);
+  var small = deviceW <= 900 || (navigator.deviceMemory && navigator.deviceMemory <= 4)
+              || navigator.connection && /(^|-)2g$/.test(navigator.connection.effectiveType || '');
+  video.src = small ? 'assets/vid/flythrough-720.mp4' : 'assets/vid/flythrough-1080.mp4';
+
+  /* ---- spine height ----
+     One full viewport per leg meant ~5,700px of scrolling before any
+     conventional section. 62svh/leg keeps every dwell readable while cutting
+     the run-up to the rest of the page by nearly 40%. */
+  var LEGS = 8, LEG_VH = 62;
+  spine.style.height = (LEGS * LEG_VH) + 'svh';
+
+  /* sector rail, one tick per leg */
+  for (var i=0;i<LEGS;i++) rail.appendChild(document.createElement('i'));
+  var ticks = rail.querySelectorAll('i');
+
+  /* ---- iOS priming: Safari will not seek a video it has never played ---- */
+  var primed = false;
+  function prime(){
+    if (primed) return; primed = true;
+    var p = video.play();
+    if (p && p.then) p.then(function(){ video.pause(); }).catch(function(){ /* fine — desktop seeks without it */ });
+    else { try{ video.pause(); }catch(e){} }
+  }
+  ['touchstart','pointerdown','wheel','keydown'].forEach(function(ev){
+    window.addEventListener(ev, prime, {once:true, passive:true});
+  });
+
+  /* ---- scroll → currentTime, coalesced through rAF ----
+     Do NOT cache duration off a single 'loadedmetadata' listener: on a warm
+     cache the metadata is already there before this script runs, the event
+     never fires, and the video would sit frozen on frame 0 forever. Read
+     video.duration live, and re-sync on every event that can supply it. */
+  var target = 0, applied = -1, ticking = false;
+  function dur(){
+    var d = video.duration;
+    return (isFinite(d) && d > 0) ? d : 0;
+  }
+  ['loadedmetadata','durationchange','loadeddata','canplay'].forEach(function(ev){
+    video.addEventListener(ev, function(){ applied = -1; update(); });
+  });
+
+  function progress(){
+    var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+    var total = spine.offsetHeight - vh;
+    /* a collapsed/zero-height viewport makes svh resolve to 0 — bail rather
+       than divide by nothing and pin the flight at one frame */
+    if (!vh || total <= 0) return null;
+    return Math.min(1, Math.max(0, -spine.getBoundingClientRect().top / total));
+  }
+
+  function update(){
+    ticking = false;
+    var p = progress();
+    if (p === null) return;          /* viewport not measurable yet */
+    var d = dur();
+    target = p * d;
+
+    /* only seek on a meaningful delta — spamming currentTime stalls the decoder.
+       Re-sync if something else moved the playhead behind our back. */
+    if (d){
+      if (Math.abs(video.currentTime - applied) > 0.5) applied = -1;
+      if (Math.abs(target - applied) > 0.016){
+        applied = target;
+        try { video.currentTime = target; } catch(e){}
+      }
+    }
+
+    for (var i=0;i<panels.length;i++){
+      var el = panels[i];
+      var a = parseFloat(el.dataset.in), b = parseFloat(el.dataset.out);
+      el.classList.toggle('on', p >= a && p <= b);
+    }
+    for (var j=0;j<ticks.length;j++){
+      ticks[j].classList.toggle('lit', p >= (j/LEGS) - 0.001);
+    }
+    if (cue) cue.style.opacity = p > 0.02 ? 0 : 1;
+  }
+
+  /* Update synchronously on scroll rather than deferring to rAF.
+     Scroll already fires at most once per frame, update() is a handful of reads,
+     and the seek guard below stops decoder spam — while rAF gets throttled in
+     background tabs and low-power mode, which would freeze the flight mid-scroll. */
+  function onScroll(){ update(); }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  window.addEventListener('resize', function(){ applied = -1; update(); }, {passive:true});
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden){ applied = -1; update(); }
+  });
+
+  update();
+})();
+</script>
 
 </body>
 </html>
