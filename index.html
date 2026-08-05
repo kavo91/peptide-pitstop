@@ -95,9 +95,11 @@
 
 <!-- Fonts are genuinely self-hosted: no preconnect, no CDN, no third-party request. -->
 <style>
+  /* Teko, self-hosted. Subset to Latin and converted to woff2: the upstream TTF
+     ships Devanagari too, which this site never sets — 285KB -> 15KB. */
   @font-face{
     font-family:'Teko';
-    src:url('assets/fonts/Teko.ttf') format('truetype');
+    src:url('assets/fonts/teko-latin.woff2') format('woff2');
     font-weight:500 700; font-display:swap;
   }
   /* Inter, self-hosted. Variable weight 400-700, latin + latin-ext subsets only
