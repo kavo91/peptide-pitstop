@@ -175,7 +175,8 @@
     position:absolute; inset:0; display:flex; flex-direction:column;
     align-items:center; justify-content:center; text-align:center;
     padding:0 24px; opacity:0; transform:translateY(18px);
-    transition:opacity .45s ease, transform .45s ease;
+    /* no CSS transition: opacity/transform are driven directly from scroll
+       position, and a transition would lag behind and fight the scrub */
   }
   .panel.on{opacity:1; transform:none}
   /* soft scrim directly behind the copy — the garage set itself carries orange
@@ -661,6 +662,47 @@
     el._frame = frame;
   });
 
+  /* ---- scroll-dwell curve ----
+     A linear scroll->time map moves the camera at a constant rate whether you
+     are reading a panel or travelling between them. Build a monotonic piecewise
+     map that spends LESS film per pixel while a panel is up (camera almost
+     stops to let you read) and more between them, so pacing follows the copy.
+     Total film is unchanged; only its distribution over the scroll is. */
+  var DWELL_SLOW = 0.55, DWELL_FAST = 1.7;
+  var segs = (function(){
+    var edges = [0];
+    panels.forEach(function(el){
+      edges.push(Math.max(0, Math.min(1, parseFloat(el.dataset.in))));
+      edges.push(Math.max(0, Math.min(1, parseFloat(el.dataset.out))));
+    });
+    edges.push(1);
+    edges = edges.filter(function(v,i,a){ return a.indexOf(v) === i; }).sort(function(a,b){return a-b;});
+    var list = [], acc = 0;
+    for (var i=0;i<edges.length-1;i++){
+      var p0 = edges[i], p1 = edges[i+1];
+      if (p1 <= p0) continue;
+      var mid = (p0+p1)/2;
+      var inPanel = panels.some(function(el){
+        return mid >= parseFloat(el.dataset.in) && mid <= parseFloat(el.dataset.out);
+      });
+      var w = (p1-p0) * (inPanel ? DWELL_SLOW : DWELL_FAST);
+      list.push({p0:p0, p1:p1, w:w, t0:acc}); acc += w;
+    }
+    list.forEach(function(s){ s.t0 /= acc; s.w /= acc; });
+    return list;
+  })();
+  function dwellMap(p){
+    for (var i=0;i<segs.length;i++){
+      var s = segs[i];
+      if (p <= s.p1 || i === segs.length-1){
+        var k = (p - s.p0) / (s.p1 - s.p0);
+        k = k < 0 ? 0 : (k > 1 ? 1 : k);
+        return s.t0 + k * s.w;
+      }
+    }
+    return p;
+  }
+
   /* sector rail, one tick per leg */
   for (var i=0;i<LEGS;i++) rail.appendChild(document.createElement('i'));
   var ticks = rail.querySelectorAll('i');
@@ -707,7 +749,7 @@
     var d = dur();
     /* never seek to exactly duration — there is no frame at the end boundary and
        the decoder drops to readyState 1 with nothing painted on the last panel */
-    target = Math.min(p * d, d - 0.08);
+    target = Math.min(dwellMap(p) * d, d - 0.08);
 
     /* only seek on a meaningful delta — spamming currentTime stalls the decoder.
        Re-sync if something else moved the playhead behind our back. */
@@ -722,7 +764,18 @@
     for (var i=0;i<panels.length;i++){
       var el = panels[i];
       var a = parseFloat(el.dataset.in), b = parseFloat(el.dataset.out);
-      el.classList.toggle('on', p >= a && p <= b);
+      /* scroll-linked fade: ramp over the first/last 16% of the dwell so the
+         copy tracks the scroll instead of snapping on a fixed CSS transition */
+      var vis = 0;
+      if (p >= a && p <= b){
+        var span = b - a, ramp = span * 0.16;
+        var din = (p - a) / ramp, dout = (b - p) / ramp;
+        vis = Math.min(1, Math.max(0, Math.min(din, dout)));
+        vis = vis * vis * (3 - 2 * vis);          /* smoothstep */
+      }
+      el.style.opacity = vis.toFixed(3);
+      el.style.transform = vis >= 0.999 ? 'none' : 'translateY(' + ((1 - vis) * 18).toFixed(1) + 'px)';
+      el.classList.toggle('on', vis > 0.02);
 
       /* draw the screenshot in across the first REVEAL_SPAN of the dwell, so it
          finishes well before the panel starts leaving and never wipes back out */
