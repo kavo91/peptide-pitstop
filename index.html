@@ -214,6 +214,12 @@
     aspect-ratio:2640/1840; background:var(--surface)}
   .panel.split .ui .frame img{width:100%; height:100%; object-fit:cover;
     clip-path:inset(0 var(--hide,0%) 0 0)}
+  /* the plasma chart is live vector, not a screenshot — its own aspect ratio,
+     and no clip-path (it draws via stroke-dashoffset instead) */
+  .panel.split .ui .frame.plasma{aspect-ratio:600/180; background:#0e0e0d;
+    border:1px solid rgba(255,255,255,.14); box-shadow:0 30px 80px rgba(0,0,0,.7)}
+  .plasmasvg{display:block; width:100%; height:100%}
+  .pp-hist path{stroke-dasharray:var(--len,0); stroke-dashoffset:var(--off,0)}
   .panel.split .ui .frame .edge{
     position:absolute; top:0; bottom:0; width:2px; pointer-events:none;
     left:calc(100% - var(--hide,0%)); transform:translateX(-1px);
@@ -222,6 +228,10 @@
   @media (prefers-reduced-motion: reduce){
     .panel.split .ui .frame img{clip-path:none}
     .panel.split .ui .frame .edge{display:none}
+    /* reduced motion: show the chart fully drawn, no stroke animation */
+    .pp-hist path{stroke-dasharray:none !important; stroke-dashoffset:0 !important}
+    #pprect{width:302px}
+    #ppnow,#ppnowlbl{opacity:1 !important}
   }
   /* side-by-side needs 520 + 44 gap + 560 + 96 padding = 1220px before it is
      cramped, and a cramped split reads as the screenshot crowding the copy */
@@ -459,9 +469,32 @@
           <h2 class="teko">Plasma-level modelling</h2>
           <p>Single-compartment plasma estimates from your own dose history and each peptide's half-life, plus adherence and a dose-history heatmap. Computed locally from your database.</p>
         </div>
+        <!-- Real vector output from the app, not a picture of it: these path
+             data are the actual computed plasma curves lifted from the running
+             build's SVG chart (3 peptides x solid history + dashed forecast,
+             split at "now"), RDP-simplified from 12.8KB to 3.4KB with peaks
+             intact. History draws itself, then the forecast extends. -->
         <div class="ui">
-          <img src="docs/screenshots/analytics.png" alt="Analytics and single-compartment plasma-level modelling chart (demo data)" loading="lazy" />
-          <div class="cap">Analytics &amp; plasma</div>
+          <div class="frame plasma">
+            <svg class="plasmasvg" viewBox="0 0 600 180" role="img"
+                 aria-label="Single-compartment plasma-level curves for three peptides, solid to the left of now and dashed forecast to the right (demo data)">
+              <defs><clipPath id="ppfore"><rect id="pprect" x="298" y="0" width="0" height="180"/></clipPath></defs>
+              <line x1="8" x2="588" y1="152" y2="152" stroke="rgba(255,255,255,.28)" stroke-width="0.5"/>
+              <g class="pp-hist" fill="none" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round">
+                <path stroke="hsl(18 82% 58%)" d="M9.7,106.8L14.9,120.2L20.1,129.5L27.8,138.6L35.7,144.0L35.7,24.3L38.3,44.6L43.4,75.8L48.6,98.1L52.5,110.6L56.4,120.1L62.9,131.3L69.4,138.6L77.1,144.0L77.2,24.2L79.7,44.2L83.6,68.8L87.5,87.9L92.7,106.8L97.9,120.1L104.3,131.2L110.9,138.6L118.6,144.0L118.7,24.2L125.0,68.5L129.0,88.1L135.4,110.3L141.9,125.0L147.1,132.9L152.4,138.6L160.1,144.0L160.2,24.2L162.7,44.2L167.9,76.0L173.1,98.3L176.8,110.1L180.8,119.9L187.2,131.1L193.8,138.6L201.5,144.0L201.7,24.2L206.8,61.7L209.4,76.0L212.0,88.1L217.1,106.7L222.3,119.9L227.5,129.3L232.7,136.0L237.9,140.7L240.5,142.5L242.4,23.9L247.6,61.4L253.4,90.7L256.0,100.5L261.2,115.6L265.7,125.1L270.0,131.8L276.1,138.5L279.3,141.2L283.9,144.0L283.9,24.2L289.0,61.3L294.2,87.9L296.9,98.3"/>
+                <path stroke="hsl(208 82% 58%)" d="M11.1,152.0L290.8,152.0"/>
+                <path stroke="hsl(138 82% 58%)" d="M11.1,151.9L15.8,152.0L16.7,49.0L19.3,90.8L21.0,108.7L23.6,126.3L26.2,136.7L29.6,144.3L33.1,148.2L37.4,150.4L44.3,151.6L57.3,152.0L58.2,49.0L59.9,79.2L62.5,108.7L65.1,126.3L68.5,139.1L72.0,145.6L74.6,148.2L78.0,150.1L83.6,151.4L98.8,152.0L99.7,49.0L101.4,79.2L104.3,111.6L107.4,130.4L110.0,139.1L114.3,146.6L116.9,148.8L119.5,150.1L125.0,151.4L140.3,152.0L141.2,49.0L143.7,90.8L145.5,108.7L148.9,130.4L151.5,139.1L153.2,142.9L155.8,146.6L158.4,148.8L161.0,150.1L166.5,151.4L181.8,152.0L182.6,49.0L185.2,90.8L187.2,110.7L190.4,130.4L193.0,139.1L194.7,142.9L197.3,146.6L199.0,148.2L202.5,150.1L207.9,151.4L223.3,152.0L224.1,49.0L226.7,90.8L228.4,108.7L231.0,126.3L234.5,139.1L237.9,145.6L240.5,148.2L244.0,150.1L251.8,151.6L264.0,152.0L264.9,49.0L266.6,79.2L269.2,108.7L270.9,121.4L273.5,133.8L276.1,141.2L278.7,145.6L280.4,147.4L285.6,150.4L292.5,151.6"/>
+              </g>
+              <g class="pp-fore" clip-path="url(#ppfore)" fill="none" stroke-width="1.5" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round">
+                <path stroke="hsl(18 82% 58%)" d="M299.4,106.6L304.6,120.1L309.8,129.4L311.5,12.0L314.9,40.9L319.2,68.8L324.4,93.1L327.9,105.5L333.1,119.1L337.4,127.3L342.5,134.5L346.1,138.2L351.2,142.2L352.9,23.5L359.0,66.5L364.2,91.6L368.4,106.6L373.6,119.9L378.8,129.3L384.0,135.9L391.7,142.4L394.3,24.2L396.9,44.5L402.1,76.0L404.7,88.1L409.9,106.8L415.0,120.0L420.2,129.4L425.4,136.0L433.2,142.5L435.8,24.2L440.9,61.6L443.5,76.0L446.1,88.1L451.3,106.8L456.5,120.1L461.7,129.4L466.8,136.0L474.6,142.5L477.2,24.2L479.8,44.5L485.0,76.0L487.5,88.1L492.7,106.8L497.9,120.1L503.1,129.4L508.3,136.0L516.0,142.5L518.6,24.2L521.2,44.5L526.4,76.0L529.0,88.1L534.2,106.8L539.3,120.1L544.5,129.4L549.7,136.0L557.5,142.5L560.0,24.2L565.2,61.6L570.4,88.1L573.0,98.3L578.2,114.0L580.8,120.1L585.9,129.4"/>
+                <path stroke="hsl(208 82% 58%)" d="M301.1,152.0L311.5,46.7L321.8,53.8L342.5,66.5L363.3,77.6L384.0,87.2L404.7,95.6L425.4,102.9L466.8,114.8L477.2,12.0L497.9,30.1L518.6,45.9L529.0,53.0L539.3,59.6L560.0,71.6L580.8,82.0"/>
+                <path stroke="hsl(138 82% 58%)" d="M301.1,151.9L305.5,152.0L306.4,49.0L308.1,79.2L310.7,108.7L311.5,12.0L314.9,82.0L316.7,103.4L319.2,122.6L321.8,134.5L324.4,141.6L327.0,145.8L331.3,149.4L333.9,150.5L339.1,151.5L352.0,152.0L352.9,49.0L354.6,79.2L357.2,108.7L359.8,126.3L361.5,133.8L364.1,141.2L366.7,145.6L368.4,147.4L373.6,150.4L380.5,151.6L393.5,152.0L394.3,49.0L396.9,90.8L398.7,108.7L401.2,126.3L404.7,139.1L408.1,145.6L410.7,148.2L414.2,150.1L422.0,151.6L434.9,152.0L435.8,49.0L437.5,79.2L440.1,108.7L443.5,130.4L446.1,139.1L447.8,142.9L450.4,146.6L453.0,148.8L455.6,150.1L463.4,151.6L476.3,152.0L477.2,49.0L478.9,79.2L481.5,108.7L484.1,126.3L487.5,139.1L491.0,145.6L493.6,148.2L497.0,150.1L504.8,151.6L517.8,152.0L518.6,49.0L520.3,79.2L522.9,108.7L525.5,126.3L528.1,136.7L529.8,141.2L533.3,146.6L535.9,148.8L539.3,150.4L546.2,151.6L559.2,152.0L560.0,49.0L563.5,100.5L566.1,121.4L568.7,133.8L572.1,142.9L576.4,148.2L580.8,150.4L587.7,151.6"/>
+              </g>
+              <line id="ppnow" x1="298" x2="298" y1="12" y2="152" stroke="rgba(255,255,255,.45)" stroke-dasharray="3 3" stroke-width="1" opacity="0"/>
+              <text id="ppnowlbl" x="301" y="20" font-size="9" fill="rgba(255,255,255,.55)" opacity="0">now</text>
+            </svg>
+          </div>
+          <div class="cap">Plasma levels &mdash; three peptides, forecast past &ldquo;now&rdquo;</div>
         </div>
       </div>
 
@@ -649,6 +682,25 @@
      Done in JS, not markup: if this script never runs the images render plainly
      rather than sitting clipped to nothing. */
   var REVEAL_SPAN = 0.55;   /* reveal completes 55% through the dwell */
+  /* the plasma panel animates real SVG geometry instead of clipping a raster:
+     history strokes draw via dashoffset, then the dashed forecast is revealed
+     by widening a clip rect (dashoffset can't drive a path that already uses
+     stroke-dasharray for its dash pattern) */
+  var plasmaPanel = document.querySelector('.panel.split .frame.plasma');
+  if (plasmaPanel){
+    var host = plasmaPanel.closest('.panel');
+    host._plasma = {
+      hist: [].slice.call(plasmaPanel.querySelectorAll('.pp-hist path')).map(function(p){
+        var L = p.getTotalLength();
+        p.style.setProperty('--len', L); p.style.setProperty('--off', L);
+        return {p:p, L:L};
+      }),
+      rect: plasmaPanel.querySelector('#pprect'),
+      now:  plasmaPanel.querySelector('#ppnow'),
+      lbl:  plasmaPanel.querySelector('#ppnowlbl')
+    };
+  }
+
   panels.forEach(function(el){
     var img = el.querySelector('.ui img');
     if (!img) return;
@@ -786,6 +838,22 @@
         var eased = 1 - Math.pow(1 - k, 3);
         fr.style.setProperty('--hide', ((1 - eased) * 100).toFixed(2) + '%');
         fr.style.setProperty('--edge', (k > 0.01 && k < 0.99) ? '1' : '0');
+      }
+
+      /* plasma chart: history draws first, then the forecast extends past now */
+      var pl = el._plasma;
+      if (pl){
+        var kk = (p - a) / ((b - a) * REVEAL_SPAN);
+        kk = kk < 0 ? 0 : (kk > 1 ? 1 : kk);
+        var hk = Math.min(1, kk / 0.62);                    /* history 0 -> 62% */
+        var fk = Math.max(0, (kk - 0.5) / 0.5);             /* forecast 50% -> end */
+        var he = 1 - Math.pow(1 - hk, 3), fe = 1 - Math.pow(1 - fk, 3);
+        for (var q=0;q<pl.hist.length;q++)
+          pl.hist[q].p.style.setProperty('--off', (pl.hist[q].L * (1 - he)).toFixed(1));
+        pl.rect.setAttribute('width', (302 * fe).toFixed(1));
+        var nowOp = Math.min(1, Math.max(0, (kk - 0.42) / 0.18));
+        pl.now.setAttribute('opacity', nowOp.toFixed(2));
+        pl.lbl.setAttribute('opacity', nowOp.toFixed(2));
       }
     }
     for (var j=0;j<ticks.length;j++){
