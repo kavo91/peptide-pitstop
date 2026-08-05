@@ -206,8 +206,13 @@
   /* scroll-driven reveal: the screenshot wipes in left-to-right as you scroll
      through the panel's dwell, so the chart reads as drawing itself. The wrapper
      is added by JS — with no JS the image simply shows, uncropped. */
-  .panel.split .ui .frame{position:relative; border-radius:12px; overflow:hidden; display:block}
-  .panel.split .ui .frame img{clip-path:inset(0 var(--hide,0%) 0 0)}
+  /* reserve the box before the lazy screenshot lands: without this the panel
+     collapses to copy-only, jumps when the image arrives, and the reveal has
+     nothing to clip. Every screenshot is 2640x1840. */
+  .panel.split .ui .frame{position:relative; border-radius:12px; overflow:hidden; display:block;
+    aspect-ratio:2640/1840; background:var(--surface)}
+  .panel.split .ui .frame img{width:100%; height:100%; object-fit:cover;
+    clip-path:inset(0 var(--hide,0%) 0 0)}
   .panel.split .ui .frame .edge{
     position:absolute; top:0; bottom:0; width:2px; pointer-events:none;
     left:calc(100% - var(--hide,0%)); transform:translateX(-1px);
@@ -222,9 +227,24 @@
   @media (max-width:1220px){
     .panel.split{flex-direction:column; gap:20px; text-align:center; padding:0 24px}
     .panel.split .copy,.panel.split .ui{flex:0 1 auto; max-width:560px}
-    .panel.split .ui{max-width:min(78vw,420px)}
+    /* width must be explicit: flex-basis auto + an unloaded image gives the
+       frame no width, so aspect-ratio has nothing to derive its height from */
+    .panel.split .ui{max-width:min(78vw,420px); width:min(78vw,420px)}
     .panel.split h2{font-size:clamp(26px,7vw,38px)}
     .panel.split .copy p{font-size:15px}
+  }
+  /* very short viewports (landscape phones ~390px tall). Stacked simply cannot
+     fit copy + screenshot, but a landscape phone has width to spare — so go
+     side-by-side there, and drop the screenshot only when it is short AND
+     narrow, where nothing would fit either way. */
+  @media (max-height:520px) and (min-width:680px){
+    .panel.split{flex-direction:row; text-align:left; gap:20px; padding:0 28px; align-items:center}
+    .panel.split .copy{flex:0 1 380px; max-width:380px}
+    .panel.split .ui{flex:0 1 290px; max-width:290px; width:290px}
+    .panel.split .copy p{font-size:13px}
+  }
+  @media (max-height:520px) and (max-width:679px){
+    .panel.split .ui{display:none}
   }
   .panel h1{font-size:clamp(54px,11vw,128px); margin:0}
   .panel h2{font-size:clamp(34px,6vw,58px); margin:0 0 10px}
