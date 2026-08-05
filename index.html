@@ -280,8 +280,51 @@
   .disclaimer{font-size:13px; color:#76766f; max-width:640px}
 
   /* restrained reveal for the conventional sections */
-  .rise{opacity:0; transform:translateY(20px); transition:opacity .6s ease, transform .6s ease}
-  .rise.on{opacity:1; transform:none}
+  /* Hidden ONLY when JS has confirmed it is running (html.js-motion). Without
+     this gate a failed observer leaves the whole lower page at opacity 0. */
+  .js-motion .rise{opacity:0; transform:translateY(20px); transition:opacity .6s ease, transform .6s ease}
+  .js-motion .rise.on{opacity:1; transform:none}
+
+  /* ---- sector rail, continued past the flight ----
+     the in-stage rail dies with the spine; this one tracks the whole document
+     so the motif carries through the conventional sections */
+  .pagerail{position:fixed; left:18px; top:50%; transform:translateY(-50%); z-index:20;
+    display:flex; flex-direction:column; gap:9px; pointer-events:none;
+    opacity:0; transition:opacity .5s ease}
+  .pagerail.show{opacity:1}
+  .pagerail i{display:block; width:3px; height:22px; border-radius:2px; background:rgba(255,255,255,.16);
+    transition:background .3s ease}
+  .pagerail i.lit{background:var(--accent)}
+
+  /* ---- scanline sweep across each card as it arrives ---- */
+  .card{position:relative; overflow:hidden}
+  .card::after{content:''; position:absolute; top:0; bottom:0; width:38%;
+    left:-45%; pointer-events:none; opacity:0;
+    background:linear-gradient(100deg, transparent, rgba(255,91,20,.14) 45%, rgba(255,255,255,.07) 55%, transparent);
+    transform:skewX(-12deg)}
+  .card.on::after{animation:sweep 1.05s cubic-bezier(.22,.61,.36,1) .18s 1 both}
+  @keyframes sweep{ from{left:-45%; opacity:0} 18%{opacity:1} to{left:118%; opacity:0} }
+
+  /* ---- dark/light theme wipe ---- */
+  .themewipe{margin-top:10px}
+  .tw-stack{position:relative; border:1px solid var(--line); border-radius:12px; overflow:hidden;
+    background:var(--surface); aspect-ratio:2640/1840}
+  .tw-stack .tw-base{width:100%; height:100%; object-fit:cover}
+  .tw-stack img{display:block; width:100%; height:auto}
+  .tw-stack .tw-over{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+    clip-path:inset(0 var(--wipe,0%) 0 0)}
+  .tw-stack .tw-edge{position:absolute; top:0; bottom:0; width:2px; pointer-events:none;
+    left:calc(100% - var(--wipe,0%)); transform:translateX(-1px);
+    background:var(--accent); box-shadow:0 0 20px 4px rgba(255,91,20,.55);
+    opacity:var(--wedge,0); transition:opacity .2s linear}
+  .tw-cap{display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+    font-size:13px; color:var(--muted); padding:8px 12px; border:1px solid var(--line);
+    border-top:0; border-radius:0 0 12px 12px; margin-top:-1px}
+  .tw-lbl{font-family:Teko; text-transform:uppercase; letter-spacing:2px; color:var(--accent); font-size:16px}
+
+  /* ---- parallax on the phone shots ---- */
+  .mobiles .shot{will-change:transform}
+  .mobiles .shot img{transform:translate3d(0,var(--par,0px),0)}
 
   @media (max-width:640px){
     .pair{grid-template-columns:1fr}
@@ -313,8 +356,12 @@
     .panel{position:static; opacity:1; transform:none; padding:56px 24px; min-height:0}
     .panel.split{flex-direction:column; text-align:center; padding:56px 24px; gap:22px}
     .panel.split .copy,.panel.split .ui{flex:0 1 auto; max-width:640px}
-    .rail,.scrollcue{display:none}
+    .rail,.scrollcue,.loadbar,.pagerail{display:none}
     .rise{opacity:1; transform:none}
+    .card.on::after{animation:none; opacity:0}
+    .tw-stack .tw-over{clip-path:none; position:static; height:auto}
+    .tw-stack .tw-edge{display:none}
+    .mobiles .shot img{transform:none}
   }
 </style>
 </head>
@@ -437,9 +484,15 @@
   <p class="eyebrow rise">A look inside</p>
   <h2 class="title teko rise">Dark &amp; light. Desk &amp;&nbsp;phone.</h2>
   <p class="sub rise">A motorsport-inspired “pit-wall” design — carbon and race-orange — with a clean light theme. Dark desktop screens appear in the flythrough above. All screenshots use demo data only.</p>
-  <div class="pair">
-    <div class="shot rise"><img src="docs/screenshots/analytics-light.png" alt="Analytics and plasma-level modelling chart in the light theme (demo data)" loading="lazy" /><div class="cap">Analytics &amp; plasma — light</div></div>
-    <div class="shot rise"><img src="docs/screenshots/today.png" alt="Today dashboard with dose log and adherence heatmap (demo data)" loading="lazy" /><div class="cap">Today — dark</div></div>
+  <!-- one frame, both themes: scrolling wipes dark -> light across the same
+       screen, which demonstrates the theme rather than captioning it -->
+  <div class="themewipe rise" id="themewipe">
+    <div class="tw-stack">
+      <img class="tw-base" src="docs/screenshots/analytics-light.png" alt="Analytics and plasma-level modelling chart in the light theme (demo data)" loading="lazy" />
+      <img class="tw-over" src="docs/screenshots/analytics.png" alt="The same analytics and plasma-level modelling screen in the dark carbon theme (demo data)" loading="lazy" />
+      <span class="tw-edge" aria-hidden="true"></span>
+    </div>
+    <div class="tw-cap"><span>Analytics &amp; plasma</span><span class="tw-lbl" id="twlbl">Dark</span></div>
   </div>
   <p class="eyebrow rise" style="margin-top:34px">On your phone</p>
   <div class="mobiles">
@@ -472,6 +525,8 @@
 <script>
 (function(){
   var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /* opt in to the hidden-then-revealed treatment only now that JS is running */
+  if (!reduce) document.documentElement.classList.add('js-motion');
   var spine  = document.getElementById('spine');
   var video  = document.getElementById('flight');
   var panels = Array.prototype.slice.call(document.querySelectorAll('.panel'));
@@ -485,6 +540,67 @@
   document.querySelectorAll('.rise').forEach(function(el,i){
     el.style.transitionDelay = (Math.min(i,6)*40)+'ms'; io.observe(el);
   });
+  /* failsafe: if nothing has revealed shortly after load, show it all rather
+     than leave the page blank */
+  setTimeout(function(){
+    if (!document.querySelector('.rise.on'))
+      document.querySelectorAll('.rise').forEach(function(el){ el.classList.add('on'); });
+  }, 2500);
+
+  /* ---------- lower-page motion (independent of the flight) ---------- */
+  if (!reduce){
+    /* sector rail continued across the whole document */
+    var SECTIONS = ['#features','#screens','#faq'];
+    var prail = document.createElement('div');
+    prail.className = 'pagerail'; prail.setAttribute('aria-hidden','true');
+    SECTIONS.forEach(function(){ prail.appendChild(document.createElement('i')); });
+    document.body.appendChild(prail);
+    var ptick = prail.querySelectorAll('i');
+
+    /* theme wipe: dark overlay retreats to reveal the light theme underneath */
+    var tw = document.getElementById('themewipe');
+    var twStack = tw && tw.querySelector('.tw-stack');
+    var twLbl = document.getElementById('twlbl');
+
+    /* phone shots drift at slightly different rates */
+    var phones = [].slice.call(document.querySelectorAll('.mobiles .shot'));
+
+    function lowUpdate(){
+      var vh = window.innerHeight || 0; if (!vh) return;
+
+      /* rail: show once the flight is behind us, light per section passed */
+      var spineBottom = spine.getBoundingClientRect().bottom;
+      prail.classList.toggle('show', spineBottom < vh * 0.5);
+      SECTIONS.forEach(function(sel, i){
+        var el = document.querySelector(sel); if (!el) return;
+        ptick[i].classList.toggle('lit', el.getBoundingClientRect().top < vh * 0.6);
+      });
+
+      /* theme wipe, driven by the frame's own travel through the viewport */
+      if (twStack){
+        var r = twStack.getBoundingClientRect();
+        var k = (vh - r.top) / (vh * 0.75 + r.height * 0.5);
+        k = k < 0 ? 0 : (k > 1 ? 1 : k);
+        var e = 1 - Math.pow(1 - k, 3);
+        twStack.style.setProperty('--wipe', (e * 100).toFixed(2) + '%');
+        twStack.style.setProperty('--wedge', (k > 0.02 && k < 0.98) ? '1' : '0');
+        if (twLbl) twLbl.textContent = e > 0.55 ? 'Light' : 'Dark';
+      }
+
+      /* parallax: a few px of counter-drift, alternating direction */
+      for (var i=0;i<phones.length;i++){
+        var pr = phones[i].getBoundingClientRect();
+        var mid = (pr.top + pr.height/2 - vh/2) / vh;      /* -1..1 through view */
+        var amt = (i % 2 ? -1 : 1) * mid * 14;
+        phones[i].style.setProperty('--par', amt.toFixed(1) + 'px');
+      }
+    }
+    /* synchronous, like the flight engine: rAF is throttled in background tabs
+       and low-power mode, which would freeze the rail, wipe and parallax */
+    window.addEventListener('scroll', lowUpdate, {passive:true});
+    window.addEventListener('resize', lowUpdate, {passive:true});
+    lowUpdate();
+  }
 
   if (reduce) return;   /* stacked stills; no scrubbing, no video fetch */
 
