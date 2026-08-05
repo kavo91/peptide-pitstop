@@ -203,6 +203,20 @@
   .panel.split .ui img{width:100%; height:auto; display:block; border-radius:12px;
     border:1px solid rgba(255,255,255,.14); box-shadow:0 30px 80px rgba(0,0,0,.7)}
   .panel.split .ui .cap{font-size:12px; color:var(--muted); padding-top:8px}
+  /* scroll-driven reveal: the screenshot wipes in left-to-right as you scroll
+     through the panel's dwell, so the chart reads as drawing itself. The wrapper
+     is added by JS — with no JS the image simply shows, uncropped. */
+  .panel.split .ui .frame{position:relative; border-radius:12px; overflow:hidden; display:block}
+  .panel.split .ui .frame img{clip-path:inset(0 var(--hide,0%) 0 0)}
+  .panel.split .ui .frame .edge{
+    position:absolute; top:0; bottom:0; width:2px; pointer-events:none;
+    left:calc(100% - var(--hide,0%)); transform:translateX(-1px);
+    background:var(--accent); box-shadow:0 0 20px 4px rgba(255,91,20,.6);
+    opacity:var(--edge,0); transition:opacity .2s linear}
+  @media (prefers-reduced-motion: reduce){
+    .panel.split .ui .frame img{clip-path:none}
+    .panel.split .ui .frame .edge{display:none}
+  }
   /* side-by-side needs 520 + 44 gap + 560 + 96 padding = 1220px before it is
      cramped, and a cramped split reads as the screenshot crowding the copy */
   @media (max-width:1220px){
@@ -494,6 +508,23 @@
   var LEGS = 8, LEG_VH = 46;
   spine.style.height = (LEGS * LEG_VH) + 'svh';
 
+  /* ---- wrap each split-panel screenshot so it can be wiped in ----
+     Done in JS, not markup: if this script never runs the images render plainly
+     rather than sitting clipped to nothing. */
+  var REVEAL_SPAN = 0.55;   /* reveal completes 55% through the dwell */
+  panels.forEach(function(el){
+    var img = el.querySelector('.ui img');
+    if (!img) return;
+    var frame = document.createElement('span');
+    frame.className = 'frame';
+    img.parentNode.insertBefore(frame, img);
+    frame.appendChild(img);
+    var edge = document.createElement('span');
+    edge.className = 'edge';
+    frame.appendChild(edge);
+    el._frame = frame;
+  });
+
   /* sector rail, one tick per leg */
   for (var i=0;i<LEGS;i++) rail.appendChild(document.createElement('i'));
   var ticks = rail.querySelectorAll('i');
@@ -556,6 +587,17 @@
       var el = panels[i];
       var a = parseFloat(el.dataset.in), b = parseFloat(el.dataset.out);
       el.classList.toggle('on', p >= a && p <= b);
+
+      /* draw the screenshot in across the first REVEAL_SPAN of the dwell, so it
+         finishes well before the panel starts leaving and never wipes back out */
+      var fr = el._frame;
+      if (fr){
+        var k = (p - a) / ((b - a) * REVEAL_SPAN);
+        k = k < 0 ? 0 : (k > 1 ? 1 : k);
+        var eased = 1 - Math.pow(1 - k, 3);
+        fr.style.setProperty('--hide', ((1 - eased) * 100).toFixed(2) + '%');
+        fr.style.setProperty('--edge', (k > 0.01 && k < 0.99) ? '1' : '0');
+      }
     }
     for (var j=0;j<ticks.length;j++){
       ticks[j].classList.toggle('lit', p >= (j/LEGS) - 0.001);
