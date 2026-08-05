@@ -463,7 +463,11 @@
   var deviceW = Math.max(screen.width || 0, window.innerWidth || 0);
   var small = deviceW <= 900 || (navigator.deviceMemory && navigator.deviceMemory <= 4)
               || navigator.connection && /(^|-)2g$/.test(navigator.connection.effectiveType || '');
-  video.src = small ? 'assets/vid/flythrough-720.mp4' : 'assets/vid/flythrough-1080.mp4';
+  /* Both tiers are deliberately small. Scrubbing is random access, so the file
+     has to buffer END TO END: a 33MB encode only buffered its first 15s before
+     the browser went NETWORK_IDLE, and every seek past that point stalled at
+     readyState 1 with nothing painted. Size beats sharpness here. */
+  video.src = small ? 'assets/vid/flythrough-540.mp4' : 'assets/vid/flythrough-720.mp4';
 
   /* ---- spine height ----
      One full viewport per leg meant ~5,700px of scrolling before any
@@ -516,7 +520,9 @@
     var p = progress();
     if (p === null) return;          /* viewport not measurable yet */
     var d = dur();
-    target = p * d;
+    /* never seek to exactly duration — there is no frame at the end boundary and
+       the decoder drops to readyState 1 with nothing painted on the last panel */
+    target = Math.min(p * d, d - 0.08);
 
     /* only seek on a meaningful delta — spamming currentTime stalls the decoder.
        Re-sync if something else moved the playhead behind our back. */
