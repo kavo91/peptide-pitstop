@@ -229,6 +229,17 @@
   .scrollcue{position:absolute; left:50%; bottom:22px; transform:translateX(-50%); z-index:3;
     font-family:Teko; letter-spacing:2px; text-transform:uppercase; font-size:15px; color:var(--muted);
     transition:opacity .4s ease}
+  /* buffering cue — the flight is several MB, and on a cold CDN edge the first
+     visitor waits. A real progress bar reads as deliberate; a frozen poster
+     reads as broken. Hidden the moment enough is buffered to scrub. */
+  .loadbar{position:absolute; left:50%; bottom:52px; transform:translateX(-50%); z-index:3;
+    width:min(240px,42vw); pointer-events:none; transition:opacity .5s ease}
+  .loadbar .track{height:2px; border-radius:2px; background:rgba(255,255,255,.16); overflow:hidden}
+  .loadbar .fill{display:block; height:100%; width:0%; background:var(--accent);
+    transition:width .35s ease}
+  .loadbar .lbl{font-family:Teko; letter-spacing:2px; text-transform:uppercase; font-size:13px;
+    color:var(--muted); text-align:center; padding-top:7px}
+  .loadbar.done{opacity:0}
 
   /* ---------- conventional sections below the spine ---------- */
   section.wrap{padding:56px 24px}
@@ -310,6 +321,7 @@
     <video id="flight" playsinline muted preload="auto" poster="assets/poster/p1.jpg" aria-hidden="true"></video>
     <img class="posterfall" src="assets/poster/p1.jpg" alt="Peptide Pitstop race garage — the flythrough, shown as a still because reduced motion is enabled." />
     <div class="rail" id="rail" aria-hidden="true"></div>
+    <div class="loadbar" id="loadbar" aria-hidden="true"><span class="track"><span class="fill" id="loadfill"></span></span><span class="lbl">Loading the flight</span></div>
     <div class="scrollcue" id="cue">Scroll</div>
     <div class="panels" id="panels">
 
@@ -323,10 +335,16 @@
         </div>
       </div>
 
-      <div class="panel" data-in="0.135" data-out="0.235">
-        <p class="eyebrow">Own your own data</p>
-        <h2 class="teko">Your data never leaves your&nbsp;server</h2>
-        <p>It runs on a machine you own. There's no account to sign up for, nothing phones home, and there's no company in the middle who could be breached or change the terms. Your notes and lab results are encrypted before they're saved, and you can export or delete the lot whenever you like.</p>
+      <div class="panel split" data-in="0.13" data-out="0.25">
+        <div class="copy">
+          <p class="eyebrow">Own your own data</p>
+          <h2 class="teko">Your data never leaves your server</h2>
+          <p>It runs on a machine you own. There's no account to sign up for, nothing phones home, and no company in the middle who could be breached or change the terms. Your notes and lab results are encrypted before they're saved, and you can export or delete the lot whenever you like.</p>
+        </div>
+        <div class="ui">
+          <img src="docs/screenshots/today.png" alt="Today dashboard with dose log and adherence heatmap (demo data)" />
+          <div class="cap">Today</div>
+        </div>
       </div>
 
       <div class="panel split" data-in="0.36" data-out="0.49">
@@ -471,9 +489,9 @@
 
   /* ---- spine height ----
      One full viewport per leg meant ~5,700px of scrolling before any
-     conventional section. 62svh/leg keeps every dwell readable while cutting
-     the run-up to the rest of the page by nearly 40%. */
-  var LEGS = 8, LEG_VH = 62;
+     conventional section. 46svh/leg keeps every dwell readable while cutting
+     the run-up to the rest of the page by ~54% from the original. */
+  var LEGS = 8, LEG_VH = 46;
   spine.style.height = (LEGS * LEG_VH) + 'svh';
 
   /* sector rail, one tick per leg */
@@ -555,6 +573,32 @@
   document.addEventListener('visibilitychange', function(){
     if (!document.hidden){ applied = -1; update(); }
   });
+
+  /* ---- buffering cue ----
+     Report real buffered progress rather than a spinner, and retire it as soon
+     as the video can actually paint a frame (readyState >= 2). */
+  var loadbar = document.getElementById('loadbar'), loadfill = document.getElementById('loadfill');
+  if (loadbar){
+    var settled = false;
+    var poll = setInterval(function(){
+      var d = dur();
+      var end = video.buffered.length ? video.buffered.end(video.buffered.length - 1) : 0;
+      if (d) loadfill.style.width = Math.min(100, (end / d) * 100).toFixed(1) + '%';
+      if (!settled && video.readyState >= 2){
+        settled = true;
+        loadfill.style.width = '100%';
+        loadbar.classList.add('done');
+        setTimeout(function(){ loadbar.style.display = 'none'; }, 600);
+        clearInterval(poll);
+      }
+    }, 250);
+    /* never leave it hanging if the video fails outright */
+    video.addEventListener('error', function(){
+      loadbar.querySelector('.lbl').textContent = 'Flight unavailable';
+      loadfill.style.background = 'var(--muted)';
+      clearInterval(poll);
+    });
+  }
 
   update();
 })();
