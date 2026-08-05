@@ -231,6 +231,15 @@
   .ppheat i[data-s="1"]{background:rgba(255,91,20,.65)}
   .ppheat i[data-s="2"]{background:rgb(255,91,20)}
   .ppheat i[data-s="3"]{background:rgba(237,239,242,.05); box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+  /* syringe: the app's widget, filling to the computed draw volume */
+  .panel.split .ui .frame.syringe{aspect-ratio:auto; background:#0e0e0d; padding:22px 18px 16px;
+    border:1px solid rgba(255,255,255,.14); box-shadow:0 30px 80px rgba(0,0,0,.7)}
+  .syrsvg{display:block; width:100%; height:auto}
+  .syrread{display:flex; align-items:baseline; gap:8px; margin-top:14px;
+    font-family:Teko; text-transform:uppercase; letter-spacing:1px}
+  .syrread b{font-size:40px; line-height:1; color:var(--ink); font-weight:600}
+  .syrread span{font-size:17px; color:var(--accent)}
+  .syrread em{margin-left:auto; font-style:normal; font-size:20px; color:var(--muted)}
   .panel.split .ui .frame .edge{
     position:absolute; top:0; bottom:0; width:2px; pointer-events:none;
     left:calc(100% - var(--hide,0%)); transform:translateX(-1px);
@@ -244,6 +253,8 @@
     #pprect{width:302px}
     #ppnow,#ppnowlbl{opacity:1 !important}
     .ppheat i{opacity:1 !important; transform:none !important}
+    #syrvol{width:42px}
+    #syrmark{opacity:1 !important}
   }
   /* side-by-side needs 520 + 44 gap + 560 + 96 padding = 1220px before it is
      cramped, and a cramped split reads as the screenshot crowding the copy */
@@ -457,9 +468,35 @@
           <h2 class="teko">Reconstitution engine</h2>
           <p>Concentration, draw volume and syringe markings computed in exact decimal math. Handles reconstituted and premixed vials, and shows the markings against the barrel you're actually drawing into.</p>
         </div>
+        <!-- the app's own syringe widget, geometry lifted verbatim from /log:
+             1 mL U-100 barrel with 0.25 mL graduations, gradient fill and the
+             dashed draw-to marker. 400 mcg of BPC-157 at 2 mg/mL is 0.20 mL,
+             so the fill rect is 42 of 210 units — the engine's real answer,
+             not a drawing of one. Colours are literals because the app writes
+             rgb(var(--token)), which doesn't resolve against this site's hex. -->
         <div class="ui">
-          <img src="docs/screenshots/dosing.png" alt="Reconstitution and draw-volume dose calculator in the dark carbon theme (demo data)" />
-          <div class="cap">Log a dose</div>
+          <div class="frame syringe">
+            <svg class="syrsvg" viewBox="0 0 260 64" role="img"
+                 aria-label="1 mL U-100 insulin syringe filled to 0.20 mL, the draw volume for 400 micrograms at 2 mg per mL">
+              <defs>
+                <linearGradient id="syrfill" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="#b34110"/><stop offset="1" stop-color="#FF5B14"/>
+                </linearGradient>
+              </defs>
+              <rect x="8" y="18" width="210" height="28" rx="4" fill="#1b1b19" stroke="#9b9b95" stroke-width="1.5"/>
+              <rect id="syrvol" x="8" y="18" width="0" height="28" rx="4" fill="url(#syrfill)" opacity="0.85"/>
+              <line x1="8" y1="14" x2="8" y2="50" stroke="#9b9b95" stroke-width="1" opacity="0.5"/>
+              <line x1="60.5" y1="14" x2="60.5" y2="50" stroke="#9b9b95" stroke-width="1" opacity="0.5"/>
+              <line x1="113" y1="14" x2="113" y2="50" stroke="#9b9b95" stroke-width="1" opacity="0.5"/>
+              <line x1="165.5" y1="14" x2="165.5" y2="50" stroke="#9b9b95" stroke-width="1" opacity="0.5"/>
+              <line x1="218" y1="14" x2="218" y2="50" stroke="#9b9b95" stroke-width="1" opacity="0.5"/>
+              <line id="syrmark" x1="50" y1="12" x2="50" y2="52" stroke="#FF5B14" stroke-width="1.5" stroke-dasharray="3 2" opacity="0"/>
+              <rect x="218" y="22" width="18" height="20" rx="2" fill="#9b9b95"/>
+              <line x1="236" y1="32" x2="258" y2="32" stroke="#9b9b95" stroke-width="2"/>
+            </svg>
+            <div class="syrread"><b id="syrdose">0</b> <span>mcg</span> <em id="syrml">&mdash;</em></div>
+          </div>
+          <div class="cap">BPC-157 at 2&nbsp;mg/mL &mdash; draw 0.20&nbsp;mL on a 1&nbsp;mL U-100</div>
         </div>
       </div>
 
@@ -726,6 +763,17 @@
     };
   }
 
+  /* syringe panel: barrel fills to the engine's computed 0.20 mL as you scroll */
+  var syrFrame = document.querySelector('.panel.split .frame.syringe');
+  if (syrFrame){
+    syrFrame.closest('.panel')._syr = {
+      vol:  syrFrame.querySelector('#syrvol'),
+      mark: syrFrame.querySelector('#syrmark'),
+      dose: syrFrame.querySelector('#syrdose'),
+      ml:   syrFrame.querySelector('#syrml')
+    };
+  }
+
   panels.forEach(function(el){
     var img = el.querySelector('.ui img');
     if (!img) return;
@@ -863,6 +911,18 @@
         var eased = 1 - Math.pow(1 - k, 3);
         fr.style.setProperty('--hide', ((1 - eased) * 100).toFixed(2) + '%');
         fr.style.setProperty('--edge', (k > 0.01 && k < 0.99) ? '1' : '0');
+      }
+
+      /* syringe: 0 -> 42 units of a 210-unit barrel = 0 -> 0.20 mL */
+      var sy = el._syr;
+      if (sy){
+        var sk = (p - a) / ((b - a) * REVEAL_SPAN);
+        sk = sk < 0 ? 0 : (sk > 1 ? 1 : sk);
+        var se = 1 - Math.pow(1 - sk, 3);
+        sy.vol.setAttribute('width', (42 * se).toFixed(2));
+        sy.mark.setAttribute('opacity', Math.min(1, se * 1.6).toFixed(2));
+        sy.dose.textContent = Math.round(400 * se);
+        sy.ml.textContent = se > 0.02 ? (0.2 * se).toFixed(2) + ' mL' : '—';
       }
 
       /* plasma chart: history draws first, then the forecast extends past now */
