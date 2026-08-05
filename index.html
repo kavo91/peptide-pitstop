@@ -220,6 +220,17 @@
     border:1px solid rgba(255,255,255,.14); box-shadow:0 30px 80px rgba(0,0,0,.7)}
   .plasmasvg{display:block; width:100%; height:100%}
   .pp-hist path{stroke-dasharray:var(--len,0); stroke-dashoffset:var(--off,0)}
+  /* adherence heatmap — 7 columns, cells populate as you scroll */
+  /* fixed cell size, not 1fr: across a 560px panel 1fr gives 80px cells, which
+     dwarfs the chart and overflows the stage. The app's is a small calendar. */
+  .ppheat{display:grid; grid-template-columns:repeat(7,13px); grid-auto-rows:13px;
+    gap:3px; margin-top:12px; justify-content:start}
+  .ppheat i{display:block; aspect-ratio:1; border-radius:2px; background:var(--c,transparent);
+    opacity:var(--o,0); transform:scale(var(--s,.7)); transition:none}
+  .ppheat i[data-s="0"]{background:transparent}
+  .ppheat i[data-s="1"]{background:rgba(255,91,20,.65)}
+  .ppheat i[data-s="2"]{background:rgb(255,91,20)}
+  .ppheat i[data-s="3"]{background:rgba(237,239,242,.05); box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
   .panel.split .ui .frame .edge{
     position:absolute; top:0; bottom:0; width:2px; pointer-events:none;
     left:calc(100% - var(--hide,0%)); transform:translateX(-1px);
@@ -232,6 +243,7 @@
     .pp-hist path{stroke-dasharray:none !important; stroke-dashoffset:0 !important}
     #pprect{width:302px}
     #ppnow,#ppnowlbl{opacity:1 !important}
+    .ppheat i{opacity:1 !important; transform:none !important}
   }
   /* side-by-side needs 520 + 44 gap + 560 + 96 padding = 1220px before it is
      cramped, and a cramped split reads as the screenshot crowding the copy */
@@ -494,7 +506,12 @@
               <text id="ppnowlbl" x="301" y="20" font-size="9" fill="rgba(255,255,255,.55)" opacity="0">now</text>
             </svg>
           </div>
-          <div class="cap">Plasma levels &mdash; three peptides, forecast past &ldquo;now&rdquo;</div>
+          <!-- real adherence heatmap: 35 days lifted from the same instance.
+               0 = outside range, 1 = partial, 2 = dosed, 3 = missed. The two
+               3s are genuine missed days — that is what 83% adherence looks
+               like, and faking a perfect grid would be a lie. -->
+          <div class="ppheat" id="ppheat" data-seq="00122222222223222222232222222220000" aria-label="Dose-history heatmap: 35 days, two missed"></div>
+          <div class="cap">Plasma levels &amp; adherence &mdash; three peptides, forecast past &ldquo;now&rdquo;</div>
         </div>
       </div>
 
@@ -697,7 +714,15 @@
       }),
       rect: plasmaPanel.querySelector('#pprect'),
       now:  plasmaPanel.querySelector('#ppnow'),
-      lbl:  plasmaPanel.querySelector('#ppnowlbl')
+      lbl:  plasmaPanel.querySelector('#ppnowlbl'),
+      heat: (function(){
+        var h = host.querySelector('#ppheat'); if (!h) return null;
+        var seq = (h.dataset.seq || '').split('');
+        seq.forEach(function(s){
+          var c = document.createElement('i'); c.dataset.s = s; h.appendChild(c);
+        });
+        return {el:h, cells:[].slice.call(h.children)};
+      })()
     };
   }
 
@@ -854,6 +879,18 @@
         var nowOp = Math.min(1, Math.max(0, (kk - 0.42) / 0.18));
         pl.now.setAttribute('opacity', nowOp.toFixed(2));
         pl.lbl.setAttribute('opacity', nowOp.toFixed(2));
+
+        /* heatmap fills day by day once the chart is under way */
+        if (pl.heat){
+          var hk = Math.max(0, (kk - 0.45) / 0.5);
+          hk = hk > 1 ? 1 : hk;
+          var n = pl.heat.cells.length, lead = hk * (n + 6);
+          for (var c=0;c<n;c++){
+            var cv = Math.min(1, Math.max(0, lead - c));
+            pl.heat.cells[c].style.setProperty('--o', cv.toFixed(2));
+            pl.heat.cells[c].style.setProperty('--s', (0.7 + 0.3*cv).toFixed(2));
+          }
+        }
       }
     }
     for (var j=0;j<ticks.length;j++){
