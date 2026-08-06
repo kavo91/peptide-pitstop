@@ -240,6 +240,38 @@
   .syrread b{font-size:40px; line-height:1; color:var(--ink); font-weight:600}
   .syrread span{font-size:17px; color:var(--accent)}
   .syrread em{margin-left:auto; font-style:normal; font-size:20px; color:var(--muted)}
+
+  /* ---- week grid (Doses) ---- */
+  .panel.split .ui .frame.wkf,
+  .panel.split .ui .frame.bwf{aspect-ratio:auto; background:#0e0e0d; padding:18px 16px 14px;
+    border:1px solid rgba(255,255,255,.14); box-shadow:0 30px 80px rgba(0,0,0,.7)}
+  .wk-days,.wk-row{display:grid; grid-template-columns:74px repeat(7,1fr); gap:4px; align-items:center}
+  .wk-days{margin-bottom:6px; padding-left:74px; grid-template-columns:repeat(7,1fr)}
+  .wk-days span{font-family:Teko; font-size:14px; letter-spacing:1px; text-align:center; color:var(--muted)}
+  .wk-days span.on{color:var(--accent)}
+  .wk-row{margin-bottom:4px}
+  .wk-row > b{font-size:11px; font-weight:500; color:rgba(237,239,242,.82); letter-spacing:.2px}
+  .wk-row i{display:flex; align-items:center; justify-content:center; height:24px; border-radius:4px;
+    background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.05);
+    font-size:12px; line-height:1; opacity:var(--o,0); transform:scale(var(--s,.8))}
+  .wk-row i.today{border-color:rgba(255,91,20,.55); background:rgba(255,91,20,.08)}
+  .wk-row i.t{color:#34c98a} .wk-row i.p{color:var(--accent)}
+  .wk-key{display:flex; gap:14px; align-items:center; margin-top:10px;
+    font-family:Teko; font-size:13px; letter-spacing:1px; color:var(--muted)}
+  .wk-key i{width:8px; height:8px; border-radius:2px; display:inline-block; margin-right:5px}
+  .wk-key i.t{background:#34c98a} .wk-key i.p{background:var(--accent)}
+
+  /* ---- blood panel ---- */
+  .bw-row{display:grid; grid-template-columns:88px 1fr 52px; gap:10px; align-items:center;
+    margin-bottom:7px; opacity:var(--o,0); transform:translateY(var(--y,6px))}
+  .bw-row b{font-size:11.5px; font-weight:500; color:rgba(237,239,242,.82)}
+  .bw-track{position:relative; height:5px; border-radius:3px; background:rgba(255,255,255,.06)}
+  .bw-fill{position:absolute; left:0; top:0; bottom:0; border-radius:3px;
+    background:linear-gradient(90deg,#b34110,#ff5b14); width:var(--w,0%)}
+  .bw-dot{position:absolute; top:50%; width:7px; height:7px; margin:-3.5px 0 0 -3.5px;
+    border-radius:50%; background:var(--ink); box-shadow:0 0 0 2px #0e0e0d; left:var(--w,0%)}
+  .bw-val{font-family:Teko; font-size:17px; letter-spacing:.5px; color:var(--accent); text-align:right}
+  .bw-val span{font-size:10px; color:var(--muted); margin-left:3px}
   .panel.split .ui .frame .edge{
     position:absolute; top:0; bottom:0; width:2px; pointer-events:none;
     left:calc(100% - var(--hide,0%)); transform:translateX(-1px);
@@ -255,6 +287,7 @@
     .ppheat i{opacity:1 !important; transform:none !important}
     #syrvol{width:42px}
     #syrmark{opacity:1 !important}
+    .wk-row i,.bw-row{opacity:1 !important; transform:none !important}
   }
   /* side-by-side needs 520 + 44 gap + 560 + 96 padding = 1220px before it is
      cramped, and a cramped split reads as the screenshot crowding the copy */
@@ -457,8 +490,18 @@
           <p>It runs on a machine you own. There's no account to sign up for, nothing phones home, and no company in the middle who could be breached or change the terms. Your notes and lab results are encrypted before they're saved, and you can export or delete the lot whenever you like.</p>
         </div>
         <div class="ui">
-          <img src="docs/screenshots/today.png" alt="Today dashboard with dose log and adherence heatmap (demo data)" />
-          <div class="cap">Today</div>
+          <!-- the Doses week grid, rebuilt from the app's own structure and
+               legend with demo values: t=taken, p=planned, .=nothing scheduled.
+               Cells land day by day as you scroll. Demo data, not real doses. -->
+          <div class="frame wkf"><div class="wk" id="wkgrid" role="img"
+               aria-label="A week of scheduled doses for three peptides, some taken and some planned (demo data)">
+            <div class="wk-days"><span>Mo</span><span>Tu</span><span class="on">We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span></div>
+            <div class="wk-row" data-name="TB-500"     data-seq="p..p..."></div>
+            <div class="wk-row" data-name="BPC-157"    data-seq="tttpppp"></div>
+            <div class="wk-row" data-name="Ipamorelin" data-seq="tttpppp"></div>
+            <div class="wk-key"><i class="t"></i>Taken <i class="p"></i>Planned</div>
+          </div></div>
+          <div class="cap">This week&rsquo;s schedule &mdash; demo data</div>
         </div>
       </div>
 
@@ -507,8 +550,21 @@
           <p>Lab panels over time, in-range summaries and a comparison matrix backed by a curated biomarker library. Doses, labs, journal and wearables all export to CSV or PDF.</p>
         </div>
         <div class="ui">
-          <img src="docs/screenshots/bloodwork.png" alt="Bloodwork and biomarker trends over time (demo data)" loading="lazy" />
-          <div class="cap">Bloodwork</div>
+          <!-- the analyte table, rebuilt from the app's columns (Analyte / Unit
+               / Ref / value) with the demo panel's values. Each row carries its
+               reference range so the marker sits where the value actually falls
+               — the bar is computed, not drawn. Demo data, not real labs. -->
+          <div class="frame bwf"><div class="bw" id="bwtable" role="img"
+               aria-label="Blood panel with seven analytes, each shown against its reference range (demo data)">
+            <div class="bw-row" data-a="ALT"        data-u="U/L"    data-lo="0"   data-hi="45"  data-v="25"></div>
+            <div class="bw-row" data-a="Creatinine" data-u="umol/L" data-lo="60"  data-hi="130" data-v="85"></div>
+            <div class="bw-row" data-a="CRP"        data-u="mg/L"   data-lo="0"   data-hi="4"   data-v="1.0"></div>
+            <div class="bw-row" data-a="Ferritin"   data-u="ug/L"   data-lo="30"  data-hi="320" data-v="150"></div>
+            <div class="bw-row" data-a="Glucose"    data-u="mmol/L" data-lo="3"   data-hi="6"   data-v="5.0"></div>
+            <div class="bw-row" data-a="Haemoglobin" data-u="g/L"   data-lo="135" data-hi="180" data-v="150"></div>
+            <div class="bw-row" data-a="Vitamin D3" data-u="nmol/L" data-lo="49"  data-hi="150" data-v="90"></div>
+          </div></div>
+          <div class="cap">Blood panel against reference ranges &mdash; demo data</div>
         </div>
       </div>
 
@@ -763,6 +819,43 @@
     };
   }
 
+  /* week grid: build cells from the t/p/. sequence, mark today's column */
+  var wk = document.getElementById('wkgrid');
+  if (wk){
+    wk.closest('.frame') && wk.closest('.frame').classList.add('wkf');
+    var wkCells = [];
+    [].slice.call(wk.querySelectorAll('.wk-row')).forEach(function(row){
+      var b = document.createElement('b'); b.textContent = row.dataset.name;
+      row.appendChild(b);
+      row.dataset.seq.split('').forEach(function(ch, i){
+        var c = document.createElement('i');
+        if (ch === 't'){ c.className = 't'; c.textContent = '✓'; }
+        else if (ch === 'p'){ c.className = 'p'; c.textContent = '○'; }
+        if (i === 2) c.className += ' today';
+        row.appendChild(c); wkCells.push(c);
+      });
+    });
+    wk.closest('.panel')._wk = wkCells;
+  }
+
+  /* blood panel: marker sits where the value falls inside its reference range */
+  var bw = document.getElementById('bwtable');
+  if (bw){
+    bw.closest('.frame') && bw.closest('.frame').classList.add('bwf');
+    var bwRows = [].slice.call(bw.querySelectorAll('.bw-row')).map(function(row){
+      var lo = +row.dataset.lo, hi = +row.dataset.hi, v = +row.dataset.v;
+      var pct = Math.max(4, Math.min(96, ((v - lo) / (hi - lo)) * 100));
+      row.innerHTML = '<b>' + row.dataset.a + '</b>' +
+        '<span class="bw-track"><span class="bw-fill"></span><span class="bw-dot"></span></span>' +
+        '<span class="bw-val"><em style="font-style:normal">0</em><span>' + row.dataset.u + '</span></span>';
+      return {el:row, pct:pct, v:v,
+        dec:(row.dataset.v.indexOf('.') > -1) ? 1 : 0,
+        fill:row.querySelector('.bw-fill'), dot:row.querySelector('.bw-dot'),
+        val:row.querySelector('.bw-val em')};
+    });
+    bw.closest('.panel')._bw = bwRows;
+  }
+
   /* syringe panel: barrel fills to the engine's computed 0.20 mL as you scroll */
   var syrFrame = document.querySelector('.panel.split .frame.syringe');
   if (syrFrame){
@@ -911,6 +1004,38 @@
         var eased = 1 - Math.pow(1 - k, 3);
         fr.style.setProperty('--hide', ((1 - eased) * 100).toFixed(2) + '%');
         fr.style.setProperty('--edge', (k > 0.01 && k < 0.99) ? '1' : '0');
+      }
+
+      /* week grid: cells land left to right, a day at a time */
+      var wkc = el._wk;
+      if (wkc){
+        var wkk = (p - a) / ((b - a) * REVEAL_SPAN);
+        wkk = wkk < 0 ? 0 : (wkk > 1 ? 1 : wkk);
+        var lead = wkk * (wkc.length + 8);
+        for (var w=0;w<wkc.length;w++){
+          /* order by column then row so it reads as days passing, not rows */
+          var col = w % 7, rw = (w / 7) | 0, ord = col * 3 + rw;
+          var cv = Math.min(1, Math.max(0, lead - ord));
+          wkc[w].style.setProperty('--o', cv.toFixed(2));
+          wkc[w].style.setProperty('--s', (0.8 + 0.2*cv).toFixed(2));
+        }
+      }
+
+      /* blood panel: rows arrive, bars fill to the value's place in range */
+      var bwr = el._bw;
+      if (bwr){
+        var bk = (p - a) / ((b - a) * REVEAL_SPAN);
+        bk = bk < 0 ? 0 : (bk > 1 ? 1 : bk);
+        var blead = bk * (bwr.length + 5);
+        for (var r=0;r<bwr.length;r++){
+          var rv = Math.min(1, Math.max(0, blead - r));
+          var ease = 1 - Math.pow(1 - rv, 3);
+          bwr[r].el.style.setProperty('--o', rv.toFixed(2));
+          bwr[r].el.style.setProperty('--y', (6*(1-rv)).toFixed(1) + 'px');
+          bwr[r].fill.style.setProperty('--w', (bwr[r].pct*ease).toFixed(1) + '%');
+          bwr[r].dot.style.setProperty('--w', (bwr[r].pct*ease).toFixed(1) + '%');
+          bwr[r].val.textContent = (bwr[r].v*ease).toFixed(bwr[r].dec);
+        }
       }
 
       /* syringe: 0 -> 42 units of a 210-unit barrel = 0 -> 0.20 mL */
