@@ -5,6 +5,14 @@ export interface SlotStatusArgs {
   now: Date;
   matchedLog: { id: string; takenAt: Date } | null;
   nextSlotStart: Date | null;  // next scheduled slot's start, or null if none
+  /**
+   * NOT CONSULTED — deliberately. A same-day dose counts as taken however far
+   * off-time it was (resolve.ts PASS 1); gating on this window falsely marked
+   * real doses "missed". Kept on the args so the protocol setting stays
+   * threaded and a future "logged late" FLAG can use it WITHOUT changing what
+   * counts as taken. Do not start gating status on it — that would retroactively
+   * rewrite historical adherence.
+   */
   adherenceWindowMin: number;
 }
 

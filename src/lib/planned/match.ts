@@ -8,6 +8,7 @@
  * the matching contract is unit-testable without a database.
  */
 import { startOfDay, addDays } from "../schedule/schedule";
+import { slotInstantsOn } from "../schedule/slot-instants";
 import { dayAnchor } from "../tz-day";
 
 /** A candidate PlannedDose row, as the matcher consumes it. */
@@ -97,6 +98,44 @@ export function pickNearestPlanned<T extends NearestSlot>(rows: T[], takenAt: Da
       (dist === bestDist && row.scheduledAt.getTime() < best.scheduledAt.getTime())
     ) {
       best = row;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
+/**
+ * The intended slot INSTANT for a dose taken on `day` — the clock time the
+ * dose was actually aimed at.
+ *
+ * `PlannedDose.scheduledAt` cannot answer this. It is deliberately a LOCAL
+ * MIDNIGHT day anchor: `materialize.ts` collapses a day's slots to one row per
+ * protocol per day, and both `today-overrides.ts` and `today.ts` depend on that
+ * invariant. Measuring lateness against it reports a 21:00 dose taken 52 min
+ * late as ~22 h late, which is what reached CSV export and the PDF report.
+ *
+ * So re-derive the time from the schedule rule and pick the slot nearest
+ * `takenAt` (ties resolve to the earlier slot, matching `pickNearestPlanned`).
+ * Returns null when the protocol has no schedule or the day has no TIMED slot;
+ * callers then keep the prior day-anchor behaviour.
+ */
+export function scheduledSlotInstant(args: {
+  scheduleRule: string | null;
+  day: Date;
+  takenAt: Date;
+  startDate?: Date | null;
+  endDate?: Date | null;
+}): Date | null {
+  const instants = slotInstantsOn(args.scheduleRule, args.day, args.startDate, args.endDate);
+  if (instants.length === 0) return null;
+
+  const t = args.takenAt.getTime();
+  let best: Date | null = null;
+  let bestDist = Infinity;
+  for (const inst of instants) {
+    const dist = Math.abs(inst.getTime() - t);
+    if (best === null || dist < bestDist || (dist === bestDist && inst.getTime() < best.getTime())) {
+      best = inst;
       bestDist = dist;
     }
   }

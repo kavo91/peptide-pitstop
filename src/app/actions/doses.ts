@@ -18,6 +18,7 @@ import {
   plannedMatchDay,
   doseDeltaMinutes,
   pickNearestPlanned,
+  scheduledSlotInstant,
   unlinkedPlannedStatus,
 } from "@/lib/planned/match";
 import { slotInstantsOn } from "@/lib/schedule/slot-instants";
@@ -230,7 +231,24 @@ export async function logDose(input: LogDoseInput): Promise<LogDoseResult> {
       const planned = pickNearestPlanned(candidates, takenAt);
       if (planned) {
         plannedDoseId = planned.id;
-        scheduledAt = planned.scheduledAt;
+        // `planned.scheduledAt` is a LOCAL-MIDNIGHT day anchor, never a clock
+        // time (see scheduledSlotInstant). Storing it on the DoseLog made
+        // deltaMinutes report a 21:00 dose taken 52 min late as ~22 h late in
+        // CSV export and the PDF report. Re-derive the real slot time from the
+        // schedule; fall back to the anchor for untimed/off-grid schedules so
+        // existing behaviour is unchanged there.
+        const sched = await tx.protocol.findUnique({
+          where: { id: effectiveProtocolId },
+          select: { scheduleRule: true, startDate: true, endDate: true },
+        });
+        scheduledAt =
+          scheduledSlotInstant({
+            scheduleRule: sched?.scheduleRule ?? null,
+            day: planned.scheduledAt,
+            takenAt,
+            startDate: sched?.startDate,
+            endDate: sched?.endDate,
+          }) ?? planned.scheduledAt;
         await tx.plannedDose.update({
           where: { id: planned.id },
           data: { status: "taken" },
@@ -351,7 +369,24 @@ async function logOralDose(input: LogDoseInput, userId: string, clientUuid: stri
       const planned = pickNearestPlanned(candidates, takenAt);
       if (planned) {
         plannedDoseId = planned.id;
-        scheduledAt = planned.scheduledAt;
+        // `planned.scheduledAt` is a LOCAL-MIDNIGHT day anchor, never a clock
+        // time (see scheduledSlotInstant). Storing it on the DoseLog made
+        // deltaMinutes report a 21:00 dose taken 52 min late as ~22 h late in
+        // CSV export and the PDF report. Re-derive the real slot time from the
+        // schedule; fall back to the anchor for untimed/off-grid schedules so
+        // existing behaviour is unchanged there.
+        const sched = await tx.protocol.findUnique({
+          where: { id: effectiveProtocolId },
+          select: { scheduleRule: true, startDate: true, endDate: true },
+        });
+        scheduledAt =
+          scheduledSlotInstant({
+            scheduleRule: sched?.scheduleRule ?? null,
+            day: planned.scheduledAt,
+            takenAt,
+            startDate: sched?.startDate,
+            endDate: sched?.endDate,
+          }) ?? planned.scheduledAt;
         await tx.plannedDose.update({
           where: { id: planned.id },
           data: { status: "taken" },

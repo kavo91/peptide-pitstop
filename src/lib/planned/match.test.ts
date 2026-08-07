@@ -5,6 +5,7 @@ import {
   plannedDayWindow,
   plannedMatchDay,
   pickNearestPlanned,
+  scheduledSlotInstant,
   unlinkedPlannedStatus,
   type PlannableSlot,
 } from "./match";
@@ -141,5 +142,72 @@ describe("unlinkedPlannedStatus", () => {
   it("restores a current/future row to planned", () => {
     expect(unlinkedPlannedStatus(dt("2026-07-24T00:00:00"), now)).toBe("planned");
     expect(unlinkedPlannedStatus(dt("2026-07-25T00:00:00"), now)).toBe("planned");
+  });
+});
+
+describe("scheduledSlotInstant", () => {
+  // Weekday-evening protocol: Mon–Fri at 21:00. 2027-03-11 is a Thursday.
+  const WEEKNIGHT = JSON.stringify([
+    { dayPattern: { kind: "weekly", byDays: ["MO", "TU", "WE", "TH", "FR"] }, times: ["21:00"] },
+  ]);
+
+  it("returns the slot's real clock time, not the day anchor", () => {
+    const got = scheduledSlotInstant({
+      scheduleRule: WEEKNIGHT,
+      day: d("2027-03-11"),
+      takenAt: dt("2027-03-11T23:52:00"),
+    });
+    expect(got).toEqual(dt("2027-03-11T21:00:00"));
+  });
+
+  it("REGRESSION: a late evening dose reads minutes late, not a whole day late", () => {
+    // The defect: DoseLog.scheduledAt inherited PlannedDose's LOCAL-MIDNIGHT
+    // day anchor, so a dose taken 2h52m after a 21:00 slot exported as
+    // ~1432 min late instead of 172. Export + PDF report showed the inflated value.
+    const takenAt = dt("2027-03-11T23:52:00");
+    const anchorDelta = doseDeltaMinutes(takenAt, d("2027-03-11")); // old behaviour
+    const slot = scheduledSlotInstant({ scheduleRule: WEEKNIGHT, day: d("2027-03-11"), takenAt });
+    const realDelta = doseDeltaMinutes(takenAt, slot);
+
+    expect(anchorDelta).toBe(1432); // midnight-anchored: the bug
+    expect(realDelta).toBe(172); // 21:00 -> 23:52
+  });
+
+  it("picks the nearest slot on a multi-slot day (evening dose -> PM slot)", () => {
+    const twice = JSON.stringify([{ dayPattern: { kind: "daily" }, times: ["08:00", "20:00"] }]);
+    const got = scheduledSlotInstant({
+      scheduleRule: twice,
+      day: d("2027-03-11"),
+      takenAt: dt("2027-03-11T19:30:00"),
+    });
+    expect(got).toEqual(dt("2027-03-11T20:00:00"));
+  });
+
+  it("returns null for an untimed schedule so callers keep the day anchor", () => {
+    const untimed = JSON.stringify([{ dayPattern: { kind: "daily" }, times: [] }]);
+    expect(
+      scheduledSlotInstant({ scheduleRule: untimed, day: d("2027-03-11"), takenAt: dt("2027-03-11T10:00:00") }),
+    ).toBeNull();
+  });
+
+  it("returns null when the day is off-grid or the rule is absent", () => {
+    // 2027-03-13 is a Saturday — not on a Mon-Fri grid.
+    expect(
+      scheduledSlotInstant({ scheduleRule: WEEKNIGHT, day: d("2027-03-13"), takenAt: dt("2027-03-13T21:10:00") }),
+    ).toBeNull();
+    expect(
+      scheduledSlotInstant({ scheduleRule: null, day: d("2027-03-11"), takenAt: dt("2027-03-11T21:10:00") }),
+    ).toBeNull();
+  });
+
+  it("respects the protocol's start/end window", () => {
+    expect(
+      scheduledSlotInstant({
+        scheduleRule: WEEKNIGHT,
+        day: d("2027-03-11"),
+        takenAt: dt("2027-03-11T21:10:00"),
+        endDate: d("2027-03-10"),
+      }),
+    ).toBeNull();
   });
 });

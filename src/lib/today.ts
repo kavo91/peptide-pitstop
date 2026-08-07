@@ -352,7 +352,11 @@ export async function getTodayDoses(
       }
 
       // alreadyLoggedToday: the resolver's live status is authoritative for a
-      // timed slot (it uses the same ±adherenceWindow match). An untimed slot
+      // timed slot. NOTE: it matches on SAME TRACKING DAY + nearest slot — there
+      // is deliberately NO ±adherenceWindow gate (see resolve.ts PASS 1: the
+      // window test used to flag real same-day doses taken off-time as missed).
+      // `Protocol.adherenceWindowMin` is still collected and stored but is not
+      // consulted by any status or adherence calculation. An untimed slot
       // keeps the prior "any log today satisfies it" rule (the resolver matches
       // an untimed slot against local midnight, which would miss a daytime
       // log), preserving non-titration behaviour exactly.
