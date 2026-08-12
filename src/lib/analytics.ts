@@ -76,6 +76,11 @@ export interface PeptidePlasma {
   hasProjection: boolean;
   /** Owning stack ids for active/completed protocols contributing this peptide. */
   stackIds: string[];
+  /**
+   * Set on the components of a blend so the chart colours them as one family
+   * (one hue, varying lightness) rather than as unrelated peptides.
+   */
+  familyKey?: string;
 }
 
 export interface AnalyticsData {
@@ -472,6 +477,8 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
           series: compSeries,
           hasProjection,
           stackIds,
+          // One vial, one injection — colour them as one family.
+          familyKey: `blend:${peptideId}`,
         });
       }
       continue;
