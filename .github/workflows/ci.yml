@@ -1,0 +1,55 @@
+name: CI
+
+# Runs the checks that previously only ever ran on a maintainer's laptop.
+# `main` requires a pull request, but nothing verified the code in one — a
+# broken change would have sailed straight through the gate. Mirrors the build
+# steps in deploy/bundled/Dockerfile (node 22, npm ci, prisma generate, build)
+# so a green CI means the image will build too.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# A new push to a PR makes the in-flight run irrelevant — cancel it rather than
+# queueing behind work that is already superseded.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: typecheck · tests · build
+    runs-on: ubuntu-latest
+    env:
+      # Prisma needs DATABASE_URL to resolve the datasource at generate/build
+      # time. Nothing here touches a real database — the file is never created.
+      DATABASE_URL: "file:./ci.db"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Validate Prisma schema
+        run: npx prisma validate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
