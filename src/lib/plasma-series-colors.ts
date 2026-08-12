@@ -2,6 +2,15 @@ export interface PlasmaColorInput {
   peptideId: string;
   peptideName: string;
   stackIds?: string[];
+  /**
+   * Explicit grouping override, taking precedence over stack membership.
+   *
+   * Series sharing a familyKey are drawn as one colour family — a single base
+   * hue with the lightness spread across members — instead of unrelated hues.
+   * Used for the components of a blend: they come from one vial and one
+   * injection, so reading them as four separate compounds is wrong.
+   */
+  familyKey?: string;
 }
 
 export interface PlasmaColorAssignment {
@@ -57,7 +66,8 @@ export function assignPlasmaSeriesColors(input: PlasmaColorInput[]): PlasmaColor
   const families = new Map<string, PlasmaColorInput[]>();
   for (const peptide of [...input].sort((a, b) => a.peptideName.localeCompare(b.peptideName) || a.peptideId.localeCompare(b.peptideId))) {
     const stackIds = normalizeStackIds(peptide.stackIds);
-    const stackKey = stackIds[0] ? `stack:${stackIds[0]}` : `solo:${peptide.peptideId}`;
+    const stackKey =
+      peptide.familyKey ?? (stackIds[0] ? `stack:${stackIds[0]}` : `solo:${peptide.peptideId}`);
     const arr = families.get(stackKey) ?? [];
     arr.push({ ...peptide, stackIds });
     families.set(stackKey, arr);

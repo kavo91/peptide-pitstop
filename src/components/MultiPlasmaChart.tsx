@@ -79,6 +79,7 @@ export function MultiPlasmaChart({
           peptideId: p.peptideId,
           peptideName: p.peptideName,
           stackIds: p.stackIds,
+          familyKey: p.familyKey,
         })),
       ),
     [visible],
