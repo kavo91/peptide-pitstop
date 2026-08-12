@@ -29,6 +29,13 @@ jobs:
         with:
           path-to-signatures: ".github/cla-signatures.json"
           path-to-document: "https://github.com/kavo91/peptide-pitstop/blob/main/CLA.md"
-          branch: main
-          allowlist: kavo91,dependabot[bot]
+          # Signatures live on their own branch, NOT main. main is protected
+          # (enforce_admins, PR required), and the action commits the signature
+          # file directly — against a protected branch that fails with
+          # "Could not create file: Changes must be made through a pull request."
+          branch: cla-signatures
+          # Co-authors count as committers here. Commits carry a
+          # "Co-Authored-By: Claude Opus 5" trailer, which has no GitHub identity
+          # and would otherwise be treated as an unsigned contributor.
+          allowlist: kavo91,dependabot[bot],Claude Opus 5,claude[bot]
           custom-pr-sign-comment: "I have read the CLA Document and I hereby sign the CLA"
