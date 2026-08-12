@@ -34,4 +34,6 @@ export async function ensureWalMode(client: WalCapable = prisma): Promise<void> 
 }
 
 // Server runtime only (Edge has no SQLite access; scripts/tests leave it unset).
-if (process.env.NEXT_RUNTIME === "nodejs") void ensureWalMode();
+if (process.env.NEXT_RUNTIME === "nodejs" && process.env.NEXT_PHASE !== "phase-production-build") {
+  void ensureWalMode();
+}

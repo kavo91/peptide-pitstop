@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/owner";
 import { getWeek, getMonth, weekStartOf } from "@/lib/doses-timeline";
 import { DosesWeek } from "@/components/DosesWeek";
@@ -9,9 +10,10 @@ import { formatSideEffects, deserializeSideEffects, resolveSymptomList } from "@
 import { parseMonthParam, shiftMonth, monthKey } from "@/lib/month-nav";
 import { parseWeekParam, shiftWeek, weekKey } from "@/lib/week-nav";
 import type { ManualDay } from "@/lib/wellness-log";
+import { activeDesign } from "@/lib/design";
+import { viewerToday } from "@/lib/viewer-tz";
 import { PitstopHeading } from "@/components/PitstopHeading";
 import { PAGE_MAIN } from "@/lib/layout";
-import { viewerToday } from "@/lib/viewer-tz";
 
 export const dynamic = "force-dynamic";
 
@@ -56,35 +58,43 @@ async function loadWellnessByDay(userId: string, gridStart: string, gridEnd: str
   return map;
 }
 
-export default async function DosesPage({ searchParams }: { searchParams: { view?: string; month?: string; weekStart?: string } }) {
+export default async function DosesPage({ searchParams }: { searchParams: Promise<{ view?: string; month?: string; weekStart?: string }> }) {
   const user = await getCurrentUser();
   if (!user) return null;
-  const view = searchParams.view === "month" ? "month" : "week";
+  const query = await searchParams;
+  const view = query.view === "month" ? "month" : "week";
+  const design = activeDesign();
   // The VIEWER's day (pt_tz cookie), not the server clock — the today ring,
   // week/month default anchors, nav "current" and future-dimming must follow
-  // the day the user is actually living.
+  // the day the user is actually living (v1.4.2).
   const viewer = await viewerToday();
   const today = viewer.date;
   const todayKey = viewer.key;
 
-  // Compact inline segmented control with a skewed active option.
+  // Current design: full-width pill (byte-identical). Pitstop: compact inline
+  // segmented control with a skewed active option. Navigation + a11y preserved.
   const tab = (v: string, label: string) => {
-    const active = view === v;
+    if (design === "pitstop") {
+      const active = view === v;
+      return (
+        <a
+          href={`/doses?view=${v}`}
+          aria-current={active ? "page" : undefined}
+          className={`px-3 py-1.5 rounded-md text-[11px] uppercase tracking-[0.08em] ${active ? "bg-accent text-onAccent" : "text-muted hover:bg-bg"}`}
+          style={active ? { transform: "skewX(-7deg)" } : undefined}
+        >
+          {active ? <span style={{ display: "inline-block", transform: "skewX(7deg)" }}>{label}</span> : label}
+        </a>
+      );
+    }
     return (
-      <a
-        href={`/doses?view=${v}`}
-        aria-current={active ? "page" : undefined}
-        className={`px-3 py-1.5 rounded-md text-[11px] uppercase tracking-[0.08em] ${active ? "bg-accent text-onAccent" : "text-muted hover:bg-bg"}`}
-        style={active ? { transform: "skewX(-7deg)" } : undefined}
-      >
-        {active ? <span style={{ display: "inline-block", transform: "skewX(7deg)" }}>{label}</span> : label}
-      </a>
+      <Link href={`/doses?view=${v}`} className={`flex-1 rounded-control px-3 py-2 text-center text-sm font-medium ${view === v ? "bg-accent text-onAccent" : "bg-bg text-muted ring-1 ring-line/15"}`}>{label}</Link>
     );
   };
 
   let body: React.ReactNode;
   if (view === "week") {
-    const anchor = parseWeekParam(searchParams.weekStart, today);
+    const anchor = parseWeekParam(query.weekStart, today);
     const w = await getWeek(user.id, anchor);
     const nav = {
       prev: weekKey(shiftWeek(anchor, -1)),
@@ -94,7 +104,7 @@ export default async function DosesPage({ searchParams }: { searchParams: { view
     };
     body = <DosesWeek days={w.days} entries={w.entries} todayKey={todayKey} nav={nav} />;
   } else {
-    const anchor = parseMonthParam(searchParams.month, today);
+    const anchor = parseMonthParam(query.month, today);
     const m = await getMonth(user.id, anchor);
     const wellnessByDay = await loadWellnessByDay(user.id, m.gridStart, m.gridEnd);
     const nav = {
@@ -116,15 +126,19 @@ export default async function DosesPage({ searchParams }: { searchParams: { view
           relDay: relDayLabel(next.date, todayKey),
         }
       : undefined;
-    body = <DosesMonth monthLabel={m.monthLabel} gridStart={m.gridStart} gridEnd={m.gridEnd} entries={m.entries} metrics={m.metrics} todayKey={todayKey} wellnessByDay={wellnessByDay} hydrationTargetMl={user.hydrationTargetMl ?? null} symptoms={resolveSymptomList(user.symptomList)} nav={nav} nextDose={nextDose} />;
+    body = <DosesMonth monthLabel={m.monthLabel} gridStart={m.gridStart} gridEnd={m.gridEnd} entries={m.entries} metrics={m.metrics} todayKey={todayKey} wellnessByDay={wellnessByDay} hydrationTargetMl={user.hydrationTargetMl ?? null} symptoms={resolveSymptomList(user.symptomList)} nav={nav} design={design} nextDose={nextDose} />;
   }
 
   return (
     <main className={PAGE_MAIN}>
       <BackButton fallback="/" />
-      <PitstopHeading title="Doses" index={2} className="mb-1 text-3xl font-semibold tracking-tight" split={["DO", "SES"]} />
+      <PitstopHeading title="Doses" index={2} design={design} className="mb-1 text-3xl font-semibold tracking-tight" split={["DO", "SES"]} />
       <p className="mb-4 text-muted">Your schedule — past and upcoming.</p>
-      <div className="mb-5 inline-flex rounded-lg bg-surface p-0.5 ring-1 ring-line/15">{tab("week", "This week")}{tab("month", "Month")}</div>
+      {design === "pitstop" ? (
+        <div className="mb-5 inline-flex rounded-lg bg-surface p-0.5 ring-1 ring-line/15">{tab("week", "This week")}{tab("month", "Month")}</div>
+      ) : (
+        <div className="mb-5 flex gap-2">{tab("week", "This week")}{tab("month", "Month")}</div>
+      )}
       {body}
     </main>
   );

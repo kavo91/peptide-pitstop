@@ -125,9 +125,12 @@ export function materializePlannedDoses(args: {
    * rebase override)? Two — and only two — shapes qualify:
    *   - BEFORE startDate: categorically stale. A genuine confirmRebase row
    *     derives from a real logged dose inside the started window, so nothing
-   *     legitimate lives before the start (regression, 2026-07-02).
-   *   - AFTER endDate: categorically stale. End dates are an inclusive cutoff;
-   *     no scheduled projection (routine or rebase-shifted) may survive past it.
+   *     legitimate lives before the start (BPC+TB4 prod bug, 2026-07-02).
+   *   - AFTER endDate: categorically stale, ON-grid or OFF-grid (rebase-
+   *     shifted) alike — a hard cutoff (Tα1 prod bug, 2026-07-05: a shortened
+   *     endDate left two rebase-shifted rows, off the schedule grid, sitting
+   *     as "due" past the new end date). The end date always wins; a rebase
+   *     is never allowed to shift the final dose past it.
    * A degenerate window (startDate after endDate — the card editor can't see
    * the end date, so this is reachable) marks NOTHING stale: both half-window
    * tests would otherwise cover the entire timeline and mass-delete history.

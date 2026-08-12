@@ -10,7 +10,7 @@ import {
   formatDayKeyShort,
   buildLinePath,
 } from "@/lib/wearable-chart";
-import { ChartCard, ChartEmpty, Legend } from "./chart-ui";
+import { ChartCard, ChartEmpty, Legend, SourceDots, sourceLegendItems } from "./chart-ui";
 
 const WIDTH = 600;
 // Taller than its natural 3:1 so the single-panel Sleep card fills the height of
@@ -151,6 +151,8 @@ export function SleepChart({ sleep, detailHref }: { sleep: SleepPoint[]; detailH
           strokeOpacity="0.4"
         />
 
+        <SourceDots sources={sleep.map((p) => p.source)} xAt={(i) => PAD.left + step * i + step / 2} y={bottomY + 9} />
+
         {/* X-axis date labels (first + last) */}
         <text x={PAD.left} y={HEIGHT - 8} fontSize="9" fill="rgb(var(--muted))">
           {formatDayKeyShort(nights[0].date)}
@@ -164,6 +166,7 @@ export function SleepChart({ sleep, detailHref }: { sleep: SleepPoint[]; detailH
         items={[
           ...STAGES.map((s) => ({ label: s.label, color: s.color, opacity: s.opacity })),
           { label: "Score", color: "rgb(var(--warn))", line: true },
+          ...sourceLegendItems(sleep.map((p) => p.source)),
         ]}
       />
     </ChartCard>

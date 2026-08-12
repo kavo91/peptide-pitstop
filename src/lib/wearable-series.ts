@@ -7,6 +7,11 @@
  */
 import { parseActivitiesJson, type GarminActivity } from "./garmin-activity";
 
+/** Which source produced a merged day (see mergeWearableRows): garmin-only,
+ *  healthkit-only, or mixed (garmin day with healthkit gap-fills). Charts mark
+ *  the non-garmin days so it's clear which data came from Apple Health. */
+export type WearableSource = "garmin" | "healthkit" | "mixed";
+
 /** A WearableDaily-shaped row — only the fields the series need. */
 export interface WearableDailyLike {
   date: Date;
@@ -29,6 +34,8 @@ export interface WearableDailyLike {
   // logged activities (plaintext) — JSON string of GarminActivity[] + a count
   activitiesJson?: string | null;
   activityCount?: number | null;
+  /** Set by mergeWearableRows; charts read it to attribute the day's source. */
+  mergedSource?: WearableSource;
 }
 
 /** Prisma Decimal | number | string | null | undefined — anything stringifiable. */
@@ -41,6 +48,7 @@ export interface SleepPoint {
   rem: number | null;
   awake: number | null;
   score: number | null;
+  source?: WearableSource;
 }
 export interface RecoveryPoint {
   date: string;
@@ -49,10 +57,12 @@ export interface RecoveryPoint {
   bodyBatteryHigh: number | null;
   bodyBatteryLow: number | null;
   stressAvg: number | null;
+  source?: WearableSource;
 }
 export interface WeightPoint {
   date: string;
   weightKg: number;
+  source?: WearableSource;
 }
 export interface ActivityPoint {
   date: string;
@@ -62,6 +72,7 @@ export interface ActivityPoint {
   intensityMinutes: number | null;
   /** Logged workouts for the day (plaintext; [] when none/malformed). */
   activities: GarminActivity[];
+  source?: WearableSource;
 }
 export interface WearableSnapshot {
   asOf: string;
@@ -107,6 +118,7 @@ export function buildWearableSeries(rows: WearableDailyLike[]): WearableSeries {
     rem: r.sleepRemSeconds ?? null,
     awake: r.sleepAwakeSeconds ?? null,
     score: r.sleepScore ?? null,
+    source: r.mergedSource,
   }));
 
   const recovery: RecoveryPoint[] = sorted.map((r) => ({
@@ -116,11 +128,14 @@ export function buildWearableSeries(rows: WearableDailyLike[]): WearableSeries {
     bodyBatteryHigh: r.bodyBatteryHigh ?? null,
     bodyBatteryLow: r.bodyBatteryLow ?? null,
     stressAvg: r.stressAvg ?? null,
+    source: r.mergedSource,
   }));
 
-  const weight: WeightPoint[] = sorted
-    .map((r) => ({ date: dayKey(r.date), weightKg: toNum(r.weightKg) }))
-    .filter((p): p is WeightPoint => p.weightKg != null);
+  const weight: WeightPoint[] = [];
+  for (const r of sorted) {
+    const weightKg = toNum(r.weightKg);
+    if (weightKg != null) weight.push({ date: dayKey(r.date), weightKg, source: r.mergedSource });
+  }
 
   const activity: ActivityPoint[] = sorted.map((r) => ({
     date: dayKey(r.date),
@@ -129,6 +144,7 @@ export function buildWearableSeries(rows: WearableDailyLike[]): WearableSeries {
     vo2max: toNum(r.vo2max),
     intensityMinutes: r.intensityMinutes ?? null,
     activities: parseActivitiesJson(r.activitiesJson),
+    source: r.mergedSource,
   }));
 
   // Latest non-null per metric (scan ascending, keep the last hit).

@@ -3,28 +3,28 @@ import { parseSchedule, slotsOn, slotsInRange } from "./entries";
 import { appendIntervalAnchor } from "./interval-anchor";
 
 /**
- * Catch-up rolling for interval schedules (example scenario): every-3-days
+ * Catch-up rolling for interval schedules (prod Reta scenario): every-3-days
  * anchored at startDate 2026-06-18 → … Jul 6, Jul 9, Jul 12. Thu Jul 9 missed,
- * taken Fri Jul 10; the user confirms the roll prompt → an anchor "2026-07-10" is
+ * taken Fri Jul 10, user confirms the roll prompt → an anchor "2026-07-10" is
  * appended INSIDE the rule. Grid semantics are piecewise: days before an
  * anchor use the previous segment's grid, days on/after use the anchor's —
  * so history stays exact across any number of rolls.
  */
-const EVERY_3D_RULE = JSON.stringify([{ dayPattern: { kind: "interval", everyDays: 3 }, times: [] }]);
+const RETA_RULE = JSON.stringify([{ dayPattern: { kind: "interval", everyDays: 3 }, times: [] }]);
 const START = new Date("2026-06-18T00:00:00");
 const local = (d: string) => new Date(d + "T00:00:00");
 const dueOn = (rule: string, d: string) => slotsOn(parseSchedule(rule), local(d), START).length > 0;
 
 describe("appendIntervalAnchor", () => {
   it("appends a roll anchor into the interval entry and returns the rewritten rule", () => {
-    const rolled = appendIntervalAnchor(EVERY_3D_RULE, local("2026-07-10"));
+    const rolled = appendIntervalAnchor(RETA_RULE, local("2026-07-10"));
     expect(rolled).not.toBeNull();
     const entry = parseSchedule(rolled!)[0];
     expect(entry.dayPattern).toEqual({ kind: "interval", everyDays: 3, anchors: ["2026-07-10"] });
   });
 
   it("is idempotent for the same day and append-only for later rolls", () => {
-    const once = appendIntervalAnchor(EVERY_3D_RULE, local("2026-07-10"))!;
+    const once = appendIntervalAnchor(RETA_RULE, local("2026-07-10"))!;
     expect(appendIntervalAnchor(once, local("2026-07-10"))).toBe(once);
     const twice = appendIntervalAnchor(once, local("2026-07-21"))!;
     expect((parseSchedule(twice)[0].dayPattern as { anchors?: string[] }).anchors).toEqual([
@@ -42,7 +42,7 @@ describe("appendIntervalAnchor", () => {
 });
 
 describe("interval grid with roll anchors", () => {
-  const ROLLED = appendIntervalAnchor(EVERY_3D_RULE, local("2026-07-10"))!;
+  const ROLLED = appendIntervalAnchor(RETA_RULE, local("2026-07-10"))!;
 
   it("rolls the future: Jul 10/13/16 due, old-grid Jul 12 no longer due", () => {
     expect(dueOn(ROLLED, "2026-07-10")).toBe(true);
@@ -79,7 +79,7 @@ describe("interval grid with roll anchors", () => {
   });
 
   it("ignores anchors before startDate and never marks pre-start days due", () => {
-    const bad = appendIntervalAnchor(EVERY_3D_RULE, local("2026-06-01"))!;
+    const bad = appendIntervalAnchor(RETA_RULE, local("2026-06-01"))!;
     expect(dueOn(bad, "2026-06-01")).toBe(false); // before the window
     expect(dueOn(bad, "2026-06-18")).toBe(true); // startDate grid unaffected
     expect(dueOn(bad, "2026-06-21")).toBe(true);

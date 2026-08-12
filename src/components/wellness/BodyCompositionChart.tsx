@@ -9,7 +9,7 @@
  */
 import type { WeightPoint } from "@/lib/wearable-series";
 import { extent, formatDayKeyShort, buildLinePath, type XY } from "@/lib/wearable-chart";
-import { ChartCard, ChartEmpty } from "./chart-ui";
+import { ChartCard, ChartEmpty, Legend, SourceDots, sourceLegendItems } from "./chart-ui";
 
 const WIDTH = 600;
 const HEIGHT = 170;
@@ -79,9 +79,13 @@ export function BodyCompositionChart({ weight, detailHref }: { weight: WeightPoi
 
         {/* X-axis baseline + first/last date */}
         <line x1={PAD.left} y1={bottomY} x2={WIDTH - PAD.right} y2={bottomY} stroke="rgb(var(--muted))" strokeWidth="0.5" strokeOpacity="0.4" />
+        <SourceDots sources={weight.map((w) => w.source)} xAt={(i) => PAD.left + i * stepX} y={bottomY + 9} />
         <text x={PAD.left} y={HEIGHT - 6} fontSize="9" fill="rgb(var(--muted))">{formatDayKeyShort(weight[0].date)}</text>
         <text x={WIDTH - PAD.right} y={HEIGHT - 6} fontSize="9" fill="rgb(var(--muted))" textAnchor="end">{formatDayKeyShort(weight[weight.length - 1].date)}</text>
       </svg>
+      {sourceLegendItems(weight.map((w) => w.source)).length > 0 && (
+        <Legend items={sourceLegendItems(weight.map((w) => w.source))} />
+      )}
     </ChartCard>
   );
 }

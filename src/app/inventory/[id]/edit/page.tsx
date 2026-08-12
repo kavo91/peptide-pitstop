@@ -10,11 +10,12 @@ function toDateInput(d: Date | null): string | undefined {
   return d ? new Date(d).toISOString().slice(0, 10) : undefined;
 }
 
-export default async function EditVialPage({ params }: { params: { id: string } }) {
+export default async function EditVialPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return null;
+  const { id } = await params;
 
-  const vial = await prisma.vial.findFirst({ where: { id: params.id, userId: user.id } });
+  const vial = await prisma.vial.findFirst({ where: { id, userId: user.id } });
   if (!vial) notFound();
 
   const peptides = await getPeptideOptions(user.id);

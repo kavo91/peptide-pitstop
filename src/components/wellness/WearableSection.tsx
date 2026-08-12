@@ -1,5 +1,5 @@
 /**
- * "Wearable (Garmin)" section for the Wellness screen. Server component: takes
+ * "Wearable" section for the Wellness screen. Server component: takes
  * the precomputed WearableSeries and renders the sleep / recovery / body-comp /
  * activity charts (2-up on lg), or a tasteful empty state + Sync-now button when
  * no wearable data has synced yet. The Sync-now button lives in the header in
@@ -19,9 +19,9 @@ export function WearableSection({ series }: { series: WearableSeries }) {
     <section className="mt-10">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-medium">Wearable (Garmin)</h2>
+          <h2 className="text-lg font-medium">Wearable</h2>
           <p className="text-sm text-muted">
-            {hasData ? "Last 7 days, synced from Garmin." : "Sleep, recovery, body and activity."}
+            {hasData ? "Last 7 days from your wearables." : "Sleep, recovery, body and activity."}
           </p>
         </div>
         <SyncNowButton />
@@ -31,7 +31,7 @@ export function WearableSection({ series }: { series: WearableSeries }) {
         <div className="rounded-card bg-surface p-8 text-center shadow-sm ring-1 ring-line/10">
           <p className="text-sm font-medium text-ink">No wearable data yet</p>
           <p className="mx-auto mt-1 max-w-xs text-sm text-muted">
-            Connect Garmin and run a sync to see your sleep, recovery, body composition and activity trends here.
+            Connect Garmin or sync Apple Health to see your sleep, recovery, body composition and activity trends here.
           </p>
         </div>
       ) : (

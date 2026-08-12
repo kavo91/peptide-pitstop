@@ -9,6 +9,7 @@ import {
   type EnrichmentEntry,
 } from "./peptide-enrichment";
 import { PEPTIDE_LIBRARY } from "./peptide-library";
+import { toNeutralReferenceEntry } from "./compliance";
 
 const unitScale: Record<string, number> = { mcg: 1, ug: 1, mg: 1000 };
 
@@ -147,6 +148,54 @@ describe("entry + template shape", () => {
         }
       }
     }
+  });
+});
+
+describe("manual entries (5-Amino-1MQ hybrid)", () => {
+  it("resolves by canonical name and by alias", () => {
+    expect(getEnrichmentSeed("5-Amino-1MQ")?.name).toBe("5-Amino-1MQ");
+    expect(getEnrichmentSeed("5a1mq")?.name).toBe("5-Amino-1MQ");
+  });
+
+  it("is present in the library so the picker offers it", () => {
+    expect(PEPTIDE_LIBRARY.some((p) => p.name === "5-Amino-1MQ")).toBe(true);
+  });
+
+  it("carries the peptidedosages mix (reconstitution ratio → calculator)", () => {
+    const e = getEnrichmentSeed("5-Amino-1MQ") as EnrichmentEntry;
+    expect(e.reconstitutionRatio).toBe("2 mL = ~5.0 mg/mL");
+    expect(e.reconstitution.some((s) => /2\.0 mL bacteriostatic water/i.test(s))).toBe(true);
+  });
+
+  it("carries the alpha-rejuvenation subQ titration ramp (150 → 300 → 500 mcg)", () => {
+    const e = getEnrichmentSeed("5-Amino-1MQ") as EnrichmentEntry;
+    expect(e.templates).toHaveLength(1);
+    const ramp = e.templates[0].ramp ?? [];
+    expect(ramp.map((r) => r.dose)).toEqual([150, 300, 500]);
+    expect(ramp.every((r) => r.unit === "mcg")).toBe(true);
+    expect(e.templates[0].targetDose).toBe(500);
+  });
+
+  it("attributes the mix to peptidedosages and names both sources", () => {
+    const e = getEnrichmentSeed("5-Amino-1MQ") as EnrichmentEntry;
+    expect(e.sourceUrl).toBe(
+      "https://peptidedosages.com/single-peptide-dosages/5-amino-1mq-10-mg-vial-dosage-protocol/",
+    );
+    expect(e.attribution).toMatch(/peptidedosages\.com/i);
+    expect(e.attribution).toMatch(/alpha-rejuvenation\.com/i);
+  });
+
+  it("exposes only allow-listed PubMed + DOI links through the neutral boundary", () => {
+    const e = getEnrichmentSeed("5-Amino-1MQ") as EnrichmentEntry;
+    const neutral = toNeutralReferenceEntry({ name: e.name, aliases: e.aliases, references: e.references });
+    // PubMed 24717514 + two DOIs (BCP 2018, Frontiers 2024) survive; the
+    // peptidedosages / alpha-rejuvenation / peptideprotocolwiki / PMC links are stripped.
+    expect(neutral.references).toHaveLength(3);
+    expect(new Set(neutral.references.map((r) => r.kind))).toEqual(new Set(["doi", "pubmed"]));
+    expect(neutral.references.every((r) => /pubmed\.ncbi|doi\.org/.test(r.href))).toBe(true);
+    expect(
+      neutral.references.some((r) => /peptideprotocolwiki|peptidedosages|alpha-rejuvenation|pmc\.ncbi/.test(r.href)),
+    ).toBe(false);
   });
 });
 

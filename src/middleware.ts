@@ -4,16 +4,17 @@ import { verifySessionToken, SESSION_COOKIE } from "@/lib/auth/session";
 const PUBLIC = ["/login", "/setup"];
 
 // Bearer-token API routes that authenticate themselves (no session cookie).
-// The session gate must let these through to their OWN timing-safe bearer check
-// (each fails closed: 503 if its token env is unset, 401 if wrong) — otherwise
-// the Garmin import sidecar and external cron callers get redirected to /login
-// and can never reach the handler. Session-authed routes (/api/wellness/sync-now,
-// /api/export/*) deliberately stay gated below.
+// The session gate must let these through to their OWN authentication. Garmin
+// and cron use scoped bearer secrets, native apps use revocable per-device
+// credentials, and Stripe uses its signed raw-body webhook.
+// Session-authed routes (/api/wellness/sync-now, /api/export/*) stay gated below.
 const BEARER_API = [
   "/api/cron/planned",
   "/api/cron/reminders",
   "/api/wellness/garmin",
+  "/api/wellness/native", // iOS HealthKit + Android Health Connect ingest (P0)
   "/api/enrichment/refresh",
+  "/api/billing/webhook", // Stripe Managed Payments — signed raw-body webhook (P0)
 ];
 
 export async function middleware(req: NextRequest) {

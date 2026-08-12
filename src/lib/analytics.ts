@@ -9,6 +9,7 @@ import { resolveTitration } from "@/lib/titration/resolve";
 import { buildResolveInput } from "@/lib/titration/from-protocol";
 import { forwardDosePoints } from "@/lib/plasma-projection";
 import { decryptField } from "@/lib/crypto/fieldEncryption";
+import { libraryHalfLifeHours, libraryComponents } from "@/lib/peptide-library";
 import { deserializeSideEffects } from "@/lib/side-effects";
 import { dayAnchor } from "@/lib/tz-day";
 import { dayKey } from "@/lib/today-overrides";
@@ -343,11 +344,30 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
   const plasmaByPeptide: PeptidePlasma[] = [];
   const peptidesWithoutHalfLife: { peptideId: string; peptideName: string }[] = [];
 
+  /** Stored halfLifeHours, else the library's, else null. Rejects non-finite and
+   *  non-positive values — a 0 would divide by zero in the decay maths. */
+  function resolveHalfLife(peptide: { name: string; aliases?: string | null; halfLifeHours?: unknown }): number | null {
+    const candidates = [
+      peptide.halfLifeHours != null ? Number(peptide.halfLifeHours) : null,
+      Number(libraryHalfLifeHours(peptide.name, peptide.aliases ?? null) ?? NaN),
+    ];
+    for (const c of candidates) {
+      if (c != null && Number.isFinite(c) && c > 0) return c;
+    }
+    return null;
+  }
+
   // Build unique set of peptides that have protocols (with halfLifeHours)
   const peptideHalfLifes = new Map<string, number | null>();
   const peptideStackIds = new Map<string, Set<string>>();
   for (const proto of plasmaProtocols) {
-    const halfLife = proto.peptide.halfLifeHours != null ? Number(proto.peptide.halfLifeHours) : null;
+    // Stored value first, then the static library. Without the fallback a peptide
+    // the library DOES know (5-Amino-1MQ at 5 h) but whose row was never populated
+    // is dropped from the curve entirely — while Settings shows the library value
+    // via its own fallback, so the two surfaces silently disagree. Note the reverse
+    // case exists too (MOTS-c: stored 2, omitted from the library), which is why
+    // stored has to win rather than the library being treated as authoritative.
+    const halfLife = resolveHalfLife(proto.peptide);
     peptideHalfLifes.set(proto.peptide.id, halfLife);
     if (proto.stackId) {
       const ids = peptideStackIds.get(proto.peptide.id) ?? new Set();
@@ -363,8 +383,11 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
     const peptideId = proto.peptide.id;
     const peptideName = proto.peptide.name;
     const halfLifeHours = peptideHalfLifes.get(peptideId) ?? null;
+    // A known blend is charted per component, so it needs no composite half-life
+    // of its own — the components carry their own.
+    const components = libraryComponents(peptideName, proto.peptide.aliases ?? null);
 
-    if (halfLifeHours === null) {
+    if (halfLifeHours === null && !components) {
       // Only add to the no-halflife list once per peptide
       if (!peptidesWithoutHalfLife.find((p) => p.peptideId === peptideId)) {
         peptidesWithoutHalfLife.push({ peptideId, peptideName });
@@ -372,8 +395,10 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
       continue;
     }
 
-    // If we've already processed this peptide via an earlier protocol, skip
-    if (plasmaByPeptide.find((p) => p.peptideId === peptideId)) continue;
+    // If we've already processed this peptide via an earlier protocol, skip.
+    // Component curves carry a synthetic `${peptideId}::${component}` id, so match
+    // on the prefix too or a second protocol would duplicate every component line.
+    if (plasmaByPeptide.some((p) => p.peptideId === peptideId || p.peptideId.startsWith(`${peptideId}::`))) continue;
 
     // Historical doses
     const historical = logsByPeptide.get(peptideId) ?? [];
@@ -410,7 +435,50 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
     }
 
     const allDoses = [...historical, ...projectionDoses];
+    const stackIds = [...(peptideStackIds.get(peptideId) ?? new Set<string>())].sort();
 
+    if (components) {
+      // Blend: one curve per component, each on its own half-life. A single
+      // composite line is meaningless here — GHK-Cu is 62.5% of KLOW by mass and
+      // clears in ~1 h, while its TB-500 persists for days; averaging them into
+      // one number misrepresents both. Dose splits by mass fraction.
+      const totalMg = components.reduce((sum, c) => sum + c.mg, 0);
+      for (const comp of components) {
+        const compId = `${peptideId}::${comp.name}`;
+        const compName = `${peptideName} · ${comp.name}`;
+        const compHalfLife = Number(libraryHalfLifeHours(comp.name) ?? NaN);
+
+        if (!Number.isFinite(compHalfLife) || compHalfLife <= 0) {
+          // e.g. KPV — in the library but PK not well characterised. Name it
+          // rather than dropping it, same as any other missing half-life.
+          if (!peptidesWithoutHalfLife.find((p) => p.peptideId === compId)) {
+            peptidesWithoutHalfLife.push({ peptideId: compId, peptideName: compName });
+          }
+          continue;
+        }
+
+        const fraction = comp.mg / totalMg;
+        const compSeries = plasmaCurve({
+          doses: allDoses.map((d) => ({ ...d, amountMcg: d.amountMcg * fraction })),
+          halfLifeHours: compHalfLife,
+          from: plasmaFrom,
+          to: plasmaTo,
+          stepHours: 6,
+        });
+        plasmaByPeptide.push({
+          peptideId: compId,
+          peptideName: compName,
+          halfLifeHours: compHalfLife,
+          series: compSeries,
+          hasProjection,
+          stackIds,
+        });
+      }
+      continue;
+    }
+
+    // Non-blend: single composite curve. halfLifeHours is non-null here — the
+    // null-and-no-components case returned above.
     const series = plasmaCurve({
       doses: allDoses,
       halfLifeHours,
@@ -418,8 +486,7 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
       to: plasmaTo,
       stepHours: 6,
     });
-
-    plasmaByPeptide.push({ peptideId, peptideName, halfLifeHours, series, hasProjection, stackIds: [...(peptideStackIds.get(peptideId) ?? new Set())].sort() });
+    plasmaByPeptide.push({ peptideId, peptideName, halfLifeHours: halfLifeHours as number, series, hasProjection, stackIds });
   }
 
   plasmaByPeptide.sort((a, b) => a.peptideName.localeCompare(b.peptideName));

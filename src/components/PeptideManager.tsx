@@ -1,14 +1,13 @@
 "use client";
 
-import { Pencil, Save, X, Plus, Info, Search, ListPlus } from "lucide-react";
+import { Pencil, Save, X, Plus, Info, Search } from "lucide-react";
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { savePeptide, addPeptideFromLibrary, deletePeptide, type PeptideInput } from "@/app/actions/peptides";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import type { LibraryPeptide } from "@/lib/peptide-library";
-import type { EnrichmentEntry } from "@/lib/peptide-enrichment";
-import { effectiveTemplates } from "@/lib/enrichment/suggested-protocol";
+import type { NeutralReferenceEntry } from "@/lib/compliance";
 import { PeptideLibraryDetail } from "./PeptideLibraryDetail";
 
 interface Peptide extends Required<Omit<PeptideInput, "id">> {
@@ -18,11 +17,11 @@ interface Peptide extends Required<Omit<PeptideInput, "id">> {
    *  hides those controls for them. */
   owned: boolean;
   /** Reference enrichment (peptidedosages.com) — null when none is curated. */
-  enrichment?: EnrichmentEntry | null;
+  enrichment?: NeutralReferenceEntry | null;
 }
 
 interface LibraryEntry extends LibraryPeptide {
-  enrichment?: EnrichmentEntry | null;
+  enrichment?: NeutralReferenceEntry | null;
 }
 
 const BLANK: PeptideInput = {
@@ -40,26 +39,6 @@ const BLANK: PeptideInput = {
 
 const input = "w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-sm text-ink";
 
-/**
- * A one-line suggested-dosing summary, derived from the entry's first effective
- * template (real or synthesized), e.g. "Suggested: 1 mg · 5 days/week". Falls
- * back to a trimmed dosing-reference sentence, or null when there's nothing.
- * REFERENCE ONLY — not medical advice.
- */
-function suggestedDosingLine(enrichment: EnrichmentEntry | null | undefined): string | null {
-  if (!enrichment) return null;
-  const t = effectiveTemplates(enrichment)[0];
-  if (t && t.targetDose != null) {
-    const dose = `${t.targetDose} ${t.unit}`;
-    return t.frequency ? `Suggested: ${dose} · ${t.frequency}` : `Suggested: ${dose}`;
-  }
-  const ref = enrichment.dosingReference?.trim();
-  if (!ref) return null;
-  // Trim to the first sentence so the inline summary stays one line.
-  const firstSentence = ref.split(/(?<=\.)\s/)[0];
-  return firstSentence.length > 120 ? `${firstSentence.slice(0, 117)}…` : firstSentence;
-}
-
 export function PeptideManager({ peptides, library = [] }: { peptides: Peptide[]; library?: LibraryEntry[] }) {
   const router = useRouter();
   const [form, setForm] = useState<PeptideInput | null>(null);
@@ -67,7 +46,6 @@ export function PeptideManager({ peptides, library = [] }: { peptides: Peptide[]
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   // Which rows have their reference-detail panel expanded (keyed by id / name).
   const [openOwned, setOpenOwned] = useState<Set<string>>(new Set());
   const [openLibrary, setOpenLibrary] = useState<Set<string>>(new Set());
@@ -89,11 +67,10 @@ export function PeptideManager({ peptides, library = [] }: { peptides: Peptide[]
     );
   }, [library, query]);
 
-  /** Add a library peptide, optionally with its suggested protocol, then refresh. */
-  async function addFromLibrary(e: LibraryEntry, withProtocol: boolean) {
+  /** Add reference data only; protocols are always entered manually/by prescriber. */
+  async function addFromLibrary(e: LibraryEntry) {
     setBusy(true);
     setError(null);
-    setNotice(null);
     const res = await addPeptideFromLibrary({
       name: e.name,
       aliases: e.aliases ?? "",
@@ -101,16 +78,11 @@ export function PeptideManager({ peptides, library = [] }: { peptides: Peptide[]
       substanceClass: e.substanceClass,
       halfLifeHours: e.halfLifeHours ?? "",
       storageNotes: e.storageNotes ?? "",
-      withProtocol,
     });
     setBusy(false);
     if (!res.ok) {
       setError(res.error);
       return;
-    }
-    if (res.protocolError) {
-      // Peptide saved, but the suggested protocol couldn't be applied — say so.
-      setNotice(`${e.name} added — ${res.protocolError}`);
     }
     router.refresh();
   }
@@ -133,7 +105,6 @@ export function PeptideManager({ peptides, library = [] }: { peptides: Peptide[]
     <div className="space-y-2">
       <ul className="space-y-2">
         {peptides.map((p) => {
-          const dosing = suggestedDosingLine(p.enrichment);
           return (
           <li key={p.id} className="rounded-card bg-surface px-4 py-3 text-sm shadow-sm ring-1 ring-line/10">
             <div className="flex items-center justify-between">
@@ -145,7 +116,6 @@ export function PeptideManager({ peptides, library = [] }: { peptides: Peptide[]
                   {p.halfLifeHours && ` · t½ ${p.halfLifeHours}h`}
                   {p.defaultStrengthMg && ` · ${p.defaultStrengthMg} mg`}
                 </p>
-                {dosing && <p className="mt-0.5 text-xs text-muted">{dosing}</p>}
               </div>
               <div className="flex items-center gap-3">
                 {p.enrichment && (
@@ -164,7 +134,7 @@ export function PeptideManager({ peptides, library = [] }: { peptides: Peptide[]
               </div>
             </div>
             {p.enrichment && openOwned.has(p.id) && (
-              <PeptideLibraryDetail entry={p.enrichment} peptideId={p.id} />
+              <PeptideLibraryDetail entry={p.enrichment} />
             )}
           </li>
           );
@@ -230,8 +200,6 @@ export function PeptideManager({ peptides, library = [] }: { peptides: Peptide[]
                 <li className="px-1 py-2 text-xs text-muted">No peptides match “{query}”.</li>
               )}
               {filteredLibrary.map((e) => {
-                const dosing = suggestedDosingLine(e.enrichment);
-                const hasTemplate = e.enrichment ? effectiveTemplates(e.enrichment).length > 0 : false;
                 return (
                 <li key={e.name} className="rounded-control bg-bg px-3 py-2 text-sm ring-1 ring-line/10">
                   <div className="flex items-center justify-between gap-3">
@@ -241,7 +209,6 @@ export function PeptideManager({ peptides, library = [] }: { peptides: Peptide[]
                         {e.category} · {e.substanceClass}
                         {e.halfLifeHours && ` · t½ ${e.halfLifeHours}h`}
                       </p>
-                      {dosing && <p className="mt-0.5 text-xs text-muted">{dosing}</p>}
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
                       {e.enrichment && (
@@ -249,15 +216,11 @@ export function PeptideManager({ peptides, library = [] }: { peptides: Peptide[]
                           <Info className="h-3.5 w-3.5" aria-hidden /> {openLibrary.has(e.name) ? "Hide" : "Details"}
                         </button>
                       )}
-                      <button type="button" onClick={() => addFromLibrary(e, false)} disabled={busy} className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-accentStrong disabled:opacity-40"><Plus className="h-3.5 w-3.5" aria-hidden /> Add</button>
-                      {hasTemplate && (
-                        <button type="button" onClick={() => addFromLibrary(e, true)} disabled={busy} className="inline-flex shrink-0 items-center gap-1 rounded-control bg-accent px-2 py-1 text-xs font-medium text-onAccent disabled:opacity-40" aria-label={`Add ${e.name} with its suggested protocol`}><ListPlus className="h-3.5 w-3.5" aria-hidden /> Add + protocol</button>
-                      )}
+                      <button type="button" onClick={() => addFromLibrary(e)} disabled={busy} className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-accentStrong disabled:opacity-40"><Plus className="h-3.5 w-3.5" aria-hidden /> Add</button>
                     </div>
                   </div>
                   {e.enrichment && openLibrary.has(e.name) && (
-                    // Not yet owned → Apply prompts "add first" (which adds it, then the user re-opens to apply).
-                    <PeptideLibraryDetail entry={e.enrichment} peptideId={null} onAddFirst={() => addFromLibrary(e, false)} />
+                    <PeptideLibraryDetail entry={e.enrichment} />
                   )}
                 </li>
                 );
@@ -265,7 +228,6 @@ export function PeptideManager({ peptides, library = [] }: { peptides: Peptide[]
             </ul>
           )}
           <button type="button" onClick={() => setForm({ ...BLANK })} className="flex w-full items-center justify-center gap-1.5 rounded-control bg-bg px-4 py-2 text-sm font-medium text-accentStrong ring-1 ring-line/15"><Plus className="h-4 w-4" aria-hidden /> Add custom peptide</button>
-          {notice && <p className="text-sm text-warn">{notice}</p>}
           {error && <p className="text-sm text-danger">{error}</p>}
         </div>
       )}

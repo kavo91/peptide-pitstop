@@ -6,15 +6,19 @@ import { SideNav } from "@/components/SideNav";
 import { MobileHeader } from "@/components/MobileHeader";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { VersionHeartbeat } from "@/components/VersionHeartbeat";
-import { getCurrentUser } from "@/lib/auth/owner";
-import { getTodayDoseStatus, type TodayDoseStatus } from "@/lib/today";
 import { ActiveRefresh } from "@/components/ActiveRefresh";
 import { viewerToday, viewerTimeZone } from "@/lib/viewer-tz";
 import { timeInTz } from "@/lib/tz-day";
+import { activeDesign, brandName } from "@/lib/design";
+import { getCurrentUser } from "@/lib/auth/owner";
+import { getTodayDoseStatus, type TodayDoseStatus } from "@/lib/today";
 
 // Peptide Pitstop typefaces — self-hosted by next/font (downloaded at build,
 // served from this origin), so there is NO runtime call to Google Fonts and no
-// third-party phone-home. globals.css maps --font-* to these CSS variables.
+// third-party phone-home. preload:false means the font files are only fetched by
+// the browser when a rule actually uses them — i.e. only under the pitstop
+// design — so the default design's render path stays byte-identical and fetches
+// no fonts. globals.css maps --font-* to these CSS variables under pitstop.
 //
 // Font licensing: Inter, Teko, Rajdhani, and IBM Plex Mono are each licensed
 // under the SIL Open Font License 1.1. See NOTICE.md at the repo root for the
@@ -32,21 +36,35 @@ const fontVariables = `${fontSans.variable} ${fontDisplay.variable} ${fontLabel.
 const ENV_LABEL = process.env.ENV_LABEL?.trim() || null;
 
 export function generateMetadata(): Metadata {
-  const brand = "Peptide Pitstop";
+  // Brand name follows the active design pack ("Peptide Pitstop" under pitstop,
+  // "Peptide Tracker" otherwise).
+  const brand = brandName();
   return {
     title: ENV_LABEL ? `${brand} · ${ENV_LABEL}` : brand,
     description: "Self-hosted peptide dose tracking, reconstitution math, and prescriptions.",
     manifest: "/manifest.webmanifest",
-    // Peptide Pitstop's brake-disc favicon.
-    icons: {
-      icon: [
-        { url: "/icons/icon-pitstop.svg", type: "image/svg+xml" },
-        { url: "/icons/favicon-32.png", type: "image/png", sizes: "32x32" },
-      ],
-      shortcut: "/icons/icon-pitstop.svg",
-      // iOS home-screen ignores SVG apple-touch-icons — must be a PNG.
-      apple: [{ url: "/icons/apple-touch-icon-pitstop.png", sizes: "180x180" }],
-    },
+    // The pitstop design ships its own brake-disc favicon; every other design
+    // keeps the existing icon set (amber dev icon when ENV_LABEL is set).
+    icons:
+      activeDesign() === "pitstop"
+        ? {
+            // Dev (ENV_LABEL set) gets a DEV-bannered brake-disc so the home-screen
+            // + Docker icons are distinguishable from prod; prod stays clean.
+            icon: ENV_LABEL ? "/icons/icon-pitstop-dev.svg" : "/icons/icon-pitstop.svg",
+            shortcut: ENV_LABEL ? "/icons/icon-pitstop-dev.svg" : "/icons/icon-pitstop.svg",
+            // iOS home-screen ignores SVG apple-touch-icons — must be a PNG.
+            apple: [{ url: ENV_LABEL ? "/icons/apple-touch-icon-pitstop-dev.png" : "/icons/apple-touch-icon-pitstop.png", sizes: "180x180" }],
+          }
+        : {
+            // Dev gets the amber icon so the browser tab is unmistakably not prod.
+            icon: ENV_LABEL
+              ? [{ url: "/icons/icon-dev.svg", type: "image/svg+xml" }]
+              : [
+                  { url: "/icons/icon.svg", type: "image/svg+xml" },
+                  { url: "/favicon.ico", sizes: "any" },
+                ],
+            apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+          },
     appleWebApp: { capable: true, statusBarStyle: "default", title: ENV_LABEL ? `Peptides ${ENV_LABEL}` : "Peptides" },
   };
 }
@@ -90,37 +108,48 @@ const noFlashScript = `
 `.trim();
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // Today dose-status for the header chip. Skipped when no user is signed in.
+  // Runtime design pack — read server-side so the same image can ship as either
+  // design via the DESIGN env var. Surfaced as data-design on <html>; all
+  // pitstop styling keys off this attribute in globals.css. "current" is the
+  // unchanged neon-teal default.
+  const design = activeDesign();
+  // Today dose-status for the pitstop header chip. Guarded: the default design
+  // does NO extra fetch (byte-identical render path), and even under pitstop we
+  // skip the dose query when no user is signed in.
   let doseStatus: TodayDoseStatus | undefined;
-  const user = await getCurrentUser();
+  if (design === "pitstop") {
+    const user = await getCurrentUser();
+    if (user) {
+      // Chip counts the VIEWER's day; the overdue compare needs the viewer's
+      // real wall clock (viewerToday().date is a noon anchor abroad).
+      const vt = await viewerToday();
+      const vtz = await viewerTimeZone();
+      doseStatus = await getTodayDoseStatus(user.id, vt.date, vtz ? timeInTz(new Date(), vtz) : undefined);
+    }
+  }
   // The day this render is anchored to (viewer tz via pt_tz cookie, else the
-  // server TZ) — ActiveRefresh compares it against the device day on mount to
+  // runtime TZ) — ActiveRefresh compares it against the device day on mount to
   // correct a wrong-day first paint (no-cookie load abroad, midnight-spanning
   // hydration).
-  const vt = await viewerToday();
-  if (user) {
-    // Chip counts the VIEWER's day; the overdue compare needs the viewer's
-    // real wall clock (viewerToday().date is a noon anchor abroad).
-    const vtz = await viewerTimeZone();
-    doseStatus = await getTodayDoseStatus(user.id, vt.date, vtz ? timeInTz(new Date(), vtz) : undefined);
-  }
+  const serverDayKey = (await viewerToday()).key;
   return (
     // suppressHydrationWarning: the inline script above sets data-theme before
     // React hydrates, so server-rendered <html> (no attribute) differs from the
     // client-hydrated one. This is the documented App Router pattern for
     // no-flash theme — it suppresses the hydration warning for <html> only.
-    <html lang="en" data-design="pitstop" className={fontVariables} suppressHydrationWarning>
+    <html lang="en" data-design={design} className={fontVariables} suppressHydrationWarning>
       <head>
         {/* Content is a hardcoded constant — no user data, safe to inline. */}
         <script dangerouslySetInnerHTML={{ __html: noFlashScript }} />
         {/* Typefaces are self-hosted via next/font (see imports) — no runtime
-            Google Fonts request. globals.css maps --font-* to the --ff-* variables. */}
+            Google Fonts request. The font files download only under the pitstop
+            design, where globals.css maps --font-* to the --ff-* variables. */}
       </head>
       <body className="flex min-h-screen flex-col font-sans antialiased lg:flex-row">
         <ServiceWorkerRegistration />
         <VersionHeartbeat />
-        <ActiveRefresh serverDayKey={vt.key} />
-        <SideNav envLabel={ENV_LABEL} brand="Peptide Pitstop" doseStatus={doseStatus} />
+        <ActiveRefresh serverDayKey={serverDayKey} />
+        <SideNav envLabel={ENV_LABEL} brand={brandName()} doseStatus={doseStatus} />
         {/* Content column: fills the space beside the desktop sidebar; on mobile
             it is the whole viewport with the bottom nav pinned underneath.
             min-w-0 lets wide children (charts, tables) shrink instead of overflow.

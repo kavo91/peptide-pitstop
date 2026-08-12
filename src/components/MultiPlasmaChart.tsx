@@ -46,30 +46,31 @@ export function MultiPlasmaChart({
   compactOnPhone = false,
   design = "current",
   missedDoses = [],
+  peptidesWithoutHalfLife = [],
   enableRangeToggle = false,
   defaultWindowDays = 30,
 }: Props) {
   const [colorNotice, setColorNotice] = useState<string | null>(null);
   const [windowDays, setWindowDays] = useState<7 | 14 | 30>(defaultWindowDays);
 
-  const renderable = plasmaByPeptide.filter((p) => p.series.length >= 2);
   const nowMs = now.getTime();
   const minT = nowMs - windowDays * DAY_MS;
   const maxT = nowMs + windowDays * DAY_MS;
 
-  const visible = renderable
-    .map((p) => ({
-      ...p,
-      series: p.series.filter((pt) => {
-        const t = pt.t.getTime();
-        return t >= minT && t <= maxT;
-      }),
-    }))
-    .filter((p) => p.series.length >= 2);
-
-  if (visible.length === 0) {
-    return <p className="text-sm text-muted">Not enough data to render curve.</p>;
-  }
+  const visible = useMemo(
+    () =>
+      plasmaByPeptide
+        .filter((p) => p.series.length >= 2)
+        .map((p) => ({
+          ...p,
+          series: p.series.filter((pt) => {
+            const t = pt.t.getTime();
+            return t >= minT && t <= maxT;
+          }),
+        }))
+        .filter((p) => p.series.length >= 2),
+    [plasmaByPeptide, minT, maxT],
+  );
 
   const colorAssignments = useMemo(
     () =>
@@ -82,25 +83,31 @@ export function MultiPlasmaChart({
       ),
     [visible],
   );
-  const colorByPeptide = new Map(colorAssignments.map((a) => [a.peptideId, a.color]));
+  const colorByPeptide = useMemo(
+    () => new Map(colorAssignments.map((a) => [a.peptideId, a.color])),
+    [colorAssignments],
+  );
 
-  const lines = visible.map((p) => {
-    const norm = normalizeToPeak(p.series);
-    const { historical, forecast } = splitSeriesAtNow(norm, now);
-    const showForecast = p.hasProjection && forecast.length >= 2;
-    const mean = norm.length ? norm.reduce((s, pt) => s + pt.level, 0) / norm.length : 0;
-    return {
-      peptideId: p.peptideId,
-      peptideName: p.peptideName,
-      color: colorByPeptide.get(p.peptideId) ?? "rgb(var(--accent))",
-      mean,
-      historicalSeg: showForecast ? historical : norm,
-      forecastSeg: showForecast ? forecast : null,
-    };
-  });
+  const lines = useMemo(() => {
+    const chartNow = new Date(nowMs);
+    return visible.map((p) => {
+      const norm = normalizeToPeak(p.series);
+      const { historical, forecast } = splitSeriesAtNow(norm, chartNow);
+      const showForecast = p.hasProjection && forecast.length >= 2;
+      const mean = norm.length ? norm.reduce((s, pt) => s + pt.level, 0) / norm.length : 0;
+      return {
+        peptideId: p.peptideId,
+        peptideName: p.peptideName,
+        color: colorByPeptide.get(p.peptideId) ?? "rgb(var(--accent))",
+        mean,
+        historicalSeg: showForecast ? historical : norm,
+        forecastSeg: showForecast ? forecast : null,
+      };
+    });
+  }, [visible, colorByPeptide, nowMs]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || lines.length === 0) return;
     const current = {
       ids: lines.map((ln) => ln.peptideId).sort(),
       mapping: Object.fromEntries(lines.map((ln) => [ln.peptideId, ln.color])),
@@ -124,6 +131,10 @@ export function MultiPlasmaChart({
     }
     window.localStorage.setItem(COLOR_STATE_KEY, JSON.stringify(current));
   }, [lines]);
+
+  if (visible.length === 0) {
+    return <p className="text-sm text-muted">Not enough data to render curve.</p>;
+  }
 
   const dismissNotice = () => {
     if (typeof window === "undefined") return;
@@ -285,6 +296,14 @@ export function MultiPlasmaChart({
         )}
       </ul>
       <p className={`mt-1 text-[10px] text-muted${phoneHide}`}>solid = actual · dashed = forecast</p>
+      {peptidesWithoutHalfLife.length > 0 && (
+        // Without this, a peptide with no half-life is simply absent from the
+        // chart — indistinguishable from one you aren't taking. Name them.
+        <p className="mt-1 text-[10px] text-muted">
+          No curve for {peptidesWithoutHalfLife.map((p) => p.peptideName).join(", ")}
+          {" "}— set a half-life in Settings.
+        </p>
+      )}
       <p className={`mt-1 text-[10px] text-muted${phoneHide}`}>Half-life estimate only — not a measured concentration. Not medical advice.</p>
     </div>
   );

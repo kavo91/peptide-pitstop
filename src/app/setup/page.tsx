@@ -15,7 +15,8 @@ export const dynamic = "force-dynamic";
 async function saveSetupToken(formData: FormData) {
   "use server";
   const token = String(formData.get("token") ?? "");
-  cookies().set(SETUP_TOKEN_COOKIE, token, {
+  const cookieStore = await cookies();
+  cookieStore.set(SETUP_TOKEN_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.COOKIE_SECURE !== "false",
@@ -28,15 +29,16 @@ async function saveSetupToken(formData: FormData) {
 export default async function SetupPage({
   searchParams,
 }: {
-  searchParams?: { token?: string };
+  searchParams?: Promise<{ token?: string }>;
 }) {
   if (await isProvisioned()) redirect("/login");
 
   const tokenRequired = setupTokenRequired();
   // A `?token=` query param prefills (and pre-stages) the field. We do NOT echo
   // back whether it was correct — only whether a token is required at all.
-  const prefill = searchParams?.token ?? "";
-  const tokenStaged = Boolean(cookies().get(SETUP_TOKEN_COOKIE)?.value);
+  const query = await searchParams;
+  const prefill = query?.token ?? "";
+  const tokenStaged = Boolean((await cookies()).get(SETUP_TOKEN_COOKIE)?.value);
 
   return (
     <main className="mx-auto max-w-md px-4 py-12">

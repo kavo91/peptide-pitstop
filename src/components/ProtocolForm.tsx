@@ -22,31 +22,13 @@ export function ProtocolForm({
   prescriptions,
   syringes,
   initial,
-  template,
-  templateRamp,
-  templateSteps,
 }: {
   peptides: Opt[];
   prescriptions: Opt[];
   syringes: Opt[];
   initial?: ProtocolInput;
-  /**
-   * An already-mapped enrichment template (see protocolTemplateToInput) used to
-   * prefill a NEW protocol. Ignored when `initial` is present (edit path) so the
-   * existing edit behaviour is unchanged. Applying a template is an explicit user
-   * action upstream — this only seeds the form's starting values.
-   */
-  template?: ProtocolInput;
-  /**
-   * Phase labels for the example titration ramp this template carries, shown as a
-   * read-only preview. When `templateSteps` is present, those steps are created
-   * with the new protocol so the template becomes a real titration ramp.
-   */
-  templateRamp?: { phase: string; doseLabel: string }[];
-  templateSteps?: NonNullable<ProtocolInput["steps"]>;
 }) {
-  // On the new-protocol path a template seeds the form; `initial` (edit) wins.
-  const seed = initial ?? template;
+  const seed = initial;
 
   const initialSchedule: Schedule =
     parseSchedule(seed?.scheduleRule).length > 0
@@ -56,9 +38,7 @@ export function ProtocolForm({
   const [form, setForm] = useState<ProtocolInput>(
     seed
       ? {
-          // Keep the template's mapped fields, but always pin peptideId to a valid
-          // option (the template carries the resolved id when the peptide is owned;
-          // fall back to the first option otherwise) and never carry an `id` (new).
+          // Keep edit fields and pin peptideId to a valid option.
           ...seed,
           id: initial?.id,
           peptideId: seed.peptideId || peptides[0]?.id || "",
@@ -164,8 +144,7 @@ export function ProtocolForm({
     setBusy(true);
     setError(null);
     const scheduleRule = JSON.stringify(entries);
-    const steps = !initial?.id && templateSteps && form.scheduleType === "titration" ? templateSteps : undefined;
-    const res = await saveProtocol({ ...form, scheduleRule, steps });
+    const res = await saveProtocol({ ...form, scheduleRule });
     setBusy(false);
     if (!res.ok) {
       setError(res.error);
@@ -389,23 +368,7 @@ export function ProtocolForm({
         <Link href="/protocols" className="rounded-control bg-bg px-4 py-3 text-sm ring-1 ring-line/15">Cancel</Link>
       </div>
       {!initial?.id && form.scheduleType === "titration" && (
-        <p className="text-xs text-muted">
-          {templateSteps?.length ? "Titration steps will be created from this template." : "Tip: after creating, you&apos;ll add titration steps on the next screen."}
-        </p>
-      )}
-      {!initial?.id && template && templateRamp && templateRamp.length > 0 && (
-        <div className="rounded-control bg-bg p-3 ring-1 ring-line/15">
-          <p className="text-xs font-medium text-muted">Example ramp from this template</p>
-          <ol className="mt-1 space-y-0.5 text-xs text-muted">
-            {templateRamp.map((r, i) => (
-              <li key={i} className="tabular-nums">{r.phase}: {r.doseLabel}</li>
-            ))}
-          </ol>
-          <p className="mt-1.5 text-[11px] text-muted">These will be created as titration steps when you save. Reference only — not medical advice.</p>
-        </div>
-      )}
-      {!initial?.id && template && (
-        <p className="text-[11px] text-muted">Prefilled from a peptidedosages.com example template — review and adjust before saving. Not medical advice.</p>
+        <p className="text-xs text-muted">Tip: after creating, you&apos;ll add titration steps on the next screen.</p>
       )}
     </div>
   );

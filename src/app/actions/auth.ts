@@ -36,7 +36,8 @@ export async function finishSetup(input: { password: string; confirm: string; se
   // Optional first-run gate. No-op when SETUP_TOKEN is unset/empty (back-compat).
   // The token may arrive in the action input (forward-compatible) or via the
   // short-lived cookie the /setup page sets from its field / `?token=` prefill.
-  const submittedToken = input.token ?? cookies().get(SETUP_TOKEN_COOKIE)?.value;
+  const cookieStore = await cookies();
+  const submittedToken = input.token ?? cookieStore.get(SETUP_TOKEN_COOKIE)?.value;
   const gate = checkSetupToken(submittedToken);
   if (!gate.ok) return { ok: false as const, error: gate.error };
 
@@ -61,7 +62,7 @@ export async function finishSetup(input: { password: string; confirm: string; se
   }
 
   // Setup done — drop the short-lived gate cookie so it doesn't linger.
-  cookies().delete(SETUP_TOKEN_COOKIE);
+  cookieStore.delete(SETUP_TOKEN_COOKIE);
 
   const token = await createSessionToken({ uid: owner.id, role: owner.role, tv: owner.tokenVersion });
   await setSessionCookie(token);

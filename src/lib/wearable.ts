@@ -7,10 +7,13 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { buildWearableSeries, type WearableSeries } from "@/lib/wearable-series";
+import { mergeWearableRows } from "@/lib/wearable-merge";
 
 /**
- * Read WearableDaily rows in [fromDate, toDate] (inclusive) for a user and build
- * the chart series + latest snapshot. Dates are local-midnight Dates.
+ * Read garmin + healthkit rows in [fromDate, toDate] and field-merge them for
+ * the charts (garmin priority; healthkit fills gaps; healthkit hrvMs is never
+ * charted — HealthKit SDNN must not mix with Garmin RMSSD-based HRV in one
+ * series). health_connect stays source-isolated until a view needs it.
  */
 export async function getWearableWindow(
   userId: string,
@@ -18,8 +21,8 @@ export async function getWearableWindow(
   toDate: Date,
 ): Promise<WearableSeries> {
   const rows = await prisma.wearableDaily.findMany({
-    where: { userId, date: { gte: fromDate, lte: toDate } },
+    where: { userId, source: { in: ["garmin", "healthkit"] }, date: { gte: fromDate, lte: toDate } },
     orderBy: { date: "asc" },
   });
-  return buildWearableSeries(rows);
+  return buildWearableSeries(mergeWearableRows(rows));
 }

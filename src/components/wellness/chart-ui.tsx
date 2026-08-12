@@ -5,6 +5,7 @@
  */
 import Link from "next/link";
 import type { ReactNode } from "react";
+import type { WearableSource } from "@/lib/wearable-series";
 
 export function ChartCard({
   title,
@@ -49,6 +50,10 @@ export interface LegendItem {
   line?: boolean;
   /** Dashed line sample. */
   dash?: boolean;
+  /** Filled circle swatch (source dot: Garmin). */
+  dot?: boolean;
+  /** Hollow circle swatch (source dot: Apple Health). */
+  ring?: boolean;
 }
 
 export function Legend({ items }: { items: LegendItem[] }) {
@@ -68,6 +73,10 @@ export function Legend({ items }: { items: LegendItem[] }) {
                 strokeDasharray={it.dash ? "4 3" : undefined}
               />
             </svg>
+          ) : it.ring ? (
+            <span className="inline-block h-2.5 w-2.5 rounded-full border-2" style={{ borderColor: it.color }} />
+          ) : it.dot ? (
+            <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: it.color, opacity: it.opacity ?? 1 }} />
           ) : (
             <span
               className="inline-block h-2.5 w-2.5 rounded-sm"
@@ -79,4 +88,52 @@ export function Legend({ items }: { items: LegendItem[] }) {
       ))}
     </ul>
   );
+}
+
+/** True if any day in the window was sourced from / filled by Apple Health. */
+export function hasHealthkitSource(sources: (WearableSource | undefined)[]): boolean {
+  return sources.some((s) => s === "healthkit" || s === "mixed");
+}
+
+/** Per-day source dots drawn inside a chart SVG — one small mark per day at the
+ *  chart's x-positions (filled = Garmin, hollow ring = Apple Health / mixed),
+ *  each with a native `<title>` tooltip. Renders nothing when no day involved
+ *  Apple Health, so garmin-only charts stay clean. */
+export function SourceDots({
+  sources,
+  xAt,
+  y,
+}: {
+  sources: (WearableSource | undefined)[];
+  xAt: (i: number) => number;
+  y: number;
+}) {
+  if (!hasHealthkitSource(sources)) return null;
+  return (
+    <g>
+      {sources.map((s, i) => {
+        const cx = xAt(i).toFixed(1);
+        const apple = s === "healthkit" || s === "mixed";
+        const label = s === "healthkit" ? "Apple Health" : s === "mixed" ? "Garmin + Apple Health" : "Garmin";
+        return apple ? (
+          <circle key={i} cx={cx} cy={y} r="2.2" fill="none" stroke="rgb(var(--accent-2-strong))" strokeWidth="1.2">
+            <title>{label}</title>
+          </circle>
+        ) : (
+          <circle key={i} cx={cx} cy={y} r="1.5" fill="rgb(var(--muted))" fillOpacity="0.5">
+            <title>{label}</title>
+          </circle>
+        );
+      })}
+    </g>
+  );
+}
+
+/** Source legend items — only when Apple Health contributed (else empty). */
+export function sourceLegendItems(sources: (WearableSource | undefined)[]): LegendItem[] {
+  if (!hasHealthkitSource(sources)) return [];
+  return [
+    { label: "Garmin", color: "rgb(var(--muted))", dot: true },
+    { label: "Apple Health", color: "rgb(var(--accent-2-strong))", ring: true },
+  ];
 }

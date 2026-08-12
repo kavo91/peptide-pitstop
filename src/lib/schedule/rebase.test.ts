@@ -49,14 +49,39 @@ describe("rebaseWeek (snap-back)", () => {
     }).map(iso);
     expect(out).toEqual([]);
   });
-  it("honours the inclusive protocol endDate when rebasing", () => {
+
+  // Bug repro (prod, 2026-07-05): Tα1 M/W/F, endDate shortened to 2026-07-06.
+  // Dose taken Sunday instead of Monday → naive shift would land on Tue Jul 7 /
+  // Thu Jul 9, BOTH past the protocol's end date. Neither should be written.
+  it("clamps shifted occurrences to protocol.endDate — drops dates past it", () => {
+    const out = rebaseWeek({
+      rebaseMode: "fixed_anchor", freq: "WEEKLY",
+      weekStart: d("2026-07-05"), plannedDays: ["MO", "WE", "FR"],
+      actual: { plannedDate: d("2026-07-06"), actualDate: d("2026-07-05") },
+      today: d("2026-07-05"),
+      endDate: d("2026-07-06"),
+    }).map(iso);
+    expect(out).toEqual([]);
+  });
+
+  it("endDate is inclusive — a shifted occurrence ON the end date is kept", () => {
     const out = rebaseWeek({
       rebaseMode: "fixed_anchor", freq: "WEEKLY",
       weekStart: d("2026-06-14"), plannedDays: ["MO", "WE", "FR"],
-      actual: { plannedDate: d("2026-06-15"), actualDate: d("2026-06-16") },
-      today: d("2026-06-16"),
-      endDate: d("2026-06-18"),
+      actual: { plannedDate: d("2026-06-15"), actualDate: d("2026-06-14") },
+      today: d("2026-06-14"),
+      endDate: d("2026-06-16"), // exactly the first shifted date (Tue 16th)
     }).map(iso);
-    expect(out).toEqual(["2026-06-18"]);
+    expect(out).toEqual(["2026-06-16"]); // Thu 18th dropped, Tue 16th kept
+  });
+
+  it("no endDate (null/undefined) — unchanged behaviour", () => {
+    const out = rebaseWeek({
+      rebaseMode: "fixed_anchor", freq: "WEEKLY",
+      weekStart: d("2026-06-14"), plannedDays: ["MO", "WE", "FR"],
+      actual: { plannedDate: d("2026-06-15"), actualDate: d("2026-06-14") },
+      today: d("2026-06-14"),
+    }).map(iso);
+    expect(out).toEqual(["2026-06-16", "2026-06-18"]);
   });
 });

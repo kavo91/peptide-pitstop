@@ -3,11 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/owner";
-import { getEnrichmentSeed } from "@/lib/peptide-enrichment";
-import { effectiveTemplates } from "@/lib/enrichment/suggested-protocol";
-import { protocolTemplateToInput, templateToRampSteps } from "@/lib/protocol-template";
-import { generateRamp } from "@/lib/titration/generate-ramp";
-import { saveProtocol, addProtocolSteps } from "./protocols";
 
 /** Parse an optional finite decimal; empty → null, invalid → null. */
 function optDecimal(v?: string | null): string | null {
@@ -129,22 +124,11 @@ export interface AddPeptideFromLibraryInput {
   substanceClass?: string;
   halfLifeHours?: string;
   storageNotes?: string;
-  /** When true, also create the suggested protocol (and its ramp, if any). */
-  withProtocol?: boolean;
-  /** Which effectiveTemplate to apply (default 0). */
-  templateIndex?: number;
 }
 
 /**
- * One-tap add-from-library. Always creates the peptide. When `withProtocol` is
- * set and the matching enrichment has an applicable (effective) template, also
- * creates the suggested protocol — and its titration steps if the template has a
- * usable ramp.
- *
- * The protocol step is best-effort: a failure there NEVER loses the created
- * peptide. We return `{ ok, peptideId, protocolId?, protocolError? }` so the
- * caller can surface a partial result. Guard: if the peptide already has a
- * protocol (one-protocol-per-peptide), protocol creation is skipped.
+ * One-tap add-from-library. This creates reference data only. Protocols remain
+ * an explicit manual/prescriber-recorded workflow; enrichment never seeds dose.
  */
 export async function addPeptideFromLibrary(input: AddPeptideFromLibraryInput) {
   const user = await getCurrentUser();
@@ -176,51 +160,5 @@ export async function addPeptideFromLibrary(input: AddPeptideFromLibraryInput) {
   revalidatePath("/inventory");
   revalidatePath("/protocols");
 
-  if (!input.withProtocol) {
-    return { ok: true as const, peptideId };
-  }
-
-  // Best-effort suggested-protocol creation. Any failure leaves the peptide
-  // intact and is reported via protocolError (never thrown).
-  try {
-    const entry = getEnrichmentSeed(name, input.aliases);
-    const templates = entry ? effectiveTemplates(entry) : [];
-    const ti = input.templateIndex ?? 0;
-    const tmpl = ti >= 0 && ti < templates.length ? templates[ti] : undefined;
-    if (!tmpl) {
-      return { ok: true as const, peptideId, protocolError: "No suggested protocol is available for this peptide." };
-    }
-
-    // Defensive: skip if a protocol already exists (one-protocol-per-peptide).
-    const existing = await prisma.protocol.count({ where: { userId: user.id, peptideId } });
-    if (existing > 0) {
-      return { ok: true as const, peptideId, protocolError: "That peptide already has a protocol." };
-    }
-
-    const protoRes = await saveProtocol(protocolTemplateToInput(tmpl, peptideId));
-    if (!protoRes.ok || !protoRes.id) {
-      return { ok: true as const, peptideId, protocolError: protoRes.ok ? "Could not create the suggested protocol." : protoRes.error };
-    }
-    const protocolId = protoRes.id;
-
-    // If the template carries a usable ramp, generate + add the titration steps
-    // via the same path the app uses elsewhere.
-    const rampParams = templateToRampSteps(tmpl);
-    if (rampParams) {
-      const steps = generateRamp(rampParams).map((s) => ({
-        dose: s.dose,
-        doseInputUnit: s.doseInputUnit,
-        durationDays: s.durationDays != null ? String(s.durationDays) : undefined,
-      }));
-      const stepRes = await addProtocolSteps({ protocolId, steps });
-      if (!stepRes.ok) {
-        return { ok: true as const, peptideId, protocolId, protocolError: stepRes.error };
-      }
-    }
-
-    return { ok: true as const, peptideId, protocolId };
-  } catch (e) {
-    console.error("addPeptideFromLibrary: protocol step failed", e);
-    return { ok: true as const, peptideId, protocolError: "Could not create the suggested protocol." };
-  }
+  return { ok: true as const, peptideId };
 }

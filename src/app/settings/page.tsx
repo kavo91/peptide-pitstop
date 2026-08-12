@@ -2,11 +2,14 @@
  * Settings — reference data management: peptides and syringes. Both feed the
  * CRUD selects elsewhere (vials, protocols, dose logging).
  */
+import Link from "next/link";
 import { Download } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/owner";
 import { prisma } from "@/lib/db";
+import { prescriptionWizardEnabled } from "@/lib/features";
 import { PEPTIDE_LIBRARY } from "@/lib/peptide-library";
 import { getEnrichmentSeed } from "@/lib/peptide-enrichment";
+import { toNeutralReferenceEntry } from "@/lib/compliance";
 import { PeptideManager } from "@/components/PeptideManager";
 import { StackBuilder } from "@/components/StackBuilder";
 import { StackCard } from "@/components/StackCard";
@@ -21,6 +24,7 @@ import { BackButton } from "@/components/BackButton";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SignOutEverywhereButton } from "@/components/SignOutEverywhereButton";
 import { PitstopHeading } from "@/components/PitstopHeading";
+import { activeDesign } from "@/lib/design";
 import { signOutEverywhere } from "@/app/actions/auth";
 import { PAGE_MAIN } from "@/lib/layout";
 
@@ -92,9 +96,15 @@ export default async function SettingsPage() {
   const peptidesWithEnrichment = peptides.map((p) => ({
     ...p,
     halfLifeHours: p.halfLifeHours || libHalfLife(p.name, p.aliases),
-    enrichment: getEnrichmentSeed(p.name, p.aliases) ?? null,
+    enrichment: (() => {
+      const entry = getEnrichmentSeed(p.name, p.aliases);
+      return entry ? toNeutralReferenceEntry(entry) : null;
+    })(),
   }));
-  const libraryWithEnrichment = libraryAvailable.map((e) => ({ ...e, enrichment: getEnrichmentSeed(e.name, e.aliases) ?? null }));
+  const libraryWithEnrichment = libraryAvailable.map((e) => {
+    const entry = getEnrichmentSeed(e.name, e.aliases);
+    return { ...e, enrichment: entry ? toNeutralReferenceEntry(entry) : null };
+  });
 
   // Component options for the stack builder: every library peptide + the user's
   // own peptides (so a stack can mix singles, blends and already-owned items).
@@ -103,6 +113,7 @@ export default async function SettingsPage() {
   ).sort((a, b) => a.localeCompare(b));
 
   const stacks = await getStacks(user.id);
+  const wizardEnabled = prescriptionWizardEnabled();
 
   const syringes = (
     await prisma.syringe.findMany({ where: { OR: [{ userId: user.id }, { userId: null }] }, orderBy: { name: "asc" } })
@@ -119,7 +130,7 @@ export default async function SettingsPage() {
   return (
     <main className={PAGE_MAIN}>
       <BackButton />
-      <PitstopHeading title="Settings" index={10} className="mb-1 text-3xl font-semibold tracking-tight" split={["SET", "TINGS"]} />
+      <PitstopHeading title="Settings" index={10} design={activeDesign()} className="mb-1 text-3xl font-semibold tracking-tight" split={["SET", "TINGS"]} />
       <p className="mb-6 text-muted">Manage your peptides and syringes.</p>
 
       <section className="mb-8">
@@ -138,7 +149,17 @@ export default async function SettingsPage() {
       <div className="min-[1440px]:grid min-[1440px]:grid-cols-2 min-[1440px]:gap-x-6 min-[1440px]:items-start">
         <div>
           <section className="mb-8">
-            <h2 className="mb-3 text-sm font-medium text-muted">Peptides</h2>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-sm font-medium text-muted">Peptides</h2>
+              {wizardEnabled && (
+                <Link
+                  href="/prescriptions/wizard"
+                  className="text-xs font-medium text-accentStrong"
+                >
+                  Add with prescription
+                </Link>
+              )}
+            </div>
             <PeptideManager peptides={peptidesWithEnrichment} library={libraryWithEnrichment} />
             {stacks.length > 0 && (
               <div className="mt-3 space-y-2">

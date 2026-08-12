@@ -24,7 +24,7 @@
  * ticks can never both push, and a claim is never re-sent even if the
  * downstream POST fails (never-double-send beats re-delivery).
  *
- * TZ: the container's TZ env must be YOUR local zone so Date maths is local.
+ * TZ: the container runs Australia/Brisbane, so local Date maths is correct.
  */
 
 // The ONLY static import here, and deliberately so: the pure planner must stay
@@ -64,10 +64,10 @@ export interface ReminderOptions {
   nagTime?: string | null;
   /**
    * IANA zone of the device the user is actually carrying, when it differs from
-   * the runtime zone. Reminder TIMING stays anchored to the runtime zone (the
-   * schedule grid is defined there); this only makes the notification TEXT
-   * honest, so a push that lands at 07:00 on a travelling phone stops claiming
-   * "21:00" with no explanation. Null/absent/equal-to-runtime → the bare time.
+   * the runtime zone. Reminder TIMING stays home-anchored (the schedule grid is
+   * home-TZ by design); this only makes the notification TEXT honest, so a push
+   * that lands at 07:00 on a travelling phone stops claiming "21:00" with no
+   * explanation. Null/absent/equal-to-runtime → the bare schedule time.
    */
   viewerTz?: string | null;
 }
@@ -111,12 +111,12 @@ export interface ReminderEvent {
  * a slot's own time, or the untimed anchor (default UNTIMED_REMINDER_TIME).
  */
 /**
- * PURE — how a slot's time is written in a notification. Schedule time, plus the
- * same instant on the user's own device clock when they differ:
- * `"21:00 (07:00 your time)"`. Without this a reminder fired at 21:00 runtime
- * time reaches a UTC−4 phone at 07:00 while insisting it is "Scheduled for
- * 21:00". Falls back to the bare time when the zone is absent, invalid, or
- * agrees with the runtime zone — so a user at home sees no change at all.
+ * PURE — how a slot's time is written in a notification. Home-anchored schedule
+ * time, plus the same instant on the user's own device clock when they differ:
+ * `"21:00 (07:00 your time)"`. Without this a reminder fired at 21:00 Brisbane
+ * reaches a UTC−4 phone at 07:00 while insisting it is "Scheduled for 21:00".
+ * Falls back to the bare time when the zone is absent, invalid, or agrees with
+ * the runtime zone — so a user at home sees no change at all.
  */
 export function slotTimeLabel(
   day: Date,
@@ -321,13 +321,12 @@ export async function sendDueReminders(
     where: { id: userId },
     select: { untimedReminderTime: true, nagTime: true, nagEnabled: true },
   });
-  // Best available signal for which zone the user's phone is in: the tz frozen on
-  // their most recent dose. There is no User.timezone column, and a cron tick has
-  // no viewer cookie to read — but every dose stamps its logging device's zone,
-  // so the newest stamp tracks travel on its own. Notification TEXT only;
-  // reminder timing stays anchored to the runtime zone.
-  //
-  // Cosmetic — it must NEVER be able to stop a dose reminder going out, so a
+  // Best available signal for which zone the user's phone is in: the tz frozen
+  // on their most recent dose. There is no User.timezone column, and a cron tick
+  // has no viewer cookie to read — but every dose logged since v1.4.0 stamps the
+  // logging device's zone, so the newest stamp tracks travel on its own. Used for
+  // notification TEXT only; reminder timing stays home-anchored.
+  // Cosmetic only — it must NEVER be able to stop a dose reminder going out, so a
   // failure here degrades to the bare schedule time rather than throwing the tick.
   let viewerTz: string | null = null;
   try {

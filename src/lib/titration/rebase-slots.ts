@@ -12,11 +12,11 @@ export interface ReconstructArgs {
   freq: "DAILY" | "WEEKLY";
   /**
    * `localDay` is the tracking day FROZEN on the device that logged the dose.
-   * It must drive the on-grid test: a dose logged while travelling can sit on a
-   * different runtime-TZ calendar day than the day it belongs to, and judging
+   * It must drive the on-grid test: a traveller's dose can sit on a different
+   * runtime-TZ (Brisbane) calendar day than the day it belongs to, and judging
    * "off-grid" by the raw instant makes an on-grid dose trigger a rebase that
    * DELETES the very slot it should have filled. Falls back to the instant for
-   * legacy rows logged before day-stamping existed.
+   * legacy rows stamped before v1.4.0.
    */
   delivered: { id: string; takenAt: Date; localDay?: string | null }[];
   /** Inclusive protocol end date. Rebased display slots must not cross it. */
@@ -57,9 +57,9 @@ export function reconstructRebasedSlots(args: ReconstructArgs): DatedSlot[] {
 
   // A grid day that ALREADY has its own delivered dose is satisfied and cannot be
   // re-anchored: taking it as the anchor drops it (and every later grid day), so the
-  // dose sitting on it loses its slot. Example — a five-day weekly grid dosed on all
-  // five days plus one extra off-grid day: the extra dose would anchor on its nearest
-  // grid neighbour and wipe that day's dose plus everything after it.
+  // dose sitting on it loses its slot. Real case — GHK-Cu MO/TU/TH/FR/SU dosed on all
+  // five grid days plus an extra Wednesday: the Wednesday anchored on Tuesday, and the
+  // Tuesday and Thursday doses vanished behind a phantom Saturday.
   const satisfied = new Set(delivered.map((dz) => doseDay(dz).getTime()));
   const anchorable = grid.filter((g) => !satisfied.has(g.getTime()));
 
@@ -68,12 +68,15 @@ export function reconstructRebasedSlots(args: ReconstructArgs): DatedSlot[] {
     // When every grid day is already dosed there is nothing to re-anchor onto: keep
     // the plain grid and let the genuinely extra dose render as off-schedule.
     if (anchorable.length === 0) break;
+    if (grid.some((g) => g.getTime() === actual.getTime())) continue; // on grid — nothing to do
+
+    // NOTE: the anchor is deliberately NOT restricted to grid days on/before the
+    // dose. Anchoring a LATER grid day onto an earlier dose is the legitimate
+    // "started the week early" rebase (M/W/F dosed from Sunday → Sun/Tue/Thu) and
+    // is covered by rebase-slots.test.ts. The backwards-slide damage came from the
+    // drop set below, not from the direction of the anchor.
     const nearest = anchorable.reduce((best, dte) =>
       Math.abs(dte.getTime() - actual.getTime()) < Math.abs(best.getTime() - actual.getTime()) ? dte : best, anchorable[0]);
-    // Membership of the FULL grid, not equality with `nearest`: `nearest` comes from
-    // the filtered candidate list, so an on-grid dose would never match it and would
-    // falsely trigger a rebase.
-    if (grid.some((g) => g.getTime() === actual.getTime())) continue; // on grid — nothing to do
 
     // Slide the grid days AFTER the satisfied slot. weekStart as `today` so NO
     // in-week day is filtered out (this is a full-week reconstruction, not the
@@ -88,13 +91,25 @@ export function reconstructRebasedSlots(args: ReconstructArgs): DatedSlot[] {
     // Drop the satisfied grid day AND every grid day after it; re-add the actual
     // anchor day plus the shifted later days, all flagged rebased. Grid days
     // strictly before the satisfied (nearest) slot keep their own (non-rebased) slots.
-    const droppedKeys = new Set(grid.filter((g) => g >= nearest).map((g) => g.getTime()));
+    // A grid day that already has its OWN delivered dose is never dropped. The
+    // anchor guard above only stopped such a day being CHOSEN as the anchor; it
+    // could still be swept up here by `g >= nearest`, orphaning its dose. The
+    // orphaned dose then rendered nowhere on the schedule while still appearing
+    // in the logged list, so its card read "Due" permanently.
+    const droppedKeys = new Set(
+      grid.filter((g) => g >= nearest && !satisfied.has(g.getTime())).map((g) => g.getTime()),
+    );
+    const kept = args.weekSlots.filter((s) => !droppedKeys.has(startOfDay(s.date).getTime()));
+    const keptDays = new Set(kept.map((s) => startOfDay(s.date).getTime()));
+
     const rebasedDays = new Set<number>([actual.getTime()]);
     for (const s of shifted) rebasedDays.add(startOfDay(s).getTime());
+    // Never emit a second slot on a day that kept its own.
+    for (const k of keptDays) rebasedDays.delete(k);
 
     const keptTime = args.weekSlots[0]?.time ?? null;
     return [
-      ...args.weekSlots.filter((s) => !droppedKeys.has(startOfDay(s.date).getTime())),
+      ...kept,
       ...[...rebasedDays].map((ms) => ({ date: new Date(ms), time: keptTime, rebased: true })),
     ].sort((a, b) => a.date.getTime() - b.date.getTime());
   }

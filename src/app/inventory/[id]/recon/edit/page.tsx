@@ -15,12 +15,13 @@ function toDateInput(d: Date | null): string {
   return d ? new Date(d).toISOString().slice(0, 10) : "";
 }
 
-export default async function EditReconPage({ params }: { params: { id: string } }) {
+export default async function EditReconPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return null;
+  const { id } = await params;
 
   const prep = await prisma.preparation.findFirst({
-    where: { vialId: params.id, active: true, vial: { userId: user.id } },
+    where: { vialId: id, active: true, vial: { userId: user.id } },
     include: { doseLogs: { select: { volumeMl: true } } },
   });
 

@@ -23,7 +23,7 @@ function tokenValid(token: string | undefined, secret: string): boolean {
  *   curl -X POST http://localhost:3009/api/cron/planned \
  *     -H "Authorization: Bearer <CRON_SECRET-or-AUTH_SECRET>"
  *
- * Returns JSON: { ok: true, users: N, upserted: N, markedMissed: N, deleted: N, completed: N }
+ * Returns JSON: { ok: true, users: N, upserted: N, markedMissed: N }
  */
 export async function POST(req: NextRequest) {
   // ── Auth ─────────────────────────────────────────────────────────────────

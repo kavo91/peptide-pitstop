@@ -4,7 +4,8 @@
  * verify too. createSessionToken/verifySessionToken are pure (testable); the
  * cookie helpers require a Next request context.
  */
-import { SignJWT, jwtVerify } from "jose";
+import { SignJWT } from "jose/jwt/sign";
+import { jwtVerify } from "jose/jwt/verify";
 import { cookies } from "next/headers";
 
 export const SESSION_COOKIE = "pt_session";
@@ -60,7 +61,8 @@ export function sessionTokenVersionValid(session: SessionData, userTokenVersion:
 }
 
 export async function setSessionCookie(token: string): Promise<void> {
-  cookies().set(SESSION_COOKIE, token, {
+  const cookieStore = await cookies();
+  cookieStore.set(SESSION_COOKIE, token, {
     httpOnly: true,
     // Secure by default (prod is HTTPS via the tunnel). A `Secure` cookie is
     // DROPPED by browsers over plain HTTP, which breaks login on a dev instance
@@ -73,11 +75,12 @@ export async function setSessionCookie(token: string): Promise<void> {
 }
 
 export async function clearSessionCookie(): Promise<void> {
-  cookies().delete(SESSION_COOKIE);
+  const cookieStore = await cookies();
+  cookieStore.delete(SESSION_COOKIE);
 }
 
 export async function getSession(): Promise<SessionData | null> {
-  const token = cookies().get(SESSION_COOKIE)?.value;
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   return verifySessionToken(token);
 }

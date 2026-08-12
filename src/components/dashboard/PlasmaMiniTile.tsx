@@ -21,9 +21,12 @@ interface Props {
   design?: "pitstop" | "current";
   /** Missed-dose times for the chart's pitstop-only redline markers. */
   missedDoses?: Date[];
+  /** Peptides with no half-life (stored or library) — named under the chart so
+   *  they are not silently absent. */
+  peptidesWithoutHalfLife?: { peptideId: string; peptideName: string }[];
 }
 
-export function PlasmaMiniTile({ plasmaByPeptide, now, design = "current", missedDoses = [] }: Props) {
+export function PlasmaMiniTile({ plasmaByPeptide, now, design = "current", missedDoses = [], peptidesWithoutHalfLife = [] }: Props) {
   const hasData = plasmaByPeptide.some((p) => p.series.length >= 2);
 
   if (!hasData) {
@@ -45,6 +48,7 @@ export function PlasmaMiniTile({ plasmaByPeptide, now, design = "current", misse
           compactOnPhone
           design={design}
           missedDoses={missedDoses}
+          peptidesWithoutHalfLife={peptidesWithoutHalfLife}
           defaultWindowDays={7}
         />
       </div>

@@ -10,7 +10,7 @@ import { rebaseWeek } from "./rebase";
 import { computeRebaseSuggestion } from "./rebase-suggest";
 
 /**
- * Example scenario: interval every-3-days anchored at
+ * Prod scenario (Retatrutide, July 2026): interval every-3-days anchored at
  * startDate 2026-06-18 → due … Jul 6, Jul 9, Jul 12. The Thu Jul 9 dose was
  * missed and logged ad-hoc on Fri Jul 10.
  *
@@ -21,12 +21,12 @@ import { computeRebaseSuggestion } from "./rebase-suggest";
  *    off-grid dose; confirming appends a rule anchor (see interval-anchor.ts).
  *  - A `fixed_anchor` interval protocol stays rigid: no shift, no prompt.
  */
-const EVERY_3D_RULE = JSON.stringify([{ dayPattern: { kind: "interval", everyDays: 3 }, times: [] }]);
+const RETA_RULE = JSON.stringify([{ dayPattern: { kind: "interval", everyDays: 3 }, times: [] }]);
 const START = new Date("2026-06-18T00:00:00");
 const local = (d: string) => new Date(d + "T00:00:00");
 
 describe("interval schedule — missed dose taken the next day", () => {
-  const schedule = parseSchedule(EVERY_3D_RULE);
+  const schedule = parseSchedule(RETA_RULE);
 
   it("keeps the startDate grid: Thu Jul 9 due, Fri Jul 10 not due, Sun Jul 12 due", () => {
     expect(slotsOn(schedule, local("2026-07-09"), START)).toHaveLength(1);
@@ -65,25 +65,25 @@ describe("interval schedule — missed dose taken the next day", () => {
     });
 
     const fridayCatchUp = {
-      protocolId: "proto-1",
+      protocolId: "reta",
       userId: "u1",
       takenAt: local("2026-07-10"),
       matchedPlanned: false,
     };
-    const intervalProto = (rebaseMode: string) => ({
-      id: "proto-1",
-      scheduleRule: EVERY_3D_RULE,
+    const retaProto = (rebaseMode: string) => ({
+      id: "reta",
+      scheduleRule: RETA_RULE,
       rebaseMode,
       startDate: START,
       endDate: null,
     });
 
-    it("offers a catch-up ROLL prompt for a rolling interval protocol ", async () => {
-      findFirst.mockResolvedValue(intervalProto("rolling"));
+    it("offers a catch-up ROLL prompt for a rolling interval protocol (prod Reta shape)", async () => {
+      findFirst.mockResolvedValue(retaProto("rolling"));
       const s = await computeRebaseSuggestion(fridayCatchUp);
       expect(s).toMatchObject({
         kind: "interval",
-        protocolId: "proto-1",
+        protocolId: "reta",
         intervalDays: 3,
         plannedDateISO: local("2026-07-09").toISOString(),
         actualDateISO: local("2026-07-10").toISOString(),
@@ -96,19 +96,19 @@ describe("interval schedule — missed dose taken the next day", () => {
     });
 
     it("offers no prompt for a fixed_anchor interval protocol (rigid grid by choice)", async () => {
-      findFirst.mockResolvedValue(intervalProto("fixed_anchor"));
+      findFirst.mockResolvedValue(retaProto("fixed_anchor"));
       await expect(computeRebaseSuggestion(fridayCatchUp)).resolves.toBeUndefined();
     });
 
     it("offers no prompt when the dose lands on a grid day", async () => {
-      findFirst.mockResolvedValue(intervalProto("rolling"));
+      findFirst.mockResolvedValue(retaProto("rolling"));
       await expect(
         computeRebaseSuggestion({ ...fridayCatchUp, takenAt: local("2026-07-12") }),
       ).resolves.toBeUndefined();
     });
 
     it("offers no prompt when the roll's next dose would land past the end date", async () => {
-      findFirst.mockResolvedValue({ ...intervalProto("rolling"), endDate: local("2026-07-11") });
+      findFirst.mockResolvedValue({ ...retaProto("rolling"), endDate: local("2026-07-11") });
       await expect(computeRebaseSuggestion(fridayCatchUp)).resolves.toBeUndefined();
     });
 

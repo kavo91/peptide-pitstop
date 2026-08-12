@@ -160,7 +160,7 @@ describe("phaseProgress for the Today label", () => {
 });
 
 // ── WS6: today.ts rebase-override classifier — TZ hardening ───────────────────
-// Regression for the bug fixed by pinning the runtime TZ: under a
+// Regression for the prod bug fixed by container TZ=Australia/Brisbane: under a
 // UTC runtime a Monday-local-midnight PlannedDose read back as Sunday, so an
 // on-grid M/W/F routine row was misclassified as an off-grid rebase override and
 // the dose showed "due" a day early. We force process.env.TZ so the assertion is
@@ -218,7 +218,7 @@ describe("rebase-override classifier — TZ hardening (WS6)", () => {
     expect(sundaySlots).toHaveLength(1); // the symptom: "due" a day early
   });
 
-  // Regression (2026-07-02): moving a stack's start date FORWARD leaves
+  // BPC+TB4 prod bug (2026-07-02): moving a stack's start date FORWARD leaves
   // already-materialised "planned" rows behind (daily rows for Jul 2–5 written
   // while the stack started immediately). Those rows now sit outside the
   // window-gated grid, so the classifier misread them as fixed_anchor rebase
@@ -313,7 +313,7 @@ describe("rebase-override classifier — TZ hardening (WS6)", () => {
     expect(dueSlotsForDay(moTh, overrideDays.get("p-live"), tue, started.startDate, started.endDate)).toHaveLength(1);
   });
 
-  // Regression (2026-06-26): a stray OFF-grid planned row sitting alongside
+  // GHK-Cu prod bug (2026-06-26): a stray OFF-grid planned row sitting alongside
   // a valid ON-grid row in the same week must NOT be treated as a rebase. A real
   // confirmRebase deletes the on-grid rows, so a genuine rebase week is purely
   // off-grid. Previously a single off-grid row made the override set REPLACE the
@@ -339,13 +339,15 @@ describe("rebase-override classifier — TZ hardening (WS6)", () => {
   });
 });
 
-// Shifted-week "logged" bug: an off-grid Sunday dose on a weekly M–F fixed_anchor
-// protocol rebases the DISPLAY week to Sun–Thu, so resolveTitration rebuilds the
-// WHOLE week — many slots, all at "21:00", on different calendar days. A caller
-// that asked for a single day (Today) but indexed by time alone picked up the
-// TAKEN Sunday slot for today → the card read "logged". resolveTitration now
-// clips its result to the queried range; these pin that contract.
-describe("shifted week must not mark a later day 'logged'", () => {
+// Tesamorelin prod bug (2026-07-13): an off-grid SUNDAY dose on a weekly M–F
+// fixed_anchor protocol rebases the DISPLAY week to Sun–Thu, so
+// resolveTitration returns the WHOLE rebased week — many slots, ALL at "21:00",
+// on different calendar days. today.ts asked for a single day (Monday) but
+// indexed those slots by time alone, so Monday's 21:00 due-slot picked up the
+// TAKEN Sunday 21:00 slot → Monday's card read "logged". The fix restricts the
+// index to slots whose local calendar day IS today. These guards pin that
+// contract against the real resolver (getTodayDoses itself is DB-bound).
+describe("shifted week must not mark a later day 'logged' (tesamorelin prod bug)", () => {
   const tesaRule = JSON.stringify([
     { dayPattern: { kind: "weekly", byDays: ["MO", "TU", "WE", "TH", "FR"] }, times: ["21:00"] },
   ]);
@@ -360,33 +362,53 @@ describe("shifted week must not mark a later day 'logged'", () => {
     adherenceWindowMin: 120,
     steps: [] as [],
   };
+  // Real logs: Thu Jul 9, Fri Jul 10, and the off-grid Sun Jul 12 22:34 local.
   const tesaLogs = [
     { id: "log-thu", takenAt: new Date("2026-07-09T11:40:00.000Z") },
     { id: "log-fri", takenAt: new Date("2026-07-10T13:15:00.000Z") },
-    { id: "log-sun", takenAt: new Date("2026-07-12T12:34:50.449Z") }, // off-grid Sun 22:34 local
+    { id: "log-sun", takenAt: new Date("2026-07-12T12:34:50.449Z") },
   ];
+
   function resolveMonday() {
     process.env.TZ = "Australia/Brisbane";
     const day = startOfDay(new Date("2026-07-13T00:00:00+10:00")); // Mon Jul 13 local midnight
-    return resolveTitration(
+    const resolved = resolveTitration(
       buildResolveInput({ protocol: tesaProto, deliveredLogs: tesaLogs, range: { start: day, end: day }, now: day }),
     );
+    return { day, resolved };
   }
 
-  it("clips a single-day range to that day even when the week is rebased", () => {
-    const resolved = resolveMonday();
+  it("resolveTitration clips a single-day range to that day even when the week is rebased", () => {
+    // The rebase rebuilds the WHOLE Sun–Thu week internally (for status + cursor
+    // correctness), but the resolver now CLIPS the result to the queried range:
+    // only Monday is returned. The taken Sunday slot and the Tue–Thu projections
+    // are outside [range.start, range.end] and must not leak out.
+    const { resolved } = resolveMonday();
     expect(resolved.slots.length).toBeGreaterThan(0);
-    expect(resolved.slots.every((s) => dayKey(s.date) === "2026-07-13")).toBe(true); // only Monday
+    expect(resolved.slots.every((s) => dayKey(s.date) === "2026-07-13")).toBe(true);
     expect(resolved.slots.some((s) => s.status === "taken")).toBe(false); // no Sunday slot leaked in
   });
 
-  it("Monday resolves as an unlogged, shifted dose — not 'logged'", () => {
-    const resolved = resolveMonday();
+  it("Monday resolves as an unlogged, shifted dose — not 'logged' (resolver-level fix)", () => {
+    // Even indexing by TIME ALONE (the old getTodayDoses pattern) is now safe,
+    // because the resolver only returns today's slot.
+    const { resolved } = resolveMonday();
     const byTime = new Map<string | null, (typeof resolved.slots)[number]>();
     for (const rs of resolved.slots) if (!byTime.has(rs.time ?? null)) byTime.set(rs.time ?? null, rs);
     const monday = byTime.get("21:00");
     expect(monday).toBeDefined();
-    expect(monday?.status).not.toBe("taken"); // not logged
-    expect(monday?.rebased).toBe(true);        // shown as shifted (Sun–Thu week)
+    expect(monday?.status).not.toBe("taken");   // Monday is NOT logged
+    expect(monday?.rebased).toBe(true);         // it IS shown as shifted (Sun–Thu week)
+    const alreadyLoggedToday = monday?.status === "taken";
+    expect(alreadyLoggedToday).toBe(false);     // the exact today.ts flag
+  });
+
+  it("today.ts's per-day filter is a redundant belt-and-braces guard after the clip", () => {
+    // today.ts still filters resolved.slots to dayKey(day); with the resolver
+    // clip this is a no-op, but it keeps Today correct even if the clip regresses.
+    const { day, resolved } = resolveMonday();
+    const daySlots = resolved.slots.filter((rs) => dayKey(rs.date) === dayKey(day));
+    expect(daySlots).toEqual(resolved.slots);
+    expect(daySlots.find((s) => s.time === "21:00")?.status).not.toBe("taken");
   });
 });

@@ -12,7 +12,7 @@ import {
   buildLinePath,
   type XY,
 } from "@/lib/wearable-chart";
-import { ChartCard, ChartEmpty, Legend } from "./chart-ui";
+import { ChartCard, ChartEmpty, Legend, SourceDots, sourceLegendItems } from "./chart-ui";
 
 const WIDTH = 600;
 const HEIGHT = 180;
@@ -102,6 +102,7 @@ export function ActivityChart({ activity, detailHref }: { activity: ActivityPoin
 
         {/* X-axis baseline + first/last date */}
         <line x1={PAD.left} y1={bottomY} x2={WIDTH - PAD.right} y2={bottomY} stroke="rgb(var(--muted))" strokeWidth="0.5" strokeOpacity="0.4" />
+        <SourceDots sources={activity.map((a) => a.source)} xAt={(i) => PAD.left + step * i + step / 2} y={bottomY + 9} />
         <text x={PAD.left} y={HEIGHT - 6} fontSize="9" fill="rgb(var(--muted))">{formatDayKeyShort(activity[0].date)}</text>
         <text x={WIDTH - PAD.right} y={HEIGHT - 6} fontSize="9" fill="rgb(var(--muted))" textAnchor="end">{formatDayKeyShort(activity[n - 1].date)}</text>
       </svg>
@@ -110,6 +111,7 @@ export function ActivityChart({ activity, detailHref }: { activity: ActivityPoin
         items={[
           ...(hasSteps ? [{ label: "Steps", color: COL.steps, opacity: 0.55 }] : []),
           ...(hasVo2 ? [{ label: "VO₂max", color: COL.vo2, line: true }] : []),
+          ...sourceLegendItems(activity.map((a) => a.source)),
         ]}
       />
     </ChartCard>

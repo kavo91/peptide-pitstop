@@ -21,8 +21,10 @@ import { getNextDose } from "@/lib/next-dose";
 import { getReorderStatus } from "@/lib/reorder";
 import { getAnalyticsData } from "@/lib/analytics";
 import { getWearableWindow } from "@/lib/wearable";
-import { startOfDay } from "@/lib/schedule/schedule";
+import { daysBetween, startOfDay } from "@/lib/schedule/schedule";
+import { parseSchedule, cyclePosition } from "@/lib/schedule/entries";
 import { scheduleTokenInfo } from "@/lib/schedule/token";
+import { MetricTile } from "@/components/dashboard/MetricTile";
 import { ProtocolTimingTile } from "@/components/dashboard/ProtocolTimingTile";
 import { AdherenceTacho } from "@/components/dashboard/AdherenceTacho";
 import { SupplyTile } from "@/components/dashboard/SupplyTile";
@@ -30,9 +32,11 @@ import { PlasmaMiniTile } from "@/components/dashboard/PlasmaMiniTile";
 import { WellnessTile } from "@/components/dashboard/WellnessTile";
 import { wellnessTrend } from "@/lib/wellness";
 import { TodaySummaryTile } from "@/components/dashboard/TodaySummaryTile";
+import { activeDesign, brandName } from "@/lib/design";
 import { APP_VERSION } from "@/lib/version";
 import { PitstopHeading } from "@/components/PitstopHeading";
 import { PAGE_MAIN } from "@/lib/layout";
+import { SignedOutNotice } from "@/components/SignedOutNotice";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +63,7 @@ const cachedAnalytics = cache(getAnalyticsData);
  * Nested async RSC for the heavy analytics tiles.
  * Wrapped in Suspense from the parent so the dose section renders first.
  */
-async function AnalyticsTiles({ userId }: { userId: string }) {
+async function AnalyticsTiles({ userId, design }: { userId: string; design: "pitstop" | "current" }) {
   const data = await cachedAnalytics(userId);
 
   // Plasma mini-tile: peptide with the most-recent dose.
@@ -71,9 +75,25 @@ async function AnalyticsTiles({ userId }: { userId: string }) {
   });
   const mostRecentPeptideId = mostRecentLog?.preparation?.vial?.peptideId ?? null;
 
+  // NOTE: AdherenceResult exposes `adherencePct` (already 0–100), NOT `.rate`.
+  // Do not multiply by 100.
+  const pct = data.overallAdherence.adherencePct != null
+    ? `${Math.round(data.overallAdherence.adherencePct)}%`
+    : "—";
+
   return (
     <>
-      <AdherenceTacho pct={data.overallAdherence.adherencePct} />
+      {design === "pitstop" ? (
+        <AdherenceTacho pct={data.overallAdherence.adherencePct} />
+      ) : (
+        <MetricTile
+          label="Adherence (90 days)"
+          value={pct}
+          href="/analytics"
+          design={design}
+          delta={pct === "100%" ? { text: "◆ best", tone: "best" } : undefined}
+        />
+      )}
       {/* Plasma chart: shown inline (under the stat tiles) up to 1900px. At
           ≥1900px it is hidden here and rendered in the right column instead, so
           the ultra-wide layout fills both columns rather than leaving a dead
@@ -85,7 +105,9 @@ async function AnalyticsTiles({ userId }: { userId: string }) {
             plasmaByPeptide={data.plasmaByPeptide}
             mostRecentPeptideId={mostRecentPeptideId}
             now={data.now}
+            design={design}
             missedDoses={data.missedDoseTimes}
+            peptidesWithoutHalfLife={data.peptidesWithoutHalfLife}
           />
         </div>
       )}
@@ -107,7 +129,7 @@ function AnalyticsSkeleton() {
  * the React-cached analytics (cachedAnalytics) so there is no extra DB cost over
  * the inline copy in AnalyticsTiles. Returns null when there is no plasma data.
  */
-async function PlasmaSection({ userId }: { userId: string }) {
+async function PlasmaSection({ userId, design }: { userId: string; design: "pitstop" | "current" }) {
   const data = await cachedAnalytics(userId);
   if (data.plasmaByPeptide.length === 0) return null;
 
@@ -123,7 +145,9 @@ async function PlasmaSection({ userId }: { userId: string }) {
       plasmaByPeptide={data.plasmaByPeptide}
       mostRecentPeptideId={mostRecentPeptideId}
       now={data.now}
+      design={design}
       missedDoses={data.missedDoseTimes}
+      peptidesWithoutHalfLife={data.peptidesWithoutHalfLife}
     />
   );
 }
@@ -131,16 +155,12 @@ async function PlasmaSection({ userId }: { userId: string }) {
 export default async function DashboardPage() {
   const user = await getCurrentUser();
 
-  if (!user) {
-    return (
-      <main className="mx-auto max-w-md px-4 py-10">
-        <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="mt-4 text-muted">
-          No owner account yet. Run <code className="rounded bg-surface px-1">npm run db:seed</code> to load your regimen.
-        </p>
-      </main>
-    );
-  }
+  if (!user) return <SignedOutNotice />;
+
+  // Active design pack (server-side env read) — surfaced to the wellness tile so
+  // its pitstop branch can render Apex-Line recovery gauges. Client components
+  // never read process.env; the design flows in as a plain prop.
+  const design = activeDesign();
 
   // Dashboard always summarises TODAY — the VIEWER's calendar day (device
   // timezone via the pt_tz cookie), so a traveller sees their own today, not
@@ -176,10 +196,32 @@ export default async function DashboardPage() {
     ? { peptideName: upcomingDose.peptideName, atISO: upcomingDose.at.toISOString() }
     : null;
 
-  // Running protocols for the Cycle timing-board. Includes active protocols with
-  // a null startDate (e.g. a stack component — createStack never sets
-  // startDate), which are genuinely running but have no Day-N anchor. A null
-  // startDate counts as "started"; a null endDate is open-ended.
+  // Cycle-day / protocol-day tile label.
+  // Find the active protocol with a startDate. If it has a cycle entry, use
+  // cyclePosition; otherwise fall back to "Protocol day N" using daysBetween.
+  // Most-recently-STARTED protocol that is genuinely RUNNING today, for the
+  // Cycle tile. Excludes: non-active status (paused/completed/archived);
+  // not-yet-started protocols (startDate in the future — e.g. a stack whose
+  // start date was set ahead, which otherwise made daysBetween negative and
+  // wrongly showed "No active protocol"); and COMPLETED protocols whose endDate
+  // has already passed (endDate before today). A null endDate = open-ended.
+  const activeProtocols = await prisma.protocol.findMany({
+    where: {
+      userId: user.id,
+      status: "active",
+      startDate: { not: null, lte: viewDate },
+      OR: [{ endDate: null }, { endDate: { gte: startOfDay(viewDate) } }],
+    },
+    orderBy: { startDate: "desc" },
+    include: { peptide: { select: { name: true } } },
+  });
+  const activeProtocol = activeProtocols[0] ?? null;
+
+  // Running protocols for the pitstop Cycle timing-board. Distinct from the
+  // Day-N query above: it must ALSO include active protocols with a null
+  // startDate (e.g. a stack component — createStack never sets startDate), which
+  // are genuinely running but have no Day-N anchor. A null startDate counts as
+  // "started"; a null endDate is open-ended.
   const runningProtocols = await prisma.protocol.findMany({
     where: {
       userId: user.id,
@@ -190,11 +232,45 @@ export default async function DashboardPage() {
     orderBy: [{ startDate: "asc" }, { name: "asc" }],
     include: { peptide: { select: { name: true } } },
   });
-  // Cycle timing-board rows: each running protocol + its compact schedule token.
-  // Count label ("N active") tracks this list length.
+  // Pit timing-board rows for the pitstop Cycle tile: each running protocol + its
+  // compact schedule token. Count label ("N active") tracks this list length.
   const protocolRows = runningProtocols.map((p) => ({ id: p.id, name: p.peptide.name, ...scheduleTokenInfo(p.scheduleRule) }));
 
-  // Telemetry date sub-line: "TUE · 23 JUN 2026 · WK 26".
+  let cycleDayLabel: string | null = null;
+  let cycleDaySub: string | null = null;
+  if (activeProtocol?.startDate) {
+    const schedule = parseSchedule(activeProtocol.scheduleRule);
+    const cycleEntry = schedule.find((e) => e.dayPattern.kind === "cycle");
+    if (cycleEntry && cycleEntry.dayPattern.kind === "cycle") {
+      const pos = cyclePosition(
+        activeProtocol.startDate,
+        cycleEntry.dayPattern.onDays,
+        cycleEntry.dayPattern.offDays,
+        viewDate,
+      );
+      if (pos) {
+        cycleDayLabel = `Day ${pos.dayOfPhase}`;
+        cycleDaySub = `${pos.phase === "on" ? "On" : "Off"} · ${pos.phaseDays}-day phase`;
+      }
+    } else {
+      // Non-cycle protocol: linear day count from startDate.
+      const n = daysBetween(startOfDay(activeProtocol.startDate), startOfDay(viewDate)) + 1;
+      if (n >= 1) {
+        cycleDayLabel = `Day ${n}`;
+        cycleDaySub = "Protocol day";
+      }
+    }
+  }
+
+  // Page header date string.
+  const dateLabel = viewDate.toLocaleDateString(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  // Pitstop telemetry date sub-line: "TUE · 23 JUN 2026 · WK 26".
   const pitWeekday = viewDate.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
   const pitMonth = viewDate.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
   const pitDateLabel = `${pitWeekday} · ${viewDate.getDate()} ${pitMonth} ${viewDate.getFullYear()} · WK ${String(isoWeek(viewDate)).padStart(2, "0")}`;
@@ -206,8 +282,12 @@ export default async function DashboardPage() {
     <main className={PAGE_MAIN}>
       {/* Page header */}
       <header className="mb-6">
-        <PitstopHeading title="Dashboard" index={1} className="text-3xl font-semibold tracking-tight" split={["DASH", "BOARD"]} />
-        <p className="mt-0.5 font-mono uppercase tracking-[0.16em] text-[11px] text-muted">{pitDateLabel}</p>
+        <PitstopHeading title="Dashboard" index={1} design={design} className="text-3xl font-semibold tracking-tight" split={["DASH", "BOARD"]} />
+        {design === "pitstop" ? (
+          <p className="mt-0.5 font-mono uppercase tracking-[0.16em] text-[11px] text-muted">{pitDateLabel}</p>
+        ) : (
+          <p className="mt-0.5 text-sm text-muted">{dateLabel}</p>
+        )}
       </header>
 
       {/* Ultra-wide two-column body. Below 1900px this wrapper is a plain block
@@ -222,24 +302,40 @@ export default async function DashboardPage() {
         {/* Left column — Today + summary tiles + Recovery */}
         <div className="min-w-0">
           {/* Today summary — compact, links to the full /today page */}
-          <TodaySummaryTile dueCount={remaining.length} loggedCount={logged.length} nextLabel={nextLabel} nextDose={nextDoseForTile} />
+          <TodaySummaryTile dueCount={remaining.length} loggedCount={logged.length} nextLabel={nextLabel} nextDose={nextDoseForTile} design={design} />
 
           {/* Summary tile grid — 2-up on mobile, 3-up on desktop. grid-flow-dense
-              lets the Cycle timing-board span both columns on mobile without
-              leaving a gap (Supply + Adherence backfill the top row). */}
+              lets the pitstop Cycle timing-board span both columns on mobile
+              without leaving a gap (Supply + Adherence backfill the top row). */}
           <div className="mb-6 grid grid-flow-row-dense grid-cols-2 gap-3 max-[640px]:mb-3 max-[640px]:gap-2 lg:grid-cols-3">
             {/* Supply tile — cheap, renders immediately */}
-            <SupplyTile item={soonestReorder} />
+            <SupplyTile item={soonestReorder} design={design} />
 
-            {/* Cycle tile — a pit timing-board of active protocols + schedules
-                (full-width on mobile, single cell at lg). */}
-            <div className="col-span-2 lg:col-span-1">
-              <ProtocolTimingTile protocols={protocolRows} />
-            </div>
+            {/* Cycle tile. Pitstop: a pit timing-board of active protocols +
+                schedules (full-width on mobile, single cell at lg). Current
+                design keeps the single "Day N" cycle readout. */}
+            {design === "pitstop" ? (
+              <div className="col-span-2 lg:col-span-1">
+                <ProtocolTimingTile protocols={protocolRows} />
+              </div>
+            ) : cycleDayLabel ? (
+              <MetricTile
+                label="Cycle"
+                value={cycleDayLabel}
+                sub={cycleDaySub ?? undefined}
+                design={design}
+                delta={cycleDaySub?.includes("On") ? { text: "▲ on plan", tone: "up" } : undefined}
+              />
+            ) : (
+              <div className="h-full rounded-card bg-surface p-4 ring-1 ring-line/10 shadow-sm">
+                <p className="text-xs font-medium text-muted">Cycle</p>
+                <p className="mt-1 text-sm text-muted">No active protocol</p>
+              </div>
+            )}
 
             {/* Analytics tiles — Suspense-wrapped; never blocks dose section */}
             <Suspense fallback={<AnalyticsSkeleton />}>
-              <AnalyticsTiles userId={user.id} />
+              <AnalyticsTiles userId={user.id} design={design} />
             </Suspense>
           </div>
 
@@ -248,7 +344,7 @@ export default async function DashboardPage() {
               that previously sat above the right rail, so mobile/laptop stacking
               stays byte-identical: Today, stats, plasma, Recovery. */}
           <div className="mt-6 max-[640px]:mt-3">
-            <WellnessTile trend={wellness} snapshot={wearable.latestSnapshot} todayKey={viewer.key} />
+            <WellnessTile trend={wellness} snapshot={wearable.latestSnapshot} design={design} todayKey={viewer.key} />
           </div>
         </div>
 
@@ -259,13 +355,13 @@ export default async function DashboardPage() {
         <div className="min-w-0">
           <div className="hidden min-[1900px]:block">
             <Suspense fallback={<div className="h-64 animate-pulse rounded-card bg-surface ring-1 ring-line/10" />}>
-              <PlasmaSection userId={user.id} />
+              <PlasmaSection userId={user.id} design={design} />
             </Suspense>
           </div>
         </div>
       </div>
 
-      <p className="mt-8 text-center text-xs text-muted max-[640px]:mt-3 lg:hidden">Peptide Pitstop · not medical advice · v{APP_VERSION}</p>
+      <p className="mt-8 text-center text-xs text-muted max-[640px]:mt-3 lg:hidden">{brandName()} · not medical advice · v{APP_VERSION}</p>
     </main>
   );
 }

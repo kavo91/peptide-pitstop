@@ -16,6 +16,7 @@
 
 import seedData from "./data/peptide-enrichment.json";
 import { applySupplement } from "./enrichment/manual-supplement";
+import { MANUAL_ENTRIES } from "./enrichment/manual-entries";
 
 export const ENRICHMENT_SOURCE = "peptidedosages.com" as const;
 
@@ -100,6 +101,30 @@ export interface EnrichmentSeed {
 const seed = seedData as EnrichmentSeed;
 
 /**
+ * Fold manually-curated whole entries (see ./enrichment/manual-entries.ts) into
+ * the scraped seed list. A manual entry REPLACES a seed entry that shares a token;
+ * otherwise it is appended. Runs once at module load. This makes manual entries —
+ * peptides absent from the scrape SLUG_MAP, or hybrids curated from multiple
+ * sources — durable against both the weekly re-scrape and a full seed
+ * regeneration, which emit only SLUG_MAP / BLEND_SLUG_MAP peptides. Mirrors the
+ * read-time philosophy of {@link applySupplement}.
+ */
+function mergeManualEntries(base: EnrichmentEntry[], manual: EnrichmentEntry[]): EnrichmentEntry[] {
+  if (manual.length === 0) return base;
+  const out = [...base];
+  for (const entry of manual) {
+    const wanted = new Set(tokens(entry.name, entry.aliases));
+    const idx = out.findIndex((e) => tokens(e.name, e.aliases).some((t) => wanted.has(t)));
+    if (idx >= 0) out[idx] = entry;
+    else out.push(entry);
+  }
+  return out;
+}
+
+/** Seed entries + manual entries, the single list every reader below uses. */
+const entries: EnrichmentEntry[] = mergeManualEntries(seed.entries, MANUAL_ENTRIES);
+
+/**
  * Tokenise a name + comma-separated aliases into lowercase match tokens.
  * Mirrors the `tokens()` helper in settings/page.tsx so library/owned/enrichment
  * matching stays consistent.
@@ -119,7 +144,7 @@ function entryTokens(e: EnrichmentEntry): Set<string> {
 function matchSeed(name: string, aliases?: string): EnrichmentEntry | undefined {
   const want = tokens(name, aliases);
   if (want.length === 0) return undefined;
-  return seed.entries.find((e) => {
+  return entries.find((e) => {
     const have = entryTokens(e);
     return want.some((t) => have.has(t));
   });
@@ -135,14 +160,14 @@ export function getEnrichmentSeed(name: string, aliases?: string): EnrichmentEnt
   return found ? applySupplement(found) : undefined;
 }
 
-/** All seed entries (for listing / debugging). */
+/** All entries — scraped seed + manual entries — for listing / debugging. */
 export function allEnrichmentSeed(): EnrichmentEntry[] {
-  return seed.entries;
+  return entries;
 }
 
-/** Seed metadata (generation time + source). */
+/** Seed metadata (generation time + source; count includes manual entries). */
 export function enrichmentSeedMeta(): { generatedAt: string; source: string; count: number } {
-  return { generatedAt: seed.generatedAt, source: seed.source, count: seed.entries.length };
+  return { generatedAt: seed.generatedAt, source: seed.source, count: entries.length };
 }
 
 /**

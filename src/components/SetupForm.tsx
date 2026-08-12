@@ -59,6 +59,7 @@ export function SetupForm() {
         <>
           <p className="text-sm text-muted">Scan this in your authenticator app, then enter the 6-digit code.</p>
           {/* bg-white intentional — QR code modules require true white background for scanner compatibility */}
+          {/* eslint-disable-next-line @next/next/no-img-element -- data-URI TOTP QR is generated at runtime */}
           {qr && <img src={qr} alt="TOTP QR code" className="mx-auto h-48 w-48 rounded-card bg-white p-2" />}
           <p className="break-all text-center text-xs text-muted">Manual key: {secret}</p>
           <input inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} placeholder="000000" className="w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-center text-2xl tabular-nums tracking-widest text-ink" />

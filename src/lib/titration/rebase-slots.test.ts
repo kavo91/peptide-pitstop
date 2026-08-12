@@ -69,16 +69,20 @@ describe("reconstructRebasedSlots", () => {
     expect(out.every((s) => s.rebased === true)).toBe(true);
   });
   it("does not reconstruct rebased display slots past the inclusive protocol endDate", () => {
+    const mwf: DatedSlot[] = [
+      { date: d("2026-07-06"), time: null }, // Mon, end date
+    ];
     const out = reconstructRebasedSlots({
-      weekSlots,
-      weekStart: d("2026-06-14"),
-      plannedDays: ["MO", "TH"],
+      weekSlots: mwf,
+      weekStart: d("2026-07-05"),
+      plannedDays: ["MO", "WE", "FR"],
       rebaseMode: "fixed_anchor",
       freq: "WEEKLY",
-      delivered: [{ id: "a", takenAt: d("2026-06-16") }], // Tue
-      endDate: d("2026-06-18"), // Thu
+      delivered: [{ id: "a", takenAt: d("2026-07-05") }], // Sun — shifts Tue/Thu past end
+      endDate: d("2026-07-06"),
     });
-    expect(out.map((s) => iso(s.date))).toEqual(["2026-06-16"]);
+    expect(out.map((s) => iso(s.date))).toEqual(["2026-07-05"]);
+    expect(out.every((s) => s.rebased === true)).toBe(true);
   });
   it("anchors off the chronologically-earliest dose regardless of input order", () => {
     // All three doses are OFF the M/W/F grid; correctness must not depend on the

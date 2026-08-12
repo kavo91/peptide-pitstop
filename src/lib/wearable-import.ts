@@ -7,7 +7,7 @@
  */
 import { normaliseGarminDay, type WellnessDay } from "./wearable-normalise";
 
-const SOURCE = "garmin";
+const SOURCES = new Set(["garmin", "healthkit", "health_connect"]);
 
 /** Parse "YYYY-MM-DD" to a local-midnight Date, or null if malformed. */
 export function localMidnight(dateStr: string): Date | null {
@@ -59,6 +59,7 @@ export function buildWearableUpsertArgs(
 ): WearableUpsertArgs {
   const date = localMidnight(day.date);
   if (!date) throw new Error(`buildWearableUpsertArgs: invalid date "${day.date}"`);
+  if (!SOURCES.has(day.source)) throw new Error(`buildWearableUpsertArgs: invalid source "${day.source}"`);
 
   const metrics: WearableMetrics = {
     sleepSeconds: day.sleepSeconds,
@@ -89,8 +90,8 @@ export function buildWearableUpsertArgs(
   };
 
   return {
-    where: { userId_date_source: { userId, date, source: SOURCE } },
-    create: { userId, date, source: SOURCE, ...metrics },
+    where: { userId_date_source: { userId, date, source: day.source } },
+    create: { userId, date, source: day.source, ...metrics },
     update: { ...metrics, syncedAt: new Date() },
   };
 }
@@ -113,6 +114,22 @@ export async function importWellnessDays(
     if (raw == null || typeof raw !== "object") continue;
     const day = normaliseGarminDay(raw);
     if (!localMidnight(day.date)) continue; // skip undated/garbage days
+    await client.wearableDaily.upsert(buildWearableUpsertArgs(userId, day, encrypt));
+    upserted += 1;
+  }
+  return { upserted };
+}
+
+/** Upsert already-validated native days without running the Garmin normaliser. */
+export async function importNativeWellnessDays(
+  client: WearableUpsertClient,
+  userId: string,
+  days: WellnessDay[],
+  encrypt: EncryptFn,
+): Promise<{ upserted: number }> {
+  let upserted = 0;
+  for (const day of days) {
+    if ((day.source !== "healthkit" && day.source !== "health_connect") || !localMidnight(day.date)) continue;
     await client.wearableDaily.upsert(buildWearableUpsertArgs(userId, day, encrypt));
     upserted += 1;
   }

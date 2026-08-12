@@ -8,6 +8,8 @@ interface BodyMapProps {
   onChange: (code: string) => void;
   recentSites: string[];
   recencyDaysByCode?: Record<string, number>;
+  /** Active design pack — threaded from the form. Gates pitstop presentation. */
+  design?: "pitstop" | "current";
 }
 
 // Anatomical fit-male silhouette — composed shapes (180×320 viewBox), shared
@@ -140,7 +142,8 @@ const ZONE_STROKE_WIDTH: Record<ZoneState, number> = {
   available: 1,
 };
 
-export function BodyMap({ value, onChange, recentSites, recencyDaysByCode }: BodyMapProps) {
+export function BodyMap({ value, onChange, recentSites, recencyDaysByCode, design = "current" }: BodyMapProps) {
+  const pit = design === "pitstop";
   const suggestedCode = suggestNextSite(recentSites);
   const rankMap = recencyRank(recentSites);
   const selectId = useId();
@@ -209,10 +212,10 @@ export function BodyMap({ value, onChange, recentSites, recencyDaysByCode }: Bod
           const state = getZoneState(opt.code, value, suggestedCode, rankMap);
           const days = recencyDaysByCode?.[opt.code];
           const isSelected = state === "selected";
-          // Recolour "recent" zones to muted-grey DASHED rings (hi-viz lime is
-          // reserved elsewhere). Pure presentation — does not touch the hit-area
-          // geometry or handlers.
-          const pitRecent = state === "recent";
+          // Pitstop: recolour "recent" zones to muted-grey DASHED rings (hi-viz
+          // lime is reserved elsewhere in this pack). Pure presentation — does
+          // not touch the hit-area geometry or handlers.
+          const pitRecent = pit && state === "recent";
           const zoneClass = pitRecent ? "fill-none stroke-muted" : ZONE_FILL[state];
           const zoneDash = pitRecent ? "2 2" : undefined;
 

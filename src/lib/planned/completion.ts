@@ -1,5 +1,5 @@
 import { parseSchedule, slotsInRange } from "@/lib/schedule/entries";
-import { startOfDay } from "@/lib/schedule/schedule";
+import { addDays, startOfDay } from "@/lib/schedule/schedule";
 import { dayAnchor } from "@/lib/tz-day";
 
 export interface CompletionProtocolInput {
@@ -11,12 +11,6 @@ export interface CompletionProtocolInput {
   deliveredLogs: { takenAt: Date | string; localDay?: string | null }[];
 }
 
-/**
- * End dates are inclusive. A protocol completes after the end day, or on the end
- * day once its final scheduled slot has already been delivered. That preserves
- * the final dose in Today/Doses until it can be logged, then retires the protocol
- * without projecting anything past the boundary.
- */
 export function protocolShouldAutoComplete(protocol: CompletionProtocolInput, today: Date): boolean {
   if (protocol.status !== "active") return false;
   if (!protocol.endDate) return false;

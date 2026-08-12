@@ -43,8 +43,9 @@ export function resolveTitration(inp: ResolveInput): ResolveResult {
         const ws = new Date(k);
         // Bucket by the FROZEN tracking day, matching both the on-grid test in
         // reconstructRebasedSlots and the slot matcher below. Bucketing by the raw
-        // instant puts a dose logged while travelling in the wrong week and hands the
-        // reconstructor a dose it will treat as off-grid. Legacy rows keep the instant.
+        // instant puts a traveller's dose in the wrong week (a Chile-Friday dose is
+        // Brisbane-Saturday) and hands the reconstructor a dose it will treat as
+        // off-grid. Legacy rows without localDay keep the instant.
         const deliveredInWeek = inp.delivered.filter(
           (dz) => weekKey(dz.localDay ? dayAnchor(dz.localDay) : dz.takenAt) === k,
         );
@@ -187,14 +188,17 @@ export function resolveTitration(inp: ResolveInput): ResolveResult {
   // calendar day, inclusive). A within-week fixed_anchor rebase
   // (reconstructRebasedSlots) intentionally rebuilds the WHOLE week for status +
   // phase-cursor correctness, so resolvedSlots can span days OUTSIDE the queried
-  // range — a single-day query can come back with the whole rebased week. Status
-  // and the cursor above were computed over the FULL (unclipped) set, so trimming
-  // here changes only what callers SEE, never how a slot was classified. Without
-  // this, a consumer that indexes the result by its range can pick a DIFFERENT
-  // day's same-time slot (e.g. Today reading a taken earlier-day slot for today).
-  // The calendar/analytics deliberately pass an EXPANDED range and clip the
-  // buffer themselves; their window is within this range, so nothing they show is
-  // dropped. stepUpDates is left unclipped (its consumers are range-independent).
+  // range — a single-day query can come back with the whole rebased Sun–Thu week.
+  // Status and the cursor above were computed over the FULL (unclipped) ordered
+  // set, so trimming here changes only what callers SEE, never how a slot was
+  // classified. This is the resolver honouring its own contract: consumers that
+  // index the result by their range are otherwise free to pick a DIFFERENT day's
+  // same-time slot (the today.ts "logged on a shifted week" bug; inventory /
+  // reorder / resolve-current read slots[0] the same way). The calendar and
+  // analytics deliberately pass an EXPANDED range (rangeEnd + buffer) and clip
+  // the buffer themselves afterwards — their display window ⊆ this range, so this
+  // clip never drops a slot they would show. stepUpDates is left unclipped (its
+  // consumers are range-independent).
   const clipLo = startOfDay(inp.range.start).getTime();
   const clipHi = startOfDay(inp.range.end).getTime();
   const clippedSlots = resolvedSlots.filter((s) => {

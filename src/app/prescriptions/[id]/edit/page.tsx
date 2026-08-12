@@ -11,11 +11,12 @@ function toDateInput(d: Date | null): string | undefined {
   return d ? new Date(d).toISOString().slice(0, 10) : undefined;
 }
 
-export default async function EditPrescriptionPage({ params }: { params: { id: string } }) {
+export default async function EditPrescriptionPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return null;
+  const { id } = await params;
 
-  const rx = await prisma.prescription.findFirst({ where: { id: params.id, userId: user.id } });
+  const rx = await prisma.prescription.findFirst({ where: { id, userId: user.id } });
   if (!rx) notFound();
   // Stack (grouped) prescriptions are edited from the stack card, not this
   // per-peptide form (they have no single peptide).

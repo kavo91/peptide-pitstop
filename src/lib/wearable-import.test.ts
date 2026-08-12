@@ -108,3 +108,4 @@ describe("importWellnessDays", () => {
     expect(upsert).toHaveBeenCalledTimes(1);
   });
 });
+

@@ -168,9 +168,9 @@ const BUILDERS: Record<ExportType, (userId: string) => Promise<CsvData>> = {
   wearable: buildWearable,
 };
 
-export async function GET(_req: NextRequest, { params }: { params: { type: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ type: string }> }) {
   // Tolerate an explicit ".csv" suffix on the path segment.
-  const type = params.type.replace(/\.csv$/, "");
+  const type = (await params).type.replace(/\.csv$/, "");
   if (!isExportType(type)) {
     return NextResponse.json({ ok: false, error: "Unknown export type" }, { status: 404 });
   }

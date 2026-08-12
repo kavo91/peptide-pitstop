@@ -132,7 +132,7 @@ export function ReconWizard({ vialId, peptideName, labelStrengthMg, targetDose, 
       {step === 1 && (
         <div>
           <h3 className="text-lg font-medium">How does this vial come?</h3>
-          <p className="mb-4 mt-1 text-sm text-muted">{peptideName} — choose how it's prepared.</p>
+          <p className="mb-4 mt-1 text-sm text-muted">{peptideName} — choose how it&apos;s prepared.</p>
           {([
             { t: "reconstituted", title: "Dry powder", sub: "Add BAC water to mix", icon: "🧪" },
             { t: "premixed", title: "Premixed", sub: "Ready to use, known concentration", icon: "💧" },

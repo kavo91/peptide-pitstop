@@ -258,7 +258,7 @@ describe("rebase-override week suppression", () => {
     expect(keys).toEqual(["2026-06-22", "2026-06-24", "2026-06-26"]);
   });
 
-  // Regression (2026-06-26): a week with BOTH an on-grid row and a stray
+  // GHK-Cu prod bug (2026-06-26): a week with BOTH an on-grid row and a stray
   // off-grid one is NOT a genuine rebase (confirmRebase deletes the on-grid rows)
   // — the stray off-grid row must not suppress and lose the live grid for the week.
   it("does NOT suppress a week that has BOTH on-grid and off-grid planned rows (stale artefact)", () => {
@@ -512,7 +512,7 @@ describe("JSON scheduleRule (custom-schedules engine)", () => {
 });
 
 // ─── suite 6: stale out-of-window rows (start date moved forward) ─────────
-// Regression (2026-07-02): pushing a protocol's start date into the
+// BPC+TB4 prod bug (2026-07-02): pushing a protocol's start date into the
 // future strands the already-materialised daily rows before it. They must be
 // DELETED — not marked missed (adherence pollution), not treated as rebase
 // overrides (Today showed the doses due), not left to fire midnight reminders.
@@ -589,9 +589,12 @@ describe("stale out-of-window rows (start date moved forward)", () => {
     expect(deletions).toEqual(["past-end"]);
   });
 
-  it("an OFF-grid row past the endDate is deleted — endDate is an inclusive cutoff", () => {
-    // MO/TH grid ending Thu 2026-07-02; a leftover Friday row is now stale and
-    // must be deleted rather than left to masquerade as a live override.
+  it("an OFF-grid row (rebase-shifted) past the endDate IS deleted — the end date is a hard cutoff", () => {
+    // MO/TH grid ending Thu 2026-07-02; the final dose was rebase-shifted to
+    // Fri 2026-07-03 (off-grid, past end). Product decision:
+    // "the protocol end date should cut off ANY doses scheduled if past the
+    // protocol end date" — unconditional, on-grid or off-grid/rebase-shifted.
+    // A rebase is never allowed to shift the final dose past the end date.
     const today = d("2026-07-03");
     const horizonEnd = new Date(today.getTime() + 13 * 86_400_000);
 
@@ -604,6 +607,36 @@ describe("stale out-of-window rows (start date moved forward)", () => {
     });
 
     expect(deletions).toEqual(["shifted-final"]);
+  });
+
+  it("Tα1 prod bug repro (2026-07-05): both off-grid rebase rows past a shortened endDate are deleted", () => {
+    // Real incident: Tα1 is M/W/F. A dose logged off-grid on Sunday rebase-
+    // shifted the week to Sun(actual)/Tue/Thu. The protocol's endDate was then
+    // shortened from 7/7 to 7/6 (Monday) — but the off-grid Tue 7/7 and Thu 7/9
+    // rows, both past the new endDate, sat as "due" forever. Both must be cut.
+    const today = d("2026-07-05"); // Sunday
+    const horizonEnd = new Date(today.getTime() + 13 * 86_400_000);
+
+    const staleRebaseRows: PlannedDoseInput[] = [
+      existing({ id: "tue-7-7", scheduledAt: d("2026-07-07"), status: "planned", hasDoseLog: false }),
+      existing({ id: "thu-7-9", scheduledAt: d("2026-07-09"), status: "planned", hasDoseLog: false }),
+    ];
+
+    const { deletions } = materializePlannedDoses({
+      protocols: [
+        proto({
+          scheduleRule: "FREQ=WEEKLY;BYDAY=MO,WE,FR",
+          startDate: d("2026-06-14"),
+          endDate: d("2026-07-06"), // Monday — shortened from the original 7/7
+        }),
+      ],
+      horizonStart: today,
+      horizonEnd,
+      existing: staleRebaseRows,
+      today,
+    });
+
+    expect([...deletions].sort()).toEqual(["thu-7-9", "tue-7-7"]);
   });
 
   it("a degenerate window (startDate after endDate) marks NOTHING stale — no mass deletion", () => {

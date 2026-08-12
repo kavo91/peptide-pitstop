@@ -261,9 +261,9 @@ export async function getTodayDoses(
     // single-day range can yield slots on OTHER days — all sharing the same
     // "HH:MM". Indexing those by time alone let a *different* day's slot answer
     // for today: a taken Sunday 21:00 slot was picked up by today's 21:00 slot,
-    // so today's card wrongly read "logged". Restrict to slots whose local
-    // calendar day IS today (the resolver also clips to range now; this is a
-    // belt-and-braces guard, matching the calendar's clipSlotsToRange).
+    // so Monday's card wrongly read "logged". Restrict to slots whose local
+    // calendar day IS today before indexing (today.ts asked for this day only;
+    // the calendar clips the same over-expansion via clipSlotsToRange).
     const todayKey = dayKey(day);
     const daySlots = resolved.slots.filter((rs) => dayKey(rs.date) === todayKey);
     const resolvedByTime = new Map<string | null, ResolvedSlot>();
