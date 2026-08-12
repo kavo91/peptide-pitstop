@@ -12,7 +12,7 @@
 
 > **Your data never leaves your server.** Handing your weight, hormone, and dosing history to someone else's startup is a leap of faith — Peptide Pitstop removes the leap. No accounts in someone else's cloud. No telemetry. No third party between you and your health record. You host it, you back it up, you export it, you delete it — on your terms.
 
-Peptide Pitstop is a private, self-hosted web app for managing peptide and GLP-1 therapy — reconstitution math, dose logging, prescriptions, bloodwork, and plasma-level modelling — installable as an offline PWA on your phone and living entirely on infrastructure you own. The dosing engine, the highest-stakes part, is exhaustively tested (600+ tests, pure decimal math, no floating-point drift).
+Peptide Pitstop is a private, self-hosted web app for managing peptide and GLP-1 therapy — reconstitution math, dose logging, prescriptions, bloodwork, and plasma-level modelling — installable as an offline PWA on your phone and living entirely on infrastructure you own. The dosing engine, the highest-stakes part, is exhaustively tested — pure decimal math, no floating-point drift.
 
 > ℹ️ Single-user today, with the data model already scoped for multi-user.
 
@@ -84,12 +84,13 @@ The motorsport "pit-wall" dark theme ships alongside a clean light theme, and th
 
 ### Dosing — the safety-critical core
 - **Reconstitution engine.** Concentration, draw volume, and syringe markings computed with `decimal.js` — pure decimal maths, no floating-point drift. Handles reconstituted *and* premixed vials.
-- **Exhaustively tested.** The dosing and schedule logic is covered by a large vitest suite (600+ tests across the codebase) including property tests, real-world cases, unit-equivalence checks, and syringe-bound guardrails.
+- **Exhaustively tested.** The dosing and schedule logic is covered by an extensive vitest suite including property tests, real-world regression cases, unit-equivalence checks, and syringe-bound guardrails.
 - **Quick logging.** Log a dose in seconds — on your phone — with a visual syringe picker and injection-site body map. Supports injections, oral peptides, and ad-hoc doses.
 
 ### Protocols, prescriptions & inventory
-- **Protocols with titration & stacks.** Multi-peptide schedules, ramping/titration steps, and stacked protocols with human-readable cadence and half-life shown inline.
+- **Protocols with titration & stacks.** Multi-peptide schedules, ramping/titration steps, and stacked protocols with human-readable cadence and half-life shown inline. Protocols are grouped by lifecycle — active, scheduled to start later, paused, past their end date, and completed — so a protocol queued for next month never sits indistinguishable from one running today.
 - **Prescriptions & vials.** Full CRUD for prescriptions, vials, and preparations, with per-dose vial-volume accounting.
+- **Guided prescription wizard (opt-in).** A step-by-step flow for entering a prescription and its protocol, reachable from Prescriptions. Off by default — set `ENABLE_PRESCRIPTION_WIZARD=1` to switch it on.
 - **Inventory & reorder.** Depletion forecasting (doses remaining / days of supply) and lead-time-aware reorder status so you restock before you run dry.
 
 ### Tracking & insight
@@ -98,7 +99,7 @@ The motorsport "pit-wall" dark theme ships alongside a clean light theme, and th
 - **Timezones & travel.** “Log now” stores the server's authoritative UTC instant while the UI renders the logging phone's local time. Every dose freezes its phone-local tracking day and timezone; 00:00–01:59 remains on the preceding tracking day and 02:00 starts the next one. Reminders and schedule slots stay anchored to the server's configured home timezone.
 - **Bloodwork.** Biomarker panels with trends and a comparison matrix, backed by a curated biomarker library.
 - **Analytics & insights.** Adherence tracking, streaks, heatmaps, and derived insights.
-- **Plasma modelling.** Single-compartment, first-order-elimination plasma-level projections — quiet telemetry for your own regimen — from your dose history and each peptide's half-life (relative units — clearly labelled, not clinical serum levels).
+- **Plasma modelling.** Single-compartment, first-order-elimination plasma-level projections — quiet telemetry for your own regimen — from your dose history and each peptide's half-life (relative units — clearly labelled, not clinical serum levels). Blends whose composition is known are charted **per component**, each decaying on its own half-life, because a blend has no meaningful single half-life: KLOW's GHK-Cu clears in about an hour while its TB-500 persists for days. Anything with no half-life on record is named beneath the chart rather than silently omitted.
 - **Journal & wellness.** Free-text journal plus wellness logging, charted over time.
 
 ### Integrations
@@ -153,6 +154,8 @@ On first visit, `/setup` walks you through setting a password and enrolling TOTP
 npm test          # vitest — dosing engine, schedule, analytics, auth, …
 npm run typecheck
 ```
+
+995 tests across 105 files, plus a TypeScript typecheck, run against every release.
 
 ---
 
@@ -250,6 +253,7 @@ Set `TZ` to your home timezone (e.g. `TZ=America/New_York`) — it anchors sched
 | `PUBLIC_APP_URL` | Absolute app URL used in relayed notification deep-links |
 | `HA_WEBHOOK_URL` | Home Assistant webhook — fallback relay for dose reminders |
 | `WELLNESS_IMPORT_TOKEN` | Bearer token the Garmin sidecar presents (fails closed if unset) |
+| `ENABLE_PRESCRIPTION_WIZARD` | Set to `1` to enable the guided prescription wizard (off by default) |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Your Cloudflare Tunnel token |
 | `GARMIN_EMAIL` / `GARMIN_PASSWORD` | Consumed only by the Garmin sync sidecar |
 
