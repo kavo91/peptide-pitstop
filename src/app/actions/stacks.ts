@@ -11,6 +11,7 @@ import { normaliseScheduleRule } from "@/lib/schedule/normalise";
 import { encryptField } from "@/lib/crypto/fieldEncryption";
 import { getTodayDoses } from "@/lib/today";
 import { resolveTrackingDayStamp, dayAnchor } from "@/lib/tz-day";
+import { localDayOf } from "@/lib/local-day";
 import { runPlannedDoseGeneration } from "@/lib/planned/run";
 import { peptideTokens } from "@/lib/stacks/server";
 import { logDose } from "./doses";
@@ -248,7 +249,12 @@ export async function logStack(stackId: string, stamp?: { localDay?: string; tz?
   // Idempotency-key day: the stamped viewer day when present (legacy
   // expression otherwise). A key change across the deploy boundary is safe —
   // the already-logged count below still dedups.
-  const dayKey = stampDay ?? startOfDay.toISOString().slice(0, 10);
+  // localDayOf, not .toISOString(): startOfDay is LOCAL midnight (setHours
+  // above), whose UTC day is the PREVIOUS one east of Greenwich — in Brisbane
+  // this key named yesterday. Only the legacy fallback path (stampDay absent)
+  // was affected, and the already-logged count below still dedups, so no row
+  // was ever double-written; the key was simply mislabelled.
+  const dayKey = stampDay ?? localDayOf(startOfDay);
 
   let logged = 0;
   let firstError: string | null = null;

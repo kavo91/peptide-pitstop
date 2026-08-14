@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import Decimal from "decimal.js";
 import { computeConcentrationMcgPerMl, computeDraw } from "@/lib/dosing/engine";
 import type { DoseUnit } from "@/lib/dosing/types";
+import { BUD_DEFAULT_DAYS, budDayKey, beyondUseDateFrom, resolveBudDays } from "@/lib/bud";
 import { createPreparation } from "@/app/actions/reconstitution";
 import { VisualSyringe } from "./VisualSyringe";
 
@@ -27,14 +28,26 @@ interface Props {
   targetDose?: string;
   targetUnit?: DoseUnit;
   syringe?: SyringeDTO | null;
+  /**
+   * Seed for the beyond-use window, resolved upstream as
+   * peptide.defaultBudDays ?? BUD_DEFAULT_DAYS. Editable on the review step —
+   * the resolved value is a starting point, not a fixed rule.
+   */
   beyondUseDays?: number;
 }
 
 type PrepType = "reconstituted" | "premixed";
 const BAC_PRESETS = ["1", "2", "3", "5"];
 
-export function ReconWizard({ vialId, peptideName, labelStrengthMg, targetDose, targetUnit, syringe, beyondUseDays = 28 }: Props) {
+export function ReconWizard({ vialId, peptideName, labelStrengthMg, targetDose, targetUnit, syringe, beyondUseDays = BUD_DEFAULT_DAYS }: Props) {
   const [step, setStep] = useState(1);
+  const [budDays, setBudDays] = useState(String(beyondUseDays));
+  // A blank or nonsensical entry falls back to the peptide default rather than
+  // saving an absurd BUD — resolveBudDays rejects non-positive/non-finite input.
+  const resolvedBudDays = resolveBudDays({
+    overrideDays: Number(budDays),
+    peptideDefaultBudDays: beyondUseDays,
+  });
   const [prepType, setPrepType] = useState<PrepType>("reconstituted");
   const [totalMg, setTotalMg] = useState(labelStrengthMg);
   const [bacWaterMl, setBacWaterMl] = useState("2");
@@ -94,7 +107,7 @@ export function ReconWizard({ vialId, peptideName, labelStrengthMg, targetDose, 
       bacWaterMl: prepType === "reconstituted" ? bacWaterMl : undefined,
       concentrationMcgPerMl: prepType === "premixed" ? concentration?.toString() : undefined,
       vialVolumeMl: prepType === "premixed" ? vialVolumeMl : undefined,
-      beyondUseDateISO: new Date(Date.now() + beyondUseDays * 86_400_000).toISOString(),
+      beyondUseDateISO: beyondUseDateFrom(new Date(), resolvedBudDays).toISOString(),
     });
     setBusy(false);
     if (res.ok) setDone(true);
@@ -221,7 +234,33 @@ export function ReconWizard({ vialId, peptideName, labelStrengthMg, targetDose, 
               />
             </div>
           )}
-          <p className="text-center text-xs text-muted">Use within {beyondUseDays} days · keep refrigerated</p>
+          <label className="mt-2 flex items-center justify-between gap-3 rounded-control bg-bg px-3 py-2.5">
+            <span className="text-sm">
+              Use within
+              <span className="block text-xs text-muted">
+                {/* budDayKey (= .toISOString().slice(0,10)) is the correct
+                    renderer BECAUSE beyondUseDateFrom now stores UTC midnight,
+                    the app's date-only convention. Both halves are UTC, so they
+                    agree in every zone. Do not "fix" this to a local formatter:
+                    that would re-break it west of Greenwich. See lib/bud.ts. */}
+                beyond-use date · {budDayKey(beyondUseDateFrom(new Date(), resolvedBudDays))}
+              </span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={365}
+                value={budDays}
+                onChange={(e) => setBudDays(e.target.value)}
+                aria-label="Beyond-use days"
+                className="w-16 rounded-control bg-surface px-2 py-1.5 text-right tabular-nums"
+              />
+              <span className="text-sm text-muted">days</span>
+            </span>
+          </label>
+          <p className="mt-1.5 text-center text-xs text-muted">Keep refrigerated</p>
           {error && <p className="mt-2 text-sm text-danger">{error}</p>}
         </div>
       )}

@@ -59,8 +59,17 @@ function PreparedVial({ v, pit }: { v: VialView; pit?: boolean }) {
       </dl>
 
       {v.beyondUseDate && (
-        <p className={`mt-3 text-xs ${v.beyondUsePassed ? "text-danger" : "text-muted"}`}>
-          {v.beyondUsePassed ? "⚠ Past beyond-use date" : "Use by"} {v.beyondUseDate}
+        <p
+          className={`mt-3 text-xs ${
+            v.budState === "passed" ? "text-danger" : v.budState === "approaching" ? "text-warn" : "text-muted"
+          }`}
+        >
+          {v.budState === "passed"
+            ? `⚠ Past beyond-use date by ${Math.abs(v.budDaysRemaining ?? 0)}d`
+            : v.budState === "approaching"
+              ? `⚠ Use by (${v.budDaysRemaining}d left)`
+              : "Use by"}{" "}
+          {v.beyondUseDate}
         </p>
       )}
       {low && !v.beyondUsePassed && (
@@ -333,6 +342,7 @@ export default async function InventoryPage() {
                       targetDose={v.recon?.targetDose}
                       targetUnit={v.recon?.targetUnit}
                       syringe={v.recon?.syringe}
+                      beyondUseDays={v.budDefaultDays}
                     />
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-line/10 px-4 py-2">

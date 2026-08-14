@@ -124,6 +124,19 @@ export function TodaysDosesCard({
                           Shifted
                         </span>
                       )}
+                      {/* Surfaced on the collapsed row on purpose: the inventory
+                          page already flagged a past-BUD prep, but nobody opens
+                          inventory before dosing. This is the screen they do open. */}
+                      {!d.alreadyLoggedToday && d.budState === "passed" && (
+                        <span className="ml-2 rounded-full bg-danger/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-danger">
+                          Past use-by
+                        </span>
+                      )}
+                      {!d.alreadyLoggedToday && d.budState === "approaching" && (
+                        <span className="ml-2 rounded-full bg-warn/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-warn">
+                          Use-by soon
+                        </span>
+                      )}
                     </p>
                     {d.phaseProgress && (
                       // Include the phase's own dose so "Phase 2" can't be misread as
@@ -182,6 +195,7 @@ export function TodaysDosesCard({
                       targetDose={d.doseValue}
                       targetUnit={d.doseUnit}
                       syringe={d.syringe}
+                      beyondUseDays={d.vialForPrep.budDefaultDays}
                     />
                   ) : (
                     <p className="text-sm text-muted">No vial on hand — add one in Inventory.</p>

@@ -56,7 +56,12 @@ export default async function LogPage() {
     return {
       peptideId: p.vial.peptideId,
       peptideName: p.vial.peptide.name,
-      preparation: { id: p.id, concentrationMcgPerMl: p.concentrationMcgPerMl.toString(), remainingMl: p.remainingMl.toString() },
+      preparation: {
+        id: p.id,
+        concentrationMcgPerMl: p.concentrationMcgPerMl.toString(),
+        remainingMl: p.remainingMl.toString(),
+        beyondUseDate: p.beyondUseDate ? p.beyondUseDate.toISOString() : null,
+      },
       hoursSinceLast,
       halfLifeHours: p.vial.peptide.halfLifeHours != null ? Number(p.vial.peptide.halfLifeHours.toString()) : null,
       minIntervalHours: p.vial.peptide.minIntervalHours != null ? Number(p.vial.peptide.minIntervalHours.toString()) : null,

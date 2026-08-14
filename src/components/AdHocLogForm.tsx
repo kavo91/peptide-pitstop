@@ -7,6 +7,7 @@ import Decimal from "decimal.js";
 import { computeDraw } from "@/lib/dosing/engine";
 import { doseUnitBreakdown } from "@/lib/dosing/unit-breakdown";
 import type { DoseUnit } from "@/lib/dosing/types";
+import { budStatus, budWarning } from "@/lib/bud";
 import type { ProtocolDoseOption } from "@/lib/log/protocol-options";
 import { logDose } from "@/app/actions/doses";
 import { enqueue } from "@/lib/offline/outbox";
@@ -24,7 +25,13 @@ import { BodyMap } from "./BodyMap";
 interface PrepOption {
   peptideId: string;
   peptideName: string;
-  preparation: { id: string; concentrationMcgPerMl: string; remainingMl: string };
+  preparation: {
+    id: string;
+    concentrationMcgPerMl: string;
+    remainingMl: string;
+    /** ISO beyond-use date; null when unrecorded. Required — see LogDoseForm. */
+    beyondUseDate: string | null;
+  };
   /** Hours since the most recent dose for this peptide. null = no prior dose. */
   hoursSinceLast: number | null;
   /** Peptide.halfLifeHours as a number, or null when unset. */
@@ -128,6 +135,14 @@ export function AdHocLogForm({
       return null;
     }
   }, [opt, syr, doseValue, doseUnit]);
+
+  // BUD notice for the SELECTED preparation. Kept out of computeDraw so that
+  // stays pure/clock-free; capped at "warn" so an already-injected dose is
+  // always loggable. See lib/bud.ts.
+  const budNotice = useMemo(
+    () => budWarning({ beyondUseDate: opt?.preparation.beyondUseDate ? new Date(opt.preparation.beyondUseDate) : null, now: new Date() }),
+    [opt?.preparation.beyondUseDate],
+  );
 
   const blocked = draw?.warnings.some((w) => w.severity === "block") ?? false;
 
@@ -283,8 +298,19 @@ export function AdHocLogForm({
             // sighted user + screen reader can tell otherwise-identical chips apart.
             const ambiguous = options.filter((x) => x.peptideName === o.peptideName && new Decimal(x.preparation.concentrationMcgPerMl).eq(o.preparation.concentrationMcgPerMl)).length > 1;
             const remaining = new Decimal(o.preparation.remainingMl).toDecimalPlaces(1).toString();
-            const sub = ambiguous ? `${conc} mg/mL · ${remaining} ml` : `${conc} mg/mL`;
-            const aria = ambiguous ? `${o.peptideName} ${conc} mg/mL, ${remaining} ml remaining` : `${o.peptideName} ${conc} mg/mL`;
+            // Mark a past-BUD prep in the picker itself — this is the screen
+            // where you choose between vials, so it is the cheapest place to
+            // stop the wrong one being picked. Text-only, so it flows into the
+            // aria label too rather than being a colour-only signal.
+            const pastBud =
+              budStatus({
+                beyondUseDate: o.preparation.beyondUseDate ? new Date(o.preparation.beyondUseDate) : null,
+                now: new Date(),
+              }).state === "passed";
+            const base = ambiguous ? `${conc} mg/mL · ${remaining} ml` : `${conc} mg/mL`;
+            const sub = pastBud ? `${base} · ⚠ past use-by` : base;
+            const ariaBase = ambiguous ? `${o.peptideName} ${conc} mg/mL, ${remaining} ml remaining` : `${o.peptideName} ${conc} mg/mL`;
+            const aria = pastBud ? `${ariaBase}, past beyond-use date` : ariaBase;
             const label = (
               <>
                 <span className="block">{o.peptideName}</span>
@@ -361,6 +387,19 @@ export function AdHocLogForm({
           has the same always-visible syringe as the protocol flow (which
           auto-fills the dose). The draw stats/warnings still gate on a real
           `draw`. */}
+      {/* Vial-level: shown as soon as a prep is selected, before any dose is
+          entered. Never blocks submission. */}
+      {budNotice && (
+        <p
+          role="status"
+          className={`rounded-control px-3 py-2 text-sm ${
+            budNotice.code === "PREPARATION_PAST_BUD" ? "bg-danger/10 text-danger" : "bg-warn/10 text-warn"
+          }`}
+        >
+          ⚠ {budNotice.message}
+        </p>
+      )}
+
       {Boolean(opt && syr) && (
         <>
           {doseValue && (
