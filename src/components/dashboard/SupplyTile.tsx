@@ -34,7 +34,7 @@ export function SupplyTile({ item, design }: Props) {
 
   if (pit) {
     return (
-      <Link href="/prescriptions" className="block h-full">
+      <Link href="/inventory" className="block h-full">
         <div
           className={`relative flex h-full flex-col overflow-hidden rounded-card p-4 pb-5 ring-1 shadow-sm ${
             urgent ? "bg-warn/10 ring-warn/20" : "bg-surface ring-line/10"
@@ -74,7 +74,7 @@ export function SupplyTile({ item, design }: Props) {
 
   // current design — unchanged.
   return (
-    <Link href="/prescriptions" className="block h-full">
+    <Link href="/inventory" className="block h-full">
       <div className={`flex h-full flex-col gap-1 rounded-card p-4 ring-1 shadow-sm ${urgent ? "bg-warn/10 ring-warn/20" : "bg-surface ring-line/10"}`}>
         <p className={`text-xs font-medium ${urgent ? "text-warn" : "text-muted"}`}>Supply</p>
         <p className={`font-medium ${urgent ? "text-warn" : "text-ink"}`}>{item.peptideName}</p>
