@@ -143,6 +143,23 @@ export function materializePlannedDoses(args: {
     return false;
   };
 
+  /**
+   * Is this row RETIRED — a projection of a schedule that is no longer running?
+   * Generation is gated on "active", so a completed/paused protocol emits no NEW
+   * rows; but the rows materialised while it WAS active keep sitting in the
+   * horizon, and the end-date cutoff above cannot see them when the protocol was
+   * closed EARLY (Tesamorelin prod bug, 2026-08-14: a course completed on 08-11
+   * with an endDate of 09-28 left five future rows, rendering a second due slot
+   * a day beside its replacement protocol, each ageing into "missed" and
+   * deflating every adherence figure in the app).
+   *
+   * Only rows from today forward retire — a closed protocol is not due today or
+   * ever again. Everything already in the past is history and is left exactly as
+   * it stands; DoseLog is never involved either way.
+   */
+  const isRetired = (p: ProtocolInput, scheduledAt: Date): boolean =>
+    p.status !== "active" && startOfDay(scheduledAt).getTime() >= today.getTime();
+
   // ── 0. Stale-row cleanup ─────────────────────────────────────────────────
   // A stranded planned/missed row with no linked DoseLog is deleted: left
   // alone it masquerades as a rebase override (dose shows due before the
@@ -155,7 +172,7 @@ export function materializePlannedDoses(args: {
     if (row.status !== "planned" && row.status !== "missed") continue;
     const p = protocolMap.get(row.protocolId);
     if (!p) continue;
-    if (isStale(p, row.scheduledAt)) {
+    if (isStale(p, row.scheduledAt) || isRetired(p, row.scheduledAt)) {
       deletions.push(row.id);
       staleIds.add(row.id);
     }
@@ -190,7 +207,7 @@ export function materializePlannedDoses(args: {
     if (!p || !p.scheduleRule) continue;
     // Stranded rows are stale artefacts (deleted above), never genuine
     // rebase overrides — they must not suppress the live grid for their week.
-    if (isStale(p, row.scheduledAt)) continue;
+    if (isStale(p, row.scheduledAt) || isRetired(p, row.scheduledAt)) continue;
     const onGrid =
       slotsOn(parseSchedule(p.scheduleRule), row.scheduledAt, p.startDate, p.endDate).length > 0;
     const key = `${row.protocolId}:${KEY(weekStartOf(row.scheduledAt))}`;
@@ -281,6 +298,13 @@ export function materializePlannedDoses(args: {
     if (row.status !== "planned") continue;
     if (row.hasDoseLog) continue;
     if (staleIds.has(row.id)) continue; // being deleted — never mark missed
+    // A protocol that has left "active" accrues no NEW misses: once a course is
+    // closed (or paused) its outstanding projections are retired, not failures.
+    // Genuine misses are already reconciled on the daily runs that ran while it
+    // was active — this only stops post-closure rows being fabricated into
+    // misses that deflate the adherence denominator (prod, 2026-08-14).
+    const owner = protocolMap.get(row.protocolId);
+    if (owner && owner.status !== "active") continue;
     const rowKey = KEY(row.scheduledAt);
     if (rowKey >= todayKey) continue; // today or future → not yet missed
     statusUpdates.push({ id: row.id, status: "missed" });

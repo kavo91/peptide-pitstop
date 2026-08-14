@@ -344,6 +344,33 @@ export async function sendDueReminders(
     nagTime: prefs && !prefs.nagEnabled ? null : prefs?.nagTime,
     viewerTz,
   });
+
+  // ── Cycle events ───────────────────────────────────────────────────────────
+  // Cycle prompts ("last dose of the cycle", "cycle complete", "back on today")
+  // are DAY-grain, not slot-grain: there is no dose time to anchor them to. Left
+  // ungated they would claim on the first tick after local midnight and push at
+  // 00:15, so they ride the same anchor as any-time-today doses (default 08:00,
+  // per-user overridable). The per-(user, day, key) claim below still makes each
+  // one exactly-once; this window only decides WHEN in the day it goes out.
+  const cycleAnchor = validTime(prefs?.untimedReminderTime)
+    ? prefs!.untimedReminderTime!
+    : UNTIMED_REMINDER_TIME;
+  const cycleMoment = reminderMoment(now, cycleAnchor).getTime();
+  const inCycleWindow =
+    cycleMoment >= now.getTime() - REMINDER_GRACE_MINUTES * 60_000 &&
+    cycleMoment <= now.getTime() + lookaheadMinutes * 60_000;
+  if (inCycleWindow) {
+    try {
+      const { getCycleAlerts } = await import("@/lib/cycle/server");
+      const { cycleNotifications } = await import("@/lib/cycle/alerts");
+      events.push(...cycleNotifications(await getCycleAlerts(userId, now)));
+    } catch (err) {
+      // Cycle prompts are secondary — a failure here must never stop the DOSE
+      // reminders below from going out.
+      console.error("[reminders] cycle alerts failed:", err);
+    }
+  }
+
   if (events.length === 0) return 0;
 
   const webhookUrl = getWebhookUrl();

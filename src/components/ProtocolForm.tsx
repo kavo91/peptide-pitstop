@@ -4,7 +4,9 @@ import { X, Plus, Save, Lightbulb } from "lucide-react";
 import Link from "next/link";
 
 import { useState } from "react";
-import { saveProtocol, type ProtocolInput } from "@/app/actions/protocols";
+import { saveProtocol, reviseProtocol, type ProtocolInput } from "@/app/actions/protocols";
+import { materialProtocolChange, type CarryStep, type ProtocolSnapshot } from "@/lib/protocol-revision";
+import { ReviseProtocolDialog } from "@/components/ReviseProtocolDialog";
 import { type WeekdayCode } from "@/lib/schedule/schedule";
 import { parseSchedule, scheduleSummary, evenlySpacedDays, isWithinDoseWindow, DEFAULT_DOSE_TIME, type Schedule, type ScheduleEntry, type DayPattern } from "@/lib/schedule/entries";
 import { reindexPresetState } from "@/lib/schedule/preset-reindex";
@@ -19,12 +21,24 @@ interface Opt { id: string; name: string }
 const input = "w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-sm text-ink";
 const DAYS: WeekdayCode[] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 
+/**
+ * Today as "YYYY-MM-DD" in the DEVICE's calendar — this seeds a `<input
+ * type="date">`, which is device-local. A UTC slice would offer yesterday for
+ * most of a Brisbane day.
+ */
+const todayKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 export function ProtocolForm({
   peptides,
   prescriptions,
   syringes,
   initial,
   cycleSuggestions,
+  savedSnapshot,
+  carryForward,
 }: {
   peptides: Opt[];
   prescriptions: Opt[];
@@ -35,6 +49,17 @@ export function ProtocolForm({
    * (lib/cycle/server) so the ~200 KB enrichment seed stays out of this bundle.
    */
   cycleSuggestions?: Record<string, CycleSuggestion>;
+  /**
+   * The protocol AS STORED, for material-change detection. Absent on CREATE
+   * (nothing to compare against, and nothing to corrupt) — both revision props
+   * must be present before the form will ever offer to revise.
+   */
+  savedSnapshot?: ProtocolSnapshot;
+  /**
+   * The re-based ladder the replacement protocol would start from, computed
+   * server-side from the OLD protocol's frequency and delivered doses.
+   */
+  carryForward?: { steps: CarryStep[]; resumedDose: string | null };
 }) {
   const seed = initial;
 
@@ -65,6 +90,10 @@ export function ProtocolForm({
   const [entries, setEntries] = useState<Schedule>(initialSchedule);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Non-null while the revise confirmation is open. Holds the labels of what
+  // changed, the carried-forward ladder (editable in the dialog) and the new
+  // protocol's start day.
+  const [revise, setRevise] = useState<null | { fields: string[]; steps: CarryStep[]; startDate: string }>(null);
 
   // The "N× per week (evenly spaced)" preset is a UI affordance that authors a
   // plain `weekly` DayPattern — there is no distinct stored kind. We track which
@@ -176,17 +205,78 @@ export function ProtocolForm({
     setPresetIdx((s) => { const next = new Set(s); if (on) next.add(i); else next.delete(i); return next; });
   }
 
+  /** The exact payload save() sends — reused verbatim by the revise path. */
+  function payload(): ProtocolInput {
+    return { ...form, scheduleRule: JSON.stringify(entries) };
+  }
+
   async function save() {
+    const next = payload();
+
+    // A material change (schedule / dose basis / start date / step lengths) on a
+    // stored protocol re-times the whole titration ladder, so it is never saved
+    // in place — offer the revision instead. Both props are absent on CREATE,
+    // where there is no history to corrupt.
+    if (savedSnapshot && carryForward) {
+      const after: ProtocolSnapshot = {
+        scheduleRule: next.scheduleRule ?? null,
+        // Coerced exactly as saveProtocol coerces it, so an unrecognised value
+        // can't read as a change the server would never have written.
+        doseBasis: next.doseBasis === "per_week" ? "per_week" : "per_injection",
+        startDate: next.startDate ? next.startDate.slice(0, 10) : null,
+        // This form does not own titration steps (StepsEditor does, with its own
+        // actions), so an absent `steps` means "unchanged" — the same reading
+        // saveProtocol's backstop applies.
+        steps: next.steps
+          ? next.steps.map((s, i) => ({
+              stepIndex: i,
+              durationDays: s.durationDays == null || s.durationDays === "" ? null : Number(s.durationDays),
+            }))
+          : savedSnapshot.steps,
+      };
+      const fields = materialProtocolChange(savedSnapshot, after);
+      if (fields.length > 0) {
+        setError(null);
+        setRevise({ fields, steps: carryForward.steps, startDate: todayKey() });
+        return;
+      }
+    }
+
     setBusy(true);
     setError(null);
-    const scheduleRule = JSON.stringify(entries);
-    const res = await saveProtocol({ ...form, scheduleRule });
+    const res = await saveProtocol(next);
     setBusy(false);
     if (!res.ok) {
       setError(res.error);
       return;
     }
     // New protocol → go to its edit page (to add titration steps); edit → back to list.
+    window.location.href = initial?.id ? "/protocols" : `/protocols/${res.id}/edit`;
+  }
+
+  async function confirmRevise() {
+    if (!revise || !initial?.id) return;
+    setBusy(true);
+    setError(null);
+    const res = await reviseProtocol({
+      id: initial.id,
+      startDate: revise.startDate,
+      next: {
+        ...payload(),
+        // The ladder as confirmed in the dialog, re-based so step 0 IS the step
+        // the user is on. Blank duration = open-ended final step.
+        steps: revise.steps.map((s) => ({
+          dose: s.dose,
+          doseInputUnit: s.doseInputUnit,
+          durationDays: s.durationDays == null ? "" : String(s.durationDays),
+        })),
+      },
+    });
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
     window.location.href = initial?.id ? "/protocols" : `/protocols/${res.id}/edit`;
   }
 
@@ -504,6 +594,21 @@ export function ProtocolForm({
       </div>
       {!initial?.id && form.scheduleType === "titration" && (
         <p className="text-xs text-muted">Tip: after creating, you&apos;ll add titration steps on the next screen.</p>
+      )}
+
+      {revise && (
+        <ReviseProtocolDialog
+          changedFields={revise.fields}
+          resumedDose={carryForward?.resumedDose ?? null}
+          steps={revise.steps}
+          startDate={revise.startDate}
+          busy={busy}
+          error={error}
+          onStartDateChange={(v) => setRevise((r) => (r ? { ...r, startDate: v } : r))}
+          onStepsChange={(s) => setRevise((r) => (r ? { ...r, steps: s } : r))}
+          onConfirm={confirmRevise}
+          onCancel={() => { setRevise(null); setError(null); }}
+        />
       )}
     </div>
   );

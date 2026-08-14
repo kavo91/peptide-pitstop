@@ -700,3 +700,164 @@ describe("protocol with no scheduleRule", () => {
     expect(statusUpdates).toHaveLength(0);
   });
 });
+
+// ─── suite 8: retired protocols (status left "active") ────────────────────
+
+describe("retired protocols — future rows must not survive completion", () => {
+  // Prod bug, 2026-08-14. A Tesamorelin course was closed early (status
+  // "completed" early) while its endDate still read weeks out, and a
+  // replacement protocol was started the same day. Generation was already gated
+  // on "active", so no NEW rows appeared — but the rows materialised while it
+  // was still running kept sitting in the horizon, inside the end-date window
+  // the stale-row cutoff checks. The user saw two Tesamorelin slots a day for
+  // five days, and each ghost aged into "missed" and deflated adherence.
+
+  it("deletes a completed protocol's future rows even inside its end-date window", () => {
+    const today = d("2026-08-14");
+    const horizonEnd = new Date(today.getTime() + 13 * 86_400_000);
+
+    const ghosts = ["2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21"].map(
+      (day, i) => existing({ id: `ghost-${i}`, scheduledAt: d(day) }),
+    );
+
+    const { deletions, statusUpdates } = materializePlannedDoses({
+      protocols: [
+        proto({
+          status: "completed",
+          startDate: d("2026-07-07"),
+          endDate: d("2026-09-28"), // still in the future — isStale can't see these
+        }),
+      ],
+      horizonStart: today,
+      horizonEnd,
+      existing: ghosts,
+      today,
+    });
+
+    expect([...deletions].sort()).toEqual(["ghost-0", "ghost-1", "ghost-2", "ghost-3", "ghost-4"]);
+    expect(statusUpdates).toHaveLength(0);
+  });
+
+  it("retires today's row too — a closed protocol is not due today", () => {
+    const today = d("2026-08-14");
+    const horizonEnd = new Date(today.getTime() + 13 * 86_400_000);
+
+    const { deletions } = materializePlannedDoses({
+      protocols: [proto({ status: "completed", endDate: d("2026-09-28") })],
+      horizonStart: today,
+      horizonEnd,
+      existing: [existing({ id: "pd-today", scheduledAt: today })],
+      today,
+    });
+
+    expect(deletions).toEqual(["pd-today"]);
+  });
+
+  it("retires a paused protocol's future rows as well", () => {
+    const today = d("2026-08-14");
+    const horizonEnd = new Date(today.getTime() + 13 * 86_400_000);
+
+    const { deletions } = materializePlannedDoses({
+      protocols: [proto({ status: "paused", endDate: d("2026-09-28") })],
+      horizonStart: today,
+      horizonEnd,
+      existing: [existing({ id: "pd-future", scheduledAt: d("2026-08-18") })],
+      today,
+    });
+
+    expect(deletions).toEqual(["pd-future"]);
+  });
+
+  it("leaves the replacement active protocol's own rows untouched", () => {
+    const today = d("2026-08-14");
+    const horizonEnd = new Date(today.getTime() + 13 * 86_400_000);
+
+    const { deletions, upserts } = materializePlannedDoses({
+      protocols: [
+        proto({ id: "old", status: "completed", startDate: d("2026-07-07"), endDate: d("2026-09-28") }),
+        proto({ id: "new", status: "active", startDate: d("2026-08-11"), endDate: d("2026-09-30") }),
+      ],
+      horizonStart: today,
+      horizonEnd,
+      existing: [
+        existing({ id: "ghost", protocolId: "old", scheduledAt: d("2026-08-18") }),
+        existing({ id: "live", protocolId: "new", scheduledAt: d("2026-08-18") }),
+      ],
+      today,
+    });
+
+    expect(deletions).toEqual(["ghost"]);
+    // The live protocol still expands its own grid across the whole horizon.
+    expect(upserts.every((u) => u.protocolId === "new")).toBe(true);
+    expect(upserts.length).toBe(14);
+  });
+
+  it("never touches history: past rows, taken/skipped rows, and rows with a DoseLog", () => {
+    const today = d("2026-08-14");
+    const horizonEnd = new Date(today.getTime() + 13 * 86_400_000);
+
+    const { deletions, statusUpdates } = materializePlannedDoses({
+      protocols: [proto({ status: "completed", startDate: d("2026-07-07"), endDate: d("2026-09-28") })],
+      horizonStart: today,
+      horizonEnd,
+      existing: [
+        existing({ id: "past-planned", scheduledAt: d("2026-08-10") }),
+        existing({ id: "past-taken", scheduledAt: d("2026-08-09"), status: "taken", hasDoseLog: true }),
+        existing({ id: "past-missed", scheduledAt: d("2026-08-08"), status: "missed" }),
+        existing({ id: "past-skipped", scheduledAt: d("2026-08-07"), status: "skipped" }),
+        // A future row that already carries a delivered dose stays in the record.
+        existing({ id: "future-logged", scheduledAt: d("2026-08-18"), hasDoseLog: true }),
+      ],
+      today,
+    });
+
+    expect(deletions).toEqual([]);
+    // …and the retired protocol accrues NO new misses: the past "planned" row is
+    // left as-is rather than being fabricated into a miss after the course closed.
+    expect(statusUpdates).toEqual([]);
+  });
+
+  it("still marks misses for an ACTIVE protocol's past rows", () => {
+    const today = d("2026-08-14");
+    const horizonEnd = new Date(today.getTime() + 13 * 86_400_000);
+
+    const { statusUpdates } = materializePlannedDoses({
+      protocols: [proto({ status: "active" })],
+      horizonStart: today,
+      horizonEnd,
+      existing: [existing({ id: "pd-past", scheduledAt: d("2026-08-10") })],
+      today,
+    });
+
+    expect(statusUpdates).toEqual([{ id: "pd-past", status: "missed" }]);
+  });
+
+  it("completing a protocol stops generation without rewriting its history", () => {
+    const today = d("2026-08-14");
+    const horizonEnd = new Date(today.getTime() + 13 * 86_400_000);
+    const history = [
+      existing({ id: "h-taken", scheduledAt: d("2026-08-05"), status: "taken", hasDoseLog: true }),
+      existing({ id: "h-missed", scheduledAt: d("2026-08-06"), status: "missed" }),
+    ];
+
+    const active = materializePlannedDoses({
+      protocols: [proto({ endDate: d("2026-09-28") })],
+      horizonStart: today,
+      horizonEnd,
+      existing: history,
+      today,
+    });
+    expect(active.upserts.length).toBe(14);
+
+    const completed = materializePlannedDoses({
+      protocols: [proto({ status: "completed", endDate: d("2026-09-28") })],
+      horizonStart: today,
+      horizonEnd,
+      existing: history,
+      today,
+    });
+    expect(completed.upserts).toHaveLength(0);
+    expect(completed.deletions).toEqual([]);
+    expect(completed.statusUpdates).toEqual([]);
+  });
+});

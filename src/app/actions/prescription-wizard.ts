@@ -17,6 +17,7 @@ import {
 } from "@/lib/prescription-wizard";
 import { dosesPerWeek } from "@/lib/schedule/frequency";
 import { normaliseScheduleRule } from "@/lib/schedule/normalise";
+import { hasActiveProtocolConflict } from "@/lib/protocol-uniqueness";
 import { peptideTokens } from "@/lib/stacks/server";
 import {
   parseDateOrder,
@@ -350,9 +351,15 @@ async function buildProtocolData(
   const name = (input.name ?? "").trim();
   if (!name) throw new Error("Protocol name is required.");
 
-  const dup = await tx.protocol.count({ where: { userId, peptideId } });
-  if (dup > 0) {
-    throw new Error("That peptide already has a protocol — edit it instead.");
+  // One ACTIVE protocol per peptide (lib/protocol-uniqueness). A completed or
+  // paused course is history and must not block a new one — otherwise a peptide
+  // can never be run a second time after cycling off it.
+  const siblings = await tx.protocol.findMany({
+    where: { userId, peptideId },
+    select: { id: true, status: true },
+  });
+  if (hasActiveProtocolConflict(siblings, { status: parseEnum(input.status, PROTOCOL_STATUSES) ?? "active" })) {
+    throw new Error("That peptide already has an active protocol — edit it, or complete it first.");
   }
 
   const transcriptionError = validateProtocolTranscriptionFields(input);
@@ -612,9 +619,14 @@ async function saveStackWizard(
     const norm = normaliseScheduleRule(component.scheduleRule, component.startDate);
     if (!norm.ok) throw new Error(norm.error);
 
-    const existingProtocol = await tx.protocol.count({ where: { userId, peptideId: peptide.id } });
-    if (existingProtocol > 0) {
-      throw new Error("That peptide already has a protocol — edit it instead.");
+    // Same active-only rule as the single-peptide path above. Stack components
+    // are always created active.
+    const componentSiblings = await tx.protocol.findMany({
+      where: { userId, peptideId: peptide.id },
+      select: { id: true, status: true },
+    });
+    if (hasActiveProtocolConflict(componentSiblings, { status: "active" })) {
+      throw new Error("That peptide already has an active protocol — edit it, or complete it first.");
     }
 
     const labelStrengthMg = new Decimal(concentrationMcgPerMl)

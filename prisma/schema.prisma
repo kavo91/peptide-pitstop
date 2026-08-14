@@ -293,10 +293,16 @@ model Protocol {
   cycleOnWeeks  Int?
   cycleOffWeeks Int?
   cycleAnchor   DateTime?
+  /// Groups every revision of one course. Null = standalone and resolves to the
+  /// protocol's own id (lib/protocol-revision.courseKey), so existing rows need
+  /// no backfill. Analytics groups on this rather than walking a self-link.
+  courseId      String?
 
   steps        ProtocolStep[]
   plannedDoses PlannedDose[]
   doseLogs     DoseLog[]
+
+  @@index([userId, courseId])
 }
 
 // A peptide "stack": a named group over real, separately-tracked protocols (each

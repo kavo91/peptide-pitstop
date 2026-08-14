@@ -6,6 +6,7 @@ import { ProtocolForm } from "@/components/ProtocolForm";
 import { cycleSuggestionsFor } from "@/lib/cycle/server";
 import { StepsEditor } from "@/components/StepsEditor";
 import { dosesPerWeek } from "@/lib/schedule/frequency";
+import { planCarryForward, daysSpentInPhase } from "@/lib/protocol-revision";
 import { viewerToday } from "@/lib/viewer-tz";
 import { type DoseUnit } from "@/lib/dosing/types";
 
@@ -22,7 +23,8 @@ export default async function EditProtocolPage({ params }: { params: Promise<{ i
 
   const protocol = await prisma.protocol.findFirst({ where: { id, userId: user.id }, include: { steps: { orderBy: { stepIndex: "asc" } } } });
   if (!protocol) notFound();
-  const viewerNow = (await viewerToday()).date;
+  const viewer = await viewerToday();
+  const viewerNow = viewer.date;
 
   const peptides = await getPeptideOptions(user.id);
   const prescriptions = await getPrescriptionOptions(user.id);
@@ -51,6 +53,58 @@ export default async function EditProtocolPage({ params }: { params: Promise<{ i
     cycleAnchor: toDateInput(protocol.cycleAnchor),
   };
 
+  // ── Protocol revision ──────────────────────────────────────────────────────
+  // What the form needs to detect a re-timing edit and offer a replacement
+  // protocol instead of mutating this one.
+  const deliveredRows = await prisma.doseLog.findMany({
+    where: { userId: user.id, protocolId: protocol.id },
+    orderBy: { takenAt: "asc" },
+    select: { takenAt: true, localDay: true },
+  });
+  // Tracking-day keys, ascending — a dose's frozen localDay wins; legacy rows
+  // fall back to the UTC date of takenAt.
+  const deliveredDayKeys = deliveredRows.map(
+    (d) => d.localDay ?? new Date(d.takenAt).toISOString().slice(0, 10),
+  );
+  const carrySteps0 = protocol.steps.map((s) => ({
+    stepIndex: s.stepIndex,
+    dose: s.dose.toString(),
+    doseInputUnit: s.doseInputUnit,
+    durationDays: s.durationDays,
+  }));
+  // HAZARD: this must be the STORED schedule rule — the OLD frequency. Handing
+  // it the edited one walks the user backwards (or skips a ramp step), which is
+  // the exact corruption this whole feature exists to prevent. Pinned by
+  // "makes the call-site hazard EXECUTABLE" in lib/protocol-revision.test.ts.
+  const ipw = dosesPerWeek(protocol.scheduleRule);
+  const spent = daysSpentInPhase({
+    steps: carrySteps0,
+    injectionsPerWeek: ipw,
+    deliveredDayKeys,
+    // The VIEWER's tracking day, matching the basis of localDay above — a UTC
+    // slice would under-count the days served by one for most of a Brisbane day.
+    todayKey: viewer.key,
+  });
+  const carrySteps = planCarryForward({
+    steps: carrySteps0,
+    injectionsPerWeek: ipw,
+    deliveredCount: deliveredDayKeys.length,
+    daysSpentInCurrentPhase: spent,
+  });
+  const savedSnapshot = {
+    scheduleRule: protocol.scheduleRule,
+    doseBasis: protocol.doseBasis,
+    startDate: protocol.startDate ? new Date(protocol.startDate).toISOString().slice(0, 10) : null,
+    steps: protocol.steps.map((s) => ({ stepIndex: s.stepIndex, durationDays: s.durationDays })),
+  };
+  // Offer the revision on EXACTLY the protocols the server would refuse an
+  // in-place edit on (assertNoScheduleRewrite: active + has delivered doses),
+  // and no others. Wider would be a dead end — the form has no "edit anyway"
+  // door, and reviseProtocol itself rejects a non-active protocol — while a
+  // protocol with no logged doses has no ladder position to corrupt, so its
+  // schedule edit is an ordinary save.
+  const revisable = protocol.status === "active" && deliveredDayKeys.length > 0;
+
   const steps = protocol.steps.map((s) => ({
     id: s.id,
     stepIndex: s.stepIndex,
@@ -63,7 +117,22 @@ export default async function EditProtocolPage({ params }: { params: Promise<{ i
   return (
     <main className="mx-auto max-w-md px-4 py-8 lg:max-w-2xl lg:px-8">
       <h1 className="mb-6 text-3xl font-semibold tracking-tight">Edit protocol</h1>
-      <ProtocolForm peptides={peptides} prescriptions={prescriptions} syringes={syringes} initial={initial} cycleSuggestions={cycleSuggestions} />
+      <ProtocolForm
+        peptides={peptides}
+        prescriptions={prescriptions}
+        syringes={syringes}
+        initial={initial}
+        cycleSuggestions={cycleSuggestions}
+        savedSnapshot={revisable ? savedSnapshot : undefined}
+        carryForward={
+          revisable
+            ? {
+                steps: carrySteps,
+                resumedDose: carrySteps[0] ? `${carrySteps[0].dose} ${carrySteps[0].doseInputUnit}` : null,
+              }
+            : undefined
+        }
+      />
 
       <section className="mt-8">
         <h2 className="mb-3 text-sm font-medium text-muted">Titration steps</h2>

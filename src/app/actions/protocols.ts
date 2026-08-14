@@ -9,7 +9,9 @@ import { parsePositiveDecimal, parseDateOrder } from "@/lib/validation/domain";
 import { runPlannedDoseGeneration } from "@/lib/planned/run";
 import { computeAdvance } from "@/lib/titration/advance-suggest";
 import { dosesPerWeek } from "@/lib/schedule/frequency";
+import { dayKey } from "@/lib/today-overrides";
 import { hasActiveProtocolConflict } from "@/lib/protocol-uniqueness";
+import { assertNoScheduleRewrite, endDateOnClose, type ProtocolSnapshot } from "@/lib/protocol-revision";
 
 function optDecimal(v?: string | null): string | null {
   const s = (v ?? "").toString().trim();
@@ -22,6 +24,11 @@ function optInt(v?: string | null): number | null {
   if (!s) return null;
   const n = parseInt(s, 10);
   return Number.isFinite(n) ? n : null;
+}
+
+/** Date-only "YYYY-MM-DD" for snapshot comparison; null stays null. */
+function dayOf(d: Date | null | undefined): string | null {
+  return d ? new Date(d).toISOString().slice(0, 10) : null;
 }
 
 export interface ProtocolInput {
@@ -151,6 +158,58 @@ export async function saveProtocol(input: ProtocolInput) {
     cycleAnchor: input.cycleAnchor ? new Date(input.cycleAnchor) : null,
   };
 
+  // Backstop: refuse a schedule rewrite on a live protocol that already has
+  // logged doses. ProtocolForm prompts and routes to reviseProtocol before ever
+  // reaching here; this catches every other door (imports, direct calls).
+  //
+  // Deliberately placed AFTER `data` is assembled rather than at the uniqueness
+  // check: `after` must read the SAME values the update below writes — the
+  // NORMALISED scheduleRule and the coerced doseBasis/startDate, not the raw
+  // input. Comparing raw input would refuse an ordinary save whenever
+  // normaliseScheduleRule merely canonicalised the rule. Still before any write.
+  if (input.id) {
+    const existing = await prisma.protocol.findFirst({
+      where: { id: input.id, userId: user.id },
+      select: {
+        status: true,
+        scheduleRule: true,
+        doseBasis: true,
+        startDate: true,
+        steps: { select: { stepIndex: true, durationDays: true } },
+      },
+    });
+    if (existing) {
+      const delivered = await prisma.doseLog.count({ where: { userId: user.id, protocolId: input.id } });
+      const before: ProtocolSnapshot = {
+        scheduleRule: existing.scheduleRule,
+        doseBasis: existing.doseBasis,
+        startDate: dayOf(existing.startDate),
+        steps: existing.steps,
+      };
+      const after: ProtocolSnapshot = {
+        scheduleRule: data.scheduleRule,
+        doseBasis: data.doseBasis,
+        startDate: dayOf(data.startDate),
+        // An EDIT never writes steps (see `initialSteps` directly below), and the
+        // edit page seeds the form without them — so an absent `steps` means
+        // "unchanged", not "cleared". A caller that DOES hand over a different
+        // ladder is stating exactly the intent this backstop exists to refuse,
+        // so that case is still compared.
+        steps: input.steps
+          ? input.steps.map((s, i) => ({
+              stepIndex: i,
+              durationDays: s.durationDays == null || s.durationDays === "" ? null : Number(s.durationDays),
+            }))
+          : existing.steps,
+      };
+      try {
+        assertNoScheduleRewrite(before, after, { status: existing.status, hasDeliveredDoses: delivered > 0 });
+      } catch (e) {
+        return { ok: false as const, error: e instanceof Error ? e.message : "Schedule change refused." };
+      }
+    }
+  }
+
   const initialSteps = !input.id && data.scheduleType === "titration" ? (input.steps ?? []) : [];
   const stepRows = initialSteps.map((s) => {
     const dose = optDecimal(s.dose);
@@ -176,6 +235,20 @@ export async function saveProtocol(input: ProtocolInput) {
         select: { stackId: true, startDate: true, endDate: true, status: true },
       });
       if (!before) return { ok: false as const, error: "Protocol not found." };
+
+      // Closing a protocol by hand must stamp an honest endDate, the way
+      // reviseProtocol already does. Without it `status` says the course is over
+      // while `endDate` says it runs for weeks yet, and slot generation — bounded
+      // by endDate — keeps emitting ghosts that age into misses nobody could log.
+      // dayKey is LOCAL: a UTC slice would stamp yesterday for the first ten
+      // hours of a Brisbane day, landing endDate before a dose logged today.
+      const closeAt = endDateOnClose({
+        wasStatus: before.status,
+        nowStatus: data.status,
+        currentEndDate: data.endDate ? dayKey(data.endDate) : null,
+        todayKey: dayKey(new Date()),
+      });
+      if (closeAt) data.endDate = new Date(`${closeAt}T00:00:00.000Z`);
 
       const { count } = await prisma.protocol.updateMany({ where: { id: input.id, userId: user.id }, data });
       if (count === 0) return { ok: false as const, error: "Protocol not found." };
@@ -681,4 +754,134 @@ export async function moveProtocolStep(stepId: string, direction: "up" | "down")
     return { ok: false as const, error: "Could not reorder step." };
   }
   return { ok: true as const };
+}
+
+export interface ReviseProtocolInput {
+  /** The live protocol being replaced. */
+  id: string;
+  /** The edited fields, exactly as ProtocolForm would have saved them. */
+  next: ProtocolInput;
+  /** New protocol's first day, "YYYY-MM-DD". Defaults to today. */
+  startDate?: string;
+}
+
+/**
+ * Complete a live protocol and create its replacement, linked as one course.
+ *
+ * Never mutates the old protocol's schedule — that is the whole point, and it is
+ * why this needs no exemption from assertNoScheduleRewrite. The old row keeps
+ * every field it had when its doses were logged, so history stays readable.
+ */
+export async function reviseProtocol(input: ReviseProtocolInput) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const old = await prisma.protocol.findFirst({
+    where: { id: input.id, userId: user.id },
+    select: { id: true, peptideId: true, courseId: true, status: true },
+  });
+  if (!old) return { ok: false as const, error: "Protocol not found." };
+  if (old.status !== "active") return { ok: false as const, error: "Only a live protocol can be revised." };
+
+  const startDate = input.startDate?.slice(0, 10) || new Date().toISOString().slice(0, 10);
+  const newStart = new Date(`${startDate}T00:00:00.000Z`);
+
+  // Validate + canonicalise exactly as saveProtocol does. Without this the
+  // revision path is a hole in the validation: normaliseScheduleRule also
+  // REJECTS never-due and malformed rules, so a schedule the ordinary save
+  // refuses could be stored by revising instead.
+  let revisedRule: string | null = null;
+  if (input.next.scheduleRule) {
+    const norm = normaliseScheduleRule(input.next.scheduleRule, startDate);
+    if (!norm.ok) return { ok: false as const, error: norm.error };
+    revisedRule = norm.rule;
+  }
+
+  // endDate = the day before the new one starts, floored at the last delivered
+  // dose's day so an endDate can never land before a real logged dose.
+  const lastDose = await prisma.doseLog.findFirst({
+    where: { userId: user.id, protocolId: old.id },
+    orderBy: { takenAt: "desc" },
+    select: { takenAt: true, localDay: true },
+  });
+  const dayBefore = new Date(newStart.getTime() - 86_400_000);
+  const lastDoseDay = lastDose
+    ? new Date(`${lastDose.localDay ?? new Date(lastDose.takenAt).toISOString().slice(0, 10)}T00:00:00.000Z`)
+    : null;
+  const endDate = lastDoseDay && lastDoseDay > dayBefore ? lastDoseDay : dayBefore;
+
+  try {
+    const newId = await prisma.$transaction(async (tx) => {
+      await tx.protocol.updateMany({
+        where: { id: old.id, userId: user.id },
+        data: { status: "completed", endDate },
+      });
+
+      // Future planned doses are NOT deleted here. isRetired() in
+      // lib/planned/materialize.ts retires a non-active protocol's rows from
+      // today forward on the next generation run, and runPlannedDoseGeneration
+      // is called below — so flipping the status IS the trigger. A second
+      // mechanism scoped to one protocol would be free to drift from it.
+
+      const created = await tx.protocol.create({
+        data: {
+          userId: user.id,
+          peptideId: old.peptideId,
+          courseId: old.courseId ?? old.id,
+          name: input.next.name.trim(),
+          // Same enum coercion saveProtocol applies — an unrecognised value must
+          // fall back to a schema-legal one, never be persisted verbatim.
+          scheduleType: ["fixed_times", "interval", "titration"].includes(input.next.scheduleType ?? "")
+            ? input.next.scheduleType!
+            : "fixed_times",
+          scheduleRule: revisedRule,
+          // Coerced exactly as saveProtocol does — the two paths must not disagree on
+          // the default, or a revision silently changes rebase behaviour.
+          rebaseMode: input.next.rebaseMode === "rolling" ? "rolling" : "fixed_anchor",
+          adherenceWindowMin: optInt(input.next.adherenceWindowMin) ?? 120,
+          defaultSyringeId: input.next.defaultSyringeId || null,
+          prescriptionId: input.next.prescriptionId || null,
+          targetDose: optDecimal(input.next.targetDose),
+          doseInputUnit: ["mcg", "mg", "ml", "units"].includes(input.next.doseInputUnit ?? "")
+            ? input.next.doseInputUnit!
+            : "mcg",
+          doseBasis: input.next.doseBasis === "per_week" ? "per_week" : "per_injection",
+          startDate: newStart,
+          endDate: null,
+          status: "active",
+          steps: {
+            create: (input.next.steps ?? []).map((s, i) => ({
+              stepIndex: i,
+              dose: s.dose,
+              doseInputUnit: s.doseInputUnit,
+              durationDays: s.durationDays == null || s.durationDays === "" ? null : Number(s.durationDays),
+              notes: s.notes || null,
+            })),
+          },
+        },
+        select: { id: true },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: user.id,
+          entityType: "Protocol",
+          entityId: created.id,
+          field: "revise",
+          newValue: `revised from ${old.id}; course ${old.courseId ?? old.id}`,
+        },
+      });
+
+      return created.id;
+    });
+
+    await runPlannedDoseGeneration(user.id);
+    revalidatePath("/protocols");
+    revalidatePath("/");
+    revalidatePath("/today");
+    return { ok: true as const, id: newId };
+  } catch (e) {
+    console.error("reviseProtocol failed", e);
+    return { ok: false as const, error: "Could not revise the protocol." };
+  }
 }

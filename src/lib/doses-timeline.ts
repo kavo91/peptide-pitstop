@@ -4,7 +4,7 @@ import { startOfDay, addDays } from "@/lib/schedule/schedule";
 import { timeInTz } from "@/lib/tz-day";
 import { resolveTitration } from "@/lib/titration/resolve";
 import { buildResolveInput } from "@/lib/titration/from-protocol";
-import type { LoggedDose, TimelineEntry } from "./doses-timeline-core";
+import { supersededFrom, type LoggedDose, type TimelineEntry } from "./doses-timeline-core";
 import { buildTimelineEntries, clipSlotsToRange, type ResolvedOcc } from "./timeline-status";
 import { monthMetricsByDay } from "./month-metrics";
 
@@ -32,6 +32,11 @@ async function buildResolvedOccurrences(userId: string, rangeStart: Date, rangeE
     include: { peptide: true, stack: true, steps: true },
   });
   const now = new Date();
+  // A retired course stops where its replacement begins — otherwise an
+  // early-closed protocol keeps emitting slots (bounded only by an endDate weeks
+  // out) that no log can match, and they render as misses on days the user did
+  // dose, beside the live protocol's own slots.
+  const supersededAt = supersededFrom(protocols);
 
   const out: ResolvedOcc[] = [];
   for (const p of protocols) {
@@ -66,15 +71,18 @@ async function buildResolvedOccurrences(userId: string, rangeStart: Date, rangeE
     // doseLogId comes from the resolver's own match (matchedLogId, Task B0); we
     // do NOT re-match here, so the timeline's taken/off-schedule split is
     // identical to Today's.
-    const mapped = resolved.slots.map((s) => ({
-      date: KEY(s.date),
-      time: s.time,
-      status: s.status,
-      doseLabel: s.perInjectionValue ? `${s.perInjectionValue} ${s.perInjectionUnit}` : "",
-      phaseIndex: s.phaseIndex,
-      doseLogId: s.matchedLogId ?? undefined,
-      rebased: s.rebased,
-    }));
+    const cutoff = supersededAt.get(p.id);
+    const mapped = resolved.slots
+      .filter((s) => !cutoff || KEY(s.date) < cutoff)
+      .map((s) => ({
+        date: KEY(s.date),
+        time: s.time,
+        status: s.status,
+        doseLabel: s.perInjectionValue ? `${s.perInjectionValue} ${s.perInjectionUnit}` : "",
+        phaseIndex: s.phaseIndex,
+        doseLogId: s.matchedLogId ?? undefined,
+        rebased: s.rebased,
+      }));
     out.push({
       protocolId: p.id,
       peptideId: p.peptideId,
