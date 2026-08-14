@@ -16,7 +16,7 @@ import { APP_VERSION } from "@/lib/version";
 import type { TodayDoseStatus } from "@/lib/today";
 import {
   LayoutDashboard, CalendarDays, FlaskConical, LineChart, HeartPulse,
-  Droplet, ClipboardList, FileText, Settings, Plus, type LucideIcon,
+  Droplet, ClipboardList, FileText, Receipt, Settings, Plus, type LucideIcon,
 } from "lucide-react";
 
 interface NavItem {
@@ -34,6 +34,7 @@ const PRIMARY: NavItem[] = [
 
 const SECONDARY: NavItem[] = [
   { href: "/analytics", label: "Analytics", match: "/analytics", icon: LineChart },
+  { href: "/costs", label: "Costs", match: "/costs", icon: Receipt },
   { href: "/journal", label: "Wellness", match: "/journal", icon: HeartPulse },
   { href: "/bloodwork", label: "Bloodwork", match: "/bloodwork", icon: Droplet },
   { href: "/protocols", label: "Protocols", match: "/protocols", icon: ClipboardList },

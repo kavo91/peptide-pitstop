@@ -4,6 +4,7 @@ const {
   protocolFindFirst,
   protocolUpdateMany,
   protocolCount,
+  protocolFindMany,
   protocolCreate,
   protocolStepCreateMany,
   transaction,
@@ -19,6 +20,7 @@ const {
   protocolFindFirst: vi.fn(),
   protocolUpdateMany: vi.fn(),
   protocolCount: vi.fn(),
+  protocolFindMany: vi.fn(),
   protocolCreate: vi.fn(),
   protocolStepCreateMany: vi.fn(),
   transaction: vi.fn(),
@@ -38,6 +40,7 @@ vi.mock("@/lib/db", () => ({
       findFirst: protocolFindFirst,
       updateMany: protocolUpdateMany,
       count: protocolCount,
+      findMany: protocolFindMany,
       create: protocolCreate,
     },
     protocolStep: {
@@ -78,6 +81,7 @@ beforeEach(() => {
   protocolFindFirst.mockReset();
   protocolUpdateMany.mockReset();
   protocolCount.mockReset();
+  protocolFindMany.mockReset();
   protocolCreate.mockReset();
   protocolStepCreateMany.mockReset();
   transaction.mockReset();
@@ -92,6 +96,8 @@ beforeEach(() => {
   currentUser.mockResolvedValue({ id: "u1" });
   protocolUpdateMany.mockResolvedValue({ count: 1 });
   protocolCount.mockResolvedValue(0);
+  // No sibling protocols for this peptide → no active-protocol conflict.
+  protocolFindMany.mockResolvedValue([]);
   protocolCreate.mockResolvedValue({ id: "proto-1" });
   protocolStepCreateMany.mockResolvedValue({ count: 5 });
   transaction.mockImplementation(async (fn) => fn({

@@ -72,7 +72,7 @@ export function PrescriptionForm({ peptides, stacks = [], initial }: { peptides:
       {isStack && <p className="-mt-1 text-xs text-muted">One grouped script covering all the stack&apos;s compounds; it links every component vial.</p>}
       <div className="flex gap-2">
         <label className="block flex-1 text-sm text-muted">Source
-          <input className={input + " mt-1"} value={form.source ?? ""} onChange={(e) => set("source", e.target.value)} placeholder="e.g. GetLimitless" />
+          <input className={input + " mt-1"} value={form.source ?? ""} onChange={(e) => set("source", e.target.value)} placeholder="e.g. your supplier" />
         </label>
         <label className="block flex-1 text-sm text-muted">Pharmacy
           <input className={input + " mt-1"} value={form.pharmacy ?? ""} onChange={(e) => set("pharmacy", e.target.value)} />

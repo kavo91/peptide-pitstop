@@ -1,6 +1,6 @@
 "use client";
 
-import { X, Plus, Save } from "lucide-react";
+import { X, Plus, Save, Lightbulb } from "lucide-react";
 import Link from "next/link";
 
 import { useState } from "react";
@@ -11,6 +11,8 @@ import { reindexPresetState } from "@/lib/schedule/preset-reindex";
 import { dosesPerWeek } from "@/lib/schedule/frequency";
 import { perInjectionPreview } from "@/lib/titration/per-injection-preview";
 import { type DoseUnit } from "@/lib/dosing/types";
+import { cyclePlanEnd } from "@/lib/cycle/state";
+import { type CycleSuggestion } from "@/lib/cycle/suggest";
 
 interface Opt { id: string; name: string }
 
@@ -22,11 +24,17 @@ export function ProtocolForm({
   prescriptions,
   syringes,
   initial,
+  cycleSuggestions,
 }: {
   peptides: Opt[];
   prescriptions: Opt[];
   syringes: Opt[];
   initial?: ProtocolInput;
+  /**
+   * Literature-derived cycle suggestion per peptide id, resolved server-side
+   * (lib/cycle/server) so the ~200 KB enrichment seed stays out of this bundle.
+   */
+  cycleSuggestions?: Record<string, CycleSuggestion>;
 }) {
   const seed = initial;
 
@@ -99,6 +107,34 @@ export function ProtocolForm({
         injectionsPerWeek,
       })
     : null;
+
+  // ── Cycle plan ─────────────────────────────────────────────────────────────
+  // The suggestion tracks the CURRENTLY SELECTED peptide, so switching peptide
+  // re-offers the right literature without a round-trip.
+  const suggestion = cycleSuggestions?.[form.peptideId];
+  const cycleOn = parseInt(form.cycleOnWeeks ?? "", 10);
+  const cycleOff = parseInt(form.cycleOffWeeks ?? "", 10);
+  const cycleOnValid = Number.isFinite(cycleOn) && cycleOn >= 1 && cycleOn <= 104;
+  const cycleOffValid = !form.cycleOffWeeks?.trim() || (Number.isFinite(cycleOff) && cycleOff >= 1 && cycleOff <= 104);
+  // Preview the planned stop from whichever anchor the cycle will actually count
+  // from — an explicit cycleAnchor, else the protocol start.
+  const cycleAnchorDate = form.cycleAnchor || form.startDate;
+  const plannedStop =
+    cycleOnValid && cycleAnchorDate ? cyclePlanEnd(new Date(cycleAnchorDate + "T00:00:00"), cycleOn) : null;
+  // Block save on a malformed cycle rather than letting the server reject it.
+  const cycleBlocked =
+    (!!form.cycleOnWeeks?.trim() && !cycleOnValid) ||
+    !cycleOffValid ||
+    (!!form.cycleOffWeeks?.trim() && !form.cycleOnWeeks?.trim());
+
+  function applySuggestion() {
+    if (!suggestion?.onWeeks) return;
+    setForm((f) => ({
+      ...f,
+      cycleOnWeeks: String(suggestion.onWeeks),
+      cycleOffWeeks: suggestion.offWeeks ? String(suggestion.offWeeks) : f.cycleOffWeeks,
+    }));
+  }
 
   function set<K extends keyof ProtocolInput>(k: K, v: ProtocolInput[K]) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -354,6 +390,105 @@ export function ProtocolForm({
         </label>
       </div>
 
+      {/* ── Cycle plan ─────────────────────────────────────────────────────── */}
+      <div className="space-y-2 rounded-card bg-bg p-3 ring-1 ring-line/15">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-sm font-medium text-ink">Cycle plan</p>
+          <span className="text-xs text-muted">optional</span>
+        </div>
+        <p className="text-xs text-muted">
+          How long to run before deliberately stopping. Leave blank to run continuously.
+        </p>
+
+        {suggestion && (
+          <div className="rounded-control bg-accent/5 p-2.5 text-xs ring-1 ring-accent/20">
+            <div className="flex items-start gap-2">
+              <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accentStrong" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="text-ink">{suggestion.basis}</p>
+                {suggestion.quote && (
+                  <p className="mt-1 italic text-muted">&ldquo;{suggestion.quote}&rdquo;</p>
+                )}
+                <p className="mt-1 text-muted">
+                  Reference only — not medical advice.
+                  {suggestion.sourceUrl && (
+                    <>
+                      {" "}
+                      <a
+                        href={suggestion.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="font-medium text-accentStrong underline"
+                      >
+                        source
+                      </a>
+                    </>
+                  )}
+                </p>
+                {suggestion.onWeeks !== null && (
+                  <button
+                    type="button"
+                    onClick={applySuggestion}
+                    className="mt-2 inline-flex items-center gap-1.5 rounded-control bg-accent px-2.5 py-1.5 font-medium text-onAccent"
+                  >
+                    <Lightbulb className="h-3.5 w-3.5" aria-hidden /> Use {suggestion.onWeeks} weeks
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <label className="block flex-1 text-sm text-muted">
+            Run for (weeks)
+            <input
+              className={input + " mt-1"}
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={104}
+              placeholder="continuous"
+              value={form.cycleOnWeeks ?? ""}
+              onChange={(e) => set("cycleOnWeeks", e.target.value)}
+            />
+          </label>
+          <label className="block flex-1 text-sm text-muted">
+            Then break (weeks)
+            <input
+              className={input + " mt-1"}
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={104}
+              placeholder="no restart"
+              value={form.cycleOffWeeks ?? ""}
+              onChange={(e) => set("cycleOffWeeks", e.target.value)}
+            />
+          </label>
+        </div>
+
+        {plannedStop && (
+          <p className="text-xs text-muted">
+            Planned last dose:{" "}
+            <span className="font-medium text-ink">
+              {plannedStop.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+            </span>
+            {cycleOffValid && form.cycleOffWeeks?.trim() ? " · then restarts automatically after the break." : " · then stops."}
+          </p>
+        )}
+        {cycleOnValid && !cycleAnchorDate && (
+          <p className="text-xs text-warn">Set a start date to see the planned stop date.</p>
+        )}
+        {cycleBlocked && (
+          <p className="text-xs text-warn">
+            {!form.cycleOnWeeks?.trim() && form.cycleOffWeeks?.trim()
+              ? "Set a run length before a break length."
+              : "Cycle lengths must be whole weeks between 1 and 104."}
+          </p>
+        )}
+      </div>
+
       {initial?.id && (
         <label className="block text-sm text-muted">Status
           <select className={input + " mt-1"} value={form.status} onChange={(e) => set("status", e.target.value)}>
@@ -364,7 +499,7 @@ export function ProtocolForm({
 
       {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex gap-2">
-        <button type="button" onClick={save} disabled={busy || !scheduleValid || perWeekBlocked || presetTimeInvalid} className="flex flex-1 items-center justify-center gap-2 rounded-control bg-accent px-4 py-3 font-medium text-onAccent disabled:opacity-40">{busy ? "…" : <><Save className="h-4 w-4" aria-hidden /> {initial?.id ? "Save protocol" : "Create & add steps"}</>}</button>
+        <button type="button" onClick={save} disabled={busy || !scheduleValid || perWeekBlocked || presetTimeInvalid || cycleBlocked} className="flex flex-1 items-center justify-center gap-2 rounded-control bg-accent px-4 py-3 font-medium text-onAccent disabled:opacity-40">{busy ? "…" : <><Save className="h-4 w-4" aria-hidden /> {initial?.id ? "Save protocol" : "Create & add steps"}</>}</button>
         <Link href="/protocols" className="rounded-control bg-bg px-4 py-3 text-sm ring-1 ring-line/15">Cancel</Link>
       </div>
       {!initial?.id && form.scheduleType === "titration" && (

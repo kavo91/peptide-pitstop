@@ -12,6 +12,7 @@ import { compareStackGrouped } from "@/lib/stack-sort";
 import { startOfDay } from "@/lib/schedule/schedule";
 import { bucketOf, PROTOCOL_SECTIONS as SECTIONS, PROTOCOL_SECTION_ACCENT as SECTION_ACCENT } from "@/lib/protocol-bucket";
 import { SignedOutNotice } from "@/components/SignedOutNotice";
+import { cycleChip } from "@/lib/cycle/label";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +84,27 @@ export default async function ProtocolsPage() {
                     halfLifeHours={p.peptide.halfLifeHours?.toString() ?? null}
                     status={p.status as "active" | "paused" | "completed"}
                   />
+                  {(() => {
+                    // Always-on cycle status (distinct from the dashboard's
+                    // banner, which only fires near a boundary). Null when the
+                    // protocol has no cycle plan — no empty chip.
+                    const chip = cycleChip({
+                      anchor: p.cycleAnchor ?? p.startDate,
+                      onWeeks: p.cycleOnWeeks,
+                      offWeeks: p.cycleOffWeeks,
+                      today,
+                    });
+                    if (!chip) return null;
+                    return (
+                      <p
+                        className={`mt-1 inline-flex items-center rounded-control px-2 py-0.5 text-xs ${
+                          chip.tone === "warn" ? "bg-warn/10 text-warn" : "bg-bg text-muted ring-1 ring-line/15"
+                        }`}
+                      >
+                        {chip.text}
+                      </p>
+                    );
+                  })()}
                   <div className="mt-1 flex items-center justify-between gap-3">
                     <ConfirmDeleteButton
                       action={deleteProtocol}
