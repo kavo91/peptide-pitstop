@@ -26,6 +26,7 @@ const ITEMS: Item[] = [
   { href: "/prescriptions", label: "Prescriptions", sub: "Refills, cost, expiry, reorder reminders" },
   { href: "/doses",         label: "Doses",         sub: "History & upcoming schedule" },
   { href: "/analytics",     label: "Analytics",     sub: "Dose history, adherence, plasma curve" },
+  { href: "/costs",         label: "Costs",         sub: "Landed cost per vial and per dose, shipping, sundries" },
   { href: "/protocols",     label: "Protocols",     sub: "Active and past treatment protocols" },
   { href: "/journal",       label: "Wellness",      sub: "Weight, mood, sleep, side effects" },
   { href: "/bloodwork",     label: "Bloodwork",     sub: "Biomarker trends with reference & optimal bands" },

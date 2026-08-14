@@ -12,6 +12,8 @@ import { BackButton } from "@/components/BackButton";
 import { TodaysDosesCard } from "@/components/dashboard/TodaysDosesCard";
 import { StackCard } from "@/components/StackCard";
 import { PAGE_MAIN } from "@/lib/layout";
+import { CycleBanner } from "@/components/CycleBanner";
+import { getCycleBannerItems } from "@/lib/cycle/server";
 
 export const dynamic = "force-dynamic";
 
@@ -46,9 +48,12 @@ export default async function TodayPage({
   const viewKey = ymd(viewDate);
   const isToday = viewKey === todayKey;
 
-  const [due, logged] = await Promise.all([
+  const [due, logged, cycleItems] = await Promise.all([
     getTodayDoses(user.id, viewDate, isToday ? new Date() : viewDate),
     getLoggedToday(user.id, viewDate),
+    // Cycle prompts are about TODAY's decision, so they only show on the real
+    // today view — browsing back to last Tuesday must not offer "stop dosing".
+    isToday ? getCycleBannerItems(user.id, viewDate) : Promise.resolve([]),
   ]);
 
   // Stacks are surfaced (with one-tap "Log stack") only on the actual today
@@ -98,6 +103,7 @@ export default async function TodayPage({
     <main className={PAGE_MAIN}>
       <BackButton fallback="/" />
       <h1 className="sr-only">Today</h1>
+      <CycleBanner alerts={cycleItems} />
       {stacks.length > 0 ? (
         // Desktop (≥1440px): stacks rail BESIDE the dose list (left rail ~320px,
         // right card). Mobile / smaller laptops: single column, stacks above the

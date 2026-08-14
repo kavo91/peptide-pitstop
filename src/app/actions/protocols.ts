@@ -9,6 +9,7 @@ import { parsePositiveDecimal, parseDateOrder } from "@/lib/validation/domain";
 import { runPlannedDoseGeneration } from "@/lib/planned/run";
 import { computeAdvance } from "@/lib/titration/advance-suggest";
 import { dosesPerWeek } from "@/lib/schedule/frequency";
+import { hasActiveProtocolConflict } from "@/lib/protocol-uniqueness";
 
 function optDecimal(v?: string | null): string | null {
   const s = (v ?? "").toString().trim();
@@ -40,8 +41,17 @@ export interface ProtocolInput {
   startDate?: string;
   endDate?: string;
   status?: string;
+  /** Planned on-cycle length in WEEKS; blank/absent = continuous (no planned stop). */
+  cycleOnWeeks?: string;
+  /** Planned break in WEEKS; blank/absent = stop without a planned restart. */
+  cycleOffWeeks?: string;
+  /** Start of the CURRENT on-cycle; blank falls back to startDate. */
+  cycleAnchor?: string;
   steps?: { dose: string; doseInputUnit: string; durationDays?: string; notes?: string }[];
 }
+
+/** Weeks outside this band are a typo, not a cycle — reject rather than persist. */
+const MAX_CYCLE_WEEKS = 104;
 
 export async function saveProtocol(input: ProtocolInput) {
   const user = await getCurrentUser();
@@ -62,11 +72,22 @@ export async function saveProtocol(input: ProtocolInput) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Invalid reference." };
   }
 
-  // One protocol per peptide. (On edit, exclude this protocol from the check.)
-  const dup = await prisma.protocol.count({
-    where: { userId: user.id, peptideId: input.peptideId, ...(input.id ? { id: { not: input.id } } : {}) },
+  // One ACTIVE protocol per peptide — see lib/protocol-uniqueness for why the
+  // status matters. Completed/paused courses are history and must not block
+  // editing the live protocol, nor starting the next cycle of one.
+  const siblings = await prisma.protocol.findMany({
+    where: { userId: user.id, peptideId: input.peptideId },
+    select: { id: true, status: true },
   });
-  if (dup > 0) return { ok: false as const, error: "That peptide already has a protocol — edit it instead." };
+  const savingStatus = ["active", "paused", "completed"].includes(input.status ?? "")
+    ? input.status!
+    : "active";
+  if (hasActiveProtocolConflict(siblings, { id: input.id, status: savingStatus })) {
+    return {
+      ok: false as const,
+      error: "That peptide already has an active protocol — edit it, or complete it first.",
+    };
+  }
 
   // Schedule rule is optional; when provided, normalise (validate + canonicalise)
   // it and reject never-due / malformed rules before persisting. Empty → null.
@@ -90,6 +111,21 @@ export async function saveProtocol(input: ProtocolInput) {
     if (!order.ok) return { ok: false as const, error: order.error };
   }
 
+  // Cycle plan. Both lengths are optional; when present they must be whole
+  // positive weeks inside a plausible band. A break with no on-cycle is
+  // meaningless (nothing to break FROM), so it's rejected rather than silently
+  // stored — otherwise the state machine would read it as "continuous".
+  const cycleOnWeeks = optInt(input.cycleOnWeeks);
+  const cycleOffWeeks = optInt(input.cycleOffWeeks);
+  for (const [label, weeks] of [["on-cycle", cycleOnWeeks], ["break", cycleOffWeeks]] as const) {
+    if (weeks !== null && (weeks < 1 || weeks > MAX_CYCLE_WEEKS)) {
+      return { ok: false as const, error: `Cycle ${label} must be between 1 and ${MAX_CYCLE_WEEKS} weeks.` };
+    }
+  }
+  if (cycleOffWeeks !== null && cycleOnWeeks === null) {
+    return { ok: false as const, error: "Set an on-cycle length before a break length." };
+  }
+
   const data = {
     peptideId: input.peptideId,
     prescriptionId: input.prescriptionId || null,
@@ -106,6 +142,13 @@ export async function saveProtocol(input: ProtocolInput) {
     startDate: input.startDate ? new Date(input.startDate) : null,
     endDate: input.endDate ? new Date(input.endDate) : null,
     status: ["active", "paused", "completed"].includes(input.status ?? "") ? input.status! : "active",
+    cycleOnWeeks,
+    // A break is only meaningful alongside an on-cycle; clearing the on-cycle
+    // clears the break with it rather than leaving an orphan.
+    cycleOffWeeks: cycleOnWeeks === null ? null : cycleOffWeeks,
+    // Explicit anchor wins; otherwise the cycle counts from the protocol start,
+    // which cycleState() resolves at read time (anchor ?? startDate).
+    cycleAnchor: input.cycleAnchor ? new Date(input.cycleAnchor) : null,
   };
 
   const initialSteps = !input.id && data.scheduleType === "titration" ? (input.steps ?? []) : [];

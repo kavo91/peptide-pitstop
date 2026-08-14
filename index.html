@@ -36,7 +36,7 @@
   "applicationSubCategory": "Self-hosted peptide & GLP-1 therapy tracker",
   "operatingSystem": "Web browser (Chrome, Firefox, Safari, Edge); self-hosted via Docker on Linux, Windows, macOS",
   "browserRequirements": "Requires JavaScript. Modern browser. Installable as a PWA.",
-  "softwareVersion": "1.3.4",
+  "softwareVersion": "1.8.1",
   "isAccessibleForFree": true,
   "license": "https://github.com/kavo91/peptide-pitstop/blob/main/LICENSE",
   "downloadUrl": "https://github.com/kavo91/peptide-pitstop",
@@ -88,7 +88,8 @@
     { "@type": "Question", "name": "How do I deploy it with Docker?", "acceptedAnswer": { "@type": "Answer", "text": "Deployment is a single Docker container. Pull the image, point it at a database file, and open it in any modern browser; full Docker, environment-variable, and demo-seed instructions are in the GitHub README. It also installs as a PWA for offline use." } },
     { "@type": "Question", "name": "Is my peptide and GLP-1 data private?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Your data never leaves your server. Identifying free-text and lab values are encrypted with AES-256-GCM before they touch disk, there is no telemetry or analytics SDK, and fonts are self-hosted — nothing is sent to a third party." } },
     { "@type": "Question", "name": "Can it do peptide reconstitution and draw-volume math?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. The built-in reconstitution engine computes concentration, draw volume, and syringe markings using exact decimal math (no floating-point drift), for both reconstituted and premixed vials." } },
-    { "@type": "Question", "name": "What can I track with Peptide Pitstop?", "acceptedAnswer": { "@type": "Answer", "text": "Reconstitution and draw-volume math, dose logs, titration and multi-peptide stacks, bloodwork and biomarker trends, single-compartment plasma-level modelling, and an adherence heatmap. Everything exports to CSV or PDF." } }
+    { "@type": "Question", "name": "Can it track how much my peptide protocol costs?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Each order is recorded as an invoice, and its shipping, tax, fees and discounts are shared across the lines it delivered, so every vial carries its honest share rather than its sticker price. Cost per dose is charged by delivered mass, so it stays correct through a part-used vial or a titration change, and consumables such as needles, syringes and swabs are included. Vials with no invoice are reported as uncosted, never as free." } },
+    { "@type": "Question", "name": "What can I track with Peptide Pitstop?", "acceptedAnswer": { "@type": "Answer", "text": "Reconstitution and draw-volume math, dose logs, titration and multi-peptide stacks, cycle plans, landed cost per vial and per dose including shipping and consumables, bloodwork and biomarker trends, single-compartment plasma-level modelling, and an adherence heatmap. Everything exports to CSV or PDF." } }
   ]
 }
 </script>
@@ -635,6 +636,9 @@
   <div class="grid">
     <div class="card rise"><div class="tag">Dosing</div><h3>Reconstitution engine</h3><p>Concentration, draw volume, and syringe markings computed with decimal math. Handles reconstituted and premixed vials.</p></div>
     <div class="card rise"><div class="tag">Protocols</div><h3>Titration &amp; stacks</h3><p>Multi-peptide schedules with ramping steps and a live calc-chart showing how each phase is computed. Log a dose that matches the next step and it offers to bring that phase forward.</p></div>
+    <div class="card rise"><div class="tag">Costs</div><h3>What it actually costs</h3><p>Shipping belongs to the order, not the vial &mdash; so it's entered once and shared across every line it delivered. Cost per dose is charged by delivered mass, so it stays right through a half-used vial or a titration change.</p></div>
+    <div class="card rise"><div class="tag">Costs</div><h3>Sundries and waste</h3><p>Needles, syringes, swabs and sharps bins count too. Product a finished vial never delivered is valued separately instead of inflating the doses you did take &mdash; and a vial you got 70&#37; through isn't called waste.</p></div>
+    <div class="card rise"><div class="tag">Cycles</div><h3>Run eight, break four</h3><p>Give a protocol a course-level on/off plan in weeks and it tracks where you are &mdash; day-of-cycle chip, a banner before the planned last dose and when a break is over. Suggested lengths come from the peptide's own literature, quoted and sourced, as reference only.</p></div>
     <div class="card rise"><div class="tag">Schedules</div><h3>Roll from a late dose</h3><p>Take an every-N-days dose late and rolling protocols offer to re-base the schedule from the day you actually dosed, with the new dates previewed. Fixed-anchor protocols keep their rigid grid.</p></div>
     <div class="card rise"><div class="tag">Bloodwork</div><h3>Biomarker trends</h3><p>Lab panels over time, in-range summaries, and a comparison matrix backed by a curated biomarker library.</p></div>
     <div class="card rise"><div class="tag">Analytics</div><h3>Plasma modelling</h3><p>Adherence, a dose-history heatmap, and single-compartment plasma-level estimates from your history and each peptide's half-life &mdash; with blends charted per component.</p></div>
@@ -677,6 +681,7 @@
     <div class="rise"><h3>How do I deploy it with Docker?</h3><p>Deployment is a single Docker container. Pull the image, point it at a database file, and open it in any browser — full Docker, env-var, and demo-seed steps are in the README. Installs as a PWA for offline use too.</p></div>
     <div class="rise"><h3>Is my peptide &amp; GLP-1 data private?</h3><p>Your data never leaves your server. Identifying free-text and lab values are encrypted with AES-256-GCM before they touch disk, there is no telemetry, and fonts are self-hosted — nothing reaches a third party.</p></div>
     <div class="rise"><h3>Can it do reconstitution math?</h3><p>Yes — the reconstitution engine computes concentration, draw volume, and syringe markings with exact decimal math (no floating-point drift), for both reconstituted and premixed vials.</p></div>
+    <div class="rise"><h3>Can it track what my protocol costs?</h3><p>Yes. Record each order as an invoice and shipping is shared across every line it delivered, so a vial's cost includes its honest share of the courier fee. Cost per dose is charged by delivered mass — correct through a half-used vial or a titration change — and needles, syringes and swabs are counted too. A vial with no invoice is reported as uncosted rather than assumed free.</p></div>
     <div class="rise"><h3>Does it work if I travel?</h3><p>Yes. Each dose freezes the calendar day and timezone it was logged in, so your history stays on the days you actually dosed. The Today view tracks your device's day and refreshes on wake, at local midnight, and when your timezone changes.</p></div>
   </div>
 </section></div>

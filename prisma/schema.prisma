@@ -51,6 +51,7 @@ model User {
   stacks        Stack[]
   pushSubscriptions PushSubscription[]
   reminderSends     ReminderSend[]
+  purchases         Purchase[]
 }
 
 // Web Push subscription for an installed PWA — one row per device/browser.
@@ -105,6 +106,7 @@ model Peptide {
   prescriptions Prescription[]
   vials         Vial[]
   protocols     Protocol[]
+  purchaseItems PurchaseItem[]
 }
 
 model Prescription {
@@ -153,8 +155,71 @@ model Vial {
   storageLocation String?
   openedAt        DateTime?
   finishedAt      DateTime?
+  // Which invoice line bought this vial. One line can cover N vials (quantity),
+  // so the landed unit cost — base price plus its share of the invoice's
+  // shipping/fees — is the line's, divided by the line quantity. Null = no cost
+  // data recorded for this vial; cost analytics reports it as uncosted rather
+  // than assuming zero.
+  purchaseItemId  String?
+  purchaseItem    PurchaseItem? @relation(fields: [purchaseItemId], references: [id])
 
   preparations Preparation[]
+}
+
+// ── Cost tracking ───────────────────────────────────────────────────────────
+// A Purchase is one invoice/order. Shipping, tax, fees and discounts are held
+// at the invoice level (they are properties of the ORDER, not of any one item)
+// and allocated across its lines at read time by `allocationMethod`. Nothing
+// derived is stored: change the method and every landed cost recomputes.
+model Purchase {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  vendor    String? // supplier/pharmacy name — plaintext, like Prescription.source (grouped on)
+  reference String? // ENCRYPTED — invoice/order number
+  orderedAt DateTime // Date-only (UTC midnight), per MIGRATIONS.md rule 3
+  receivedAt DateTime? // Date-only (UTC midnight)
+  currency  String   @default("AUD")
+  // Invoice-level overhead. Allocatable overhead = shipping + tax + fees − discount.
+  shippingCost Decimal @default(0)
+  taxCost      Decimal @default(0)
+  otherFees    Decimal @default(0)
+  discount     Decimal @default(0)
+  /// value = pro-rata on line subtotal | quantity = equal per unit | none = leave unallocated
+  allocationMethod String @default("value")
+  notes     String? // ENCRYPTED
+  createdAt DateTime @default(now())
+
+  items PurchaseItem[]
+
+  @@index([userId, orderedAt])
+}
+
+// One line on an invoice. `kind` splits the two things a peptide order contains:
+//   peptide    — vials of a compound; links to the Vial rows it bought
+//   consumable — needles, swabs, sharps containers, pen tips, bac water, …
+// Consumables carry unitsPerPack (pieces in a box) and an optional unitsPerDose
+// so a modelled per-injection consumable cost can be derived; leave unitsPerDose
+// null and the line only contributes to the amortised figure.
+model PurchaseItem {
+  id           String   @id @default(cuid())
+  purchaseId   String
+  purchase     Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  kind         String // peptide | consumable
+  peptideId    String?
+  peptide      Peptide? @relation(fields: [peptideId], references: [id])
+  /// consumable taxonomy: needle | syringe | swab | sharps_container | pen_tip | bac_water | other
+  category     String?
+  description  String
+  quantity     Int      @default(1)
+  unitCost     Decimal
+  unitsPerPack Int?
+  unitsPerDose Decimal?
+  sortIndex    Int      @default(0)
+
+  vials Vial[]
+
+  @@index([purchaseId])
 }
 
 // "Reconstitution / Preparation" — supports both dry-reconstituted and premixed vials.
@@ -213,6 +278,21 @@ model Protocol {
   startDate            DateTime?
   endDate              DateTime?
   status               String    @default("active") // active | paused | completed
+
+  // A COURSE-level on/off plan: how many weeks to run before deliberately
+  // stopping, and how long to stay off before restarting. Distinct from the
+  // schedule's `cycle` DayPattern (lib/schedule/entries), which is an intra-week
+  // dosing RHYTHM in DAYS (e.g. 5-on/2-off). These are WEEKS and govern whether
+  // the protocol should be running at all.
+  //
+  //   cycleOnWeeks   null = continuous / no planned stop.
+  //   cycleOffWeeks  null = stop and do not auto-plan a restart.
+  //   cycleAnchor    start of the CURRENT on-cycle; null falls back to
+  //                  startDate. Bumped forward on each restart so `startDate`
+  //                  keeps meaning "when this protocol first began".
+  cycleOnWeeks  Int?
+  cycleOffWeeks Int?
+  cycleAnchor   DateTime?
 
   steps        ProtocolStep[]
   plannedDoses PlannedDose[]

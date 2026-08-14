@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/owner";
 import { prisma } from "@/lib/db";
 import { getPeptideOptions, getPrescriptionOptions, getSyringeOptions } from "@/lib/options";
 import { ProtocolForm } from "@/components/ProtocolForm";
+import { cycleSuggestionsFor } from "@/lib/cycle/server";
 import { StepsEditor } from "@/components/StepsEditor";
 import { dosesPerWeek } from "@/lib/schedule/frequency";
 import { viewerToday } from "@/lib/viewer-tz";
@@ -26,6 +27,7 @@ export default async function EditProtocolPage({ params }: { params: Promise<{ i
   const peptides = await getPeptideOptions(user.id);
   const prescriptions = await getPrescriptionOptions(user.id);
   const syringes = await getSyringeOptions(user.id);
+  const cycleSuggestions = await cycleSuggestionsFor(peptides);
 
   const initial = {
     id: protocol.id,
@@ -44,6 +46,9 @@ export default async function EditProtocolPage({ params }: { params: Promise<{ i
     startDate: toDateInput(protocol.startDate),
     endDate: toDateInput(protocol.endDate),
     status: protocol.status,
+    cycleOnWeeks: protocol.cycleOnWeeks?.toString() ?? undefined,
+    cycleOffWeeks: protocol.cycleOffWeeks?.toString() ?? undefined,
+    cycleAnchor: toDateInput(protocol.cycleAnchor),
   };
 
   const steps = protocol.steps.map((s) => ({
@@ -58,7 +63,7 @@ export default async function EditProtocolPage({ params }: { params: Promise<{ i
   return (
     <main className="mx-auto max-w-md px-4 py-8 lg:max-w-2xl lg:px-8">
       <h1 className="mb-6 text-3xl font-semibold tracking-tight">Edit protocol</h1>
-      <ProtocolForm peptides={peptides} prescriptions={prescriptions} syringes={syringes} initial={initial} />
+      <ProtocolForm peptides={peptides} prescriptions={prescriptions} syringes={syringes} initial={initial} cycleSuggestions={cycleSuggestions} />
 
       <section className="mt-8">
         <h2 className="mb-3 text-sm font-medium text-muted">Titration steps</h2>

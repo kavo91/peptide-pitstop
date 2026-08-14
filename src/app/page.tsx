@@ -37,6 +37,8 @@ import { APP_VERSION } from "@/lib/version";
 import { PitstopHeading } from "@/components/PitstopHeading";
 import { PAGE_MAIN } from "@/lib/layout";
 import { SignedOutNotice } from "@/components/SignedOutNotice";
+import { CycleBanner } from "@/components/CycleBanner";
+import { getCycleBannerItems } from "@/lib/cycle/server";
 
 export const dynamic = "force-dynamic";
 
@@ -173,13 +175,14 @@ export default async function DashboardPage() {
   wearFrom.setDate(wearFrom.getDate() - 30);
 
   // Cheap data — fetched before render, never delayed by analytics.
-  const [due, logged, reorderItems, journalEntries, wearable, upcomingDose] = await Promise.all([
+  const [due, logged, reorderItems, journalEntries, wearable, upcomingDose, cycleItems] = await Promise.all([
     getTodayDoses(user.id, viewDate, new Date()),
     getLoggedToday(user.id, viewDate),
     getReorderStatus(user.id),
     prisma.journalEntry.findMany({ where: { userId: user.id }, orderBy: { date: "desc" }, take: 30 }),
     getWearableWindow(user.id, wearFrom, viewDate),
     getNextDose(user.id, viewDate),
+    getCycleBannerItems(user.id, viewDate),
   ]);
   const wellness = wellnessTrend(journalEntries, viewDate);
 
@@ -289,6 +292,12 @@ export default async function DashboardPage() {
           <p className="mt-0.5 text-sm text-muted">{dateLabel}</p>
         )}
       </header>
+
+      {/* Cycle prompts — a peptide reaching or passing its planned stop, or a
+          break ending. Full-width above the two-column body so a "stop dosing"
+          prompt can't be pushed below the fold on a wide screen. Renders
+          nothing when there is nothing to say. */}
+      <CycleBanner alerts={cycleItems} />
 
       {/* Ultra-wide two-column body. Below 1900px this wrapper is a plain block
           (no grid classes apply) so the children stack exactly as before:
