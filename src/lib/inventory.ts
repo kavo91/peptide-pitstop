@@ -14,6 +14,7 @@ import { dosesPerWeek } from "@/lib/schedule/frequency";
 import { resolveTitration } from "@/lib/titration/resolve";
 import { buildResolveInput } from "@/lib/titration/from-protocol";
 import { perInjectionDose } from "@/lib/titration/dose-basis";
+import { budStatus, resolveBudDays, type BudState } from "@/lib/bud";
 import type { DoseUnit } from "@/lib/dosing/types";
 
 // Re-export so existing importers (`@/lib/inventory`) keep working after the
@@ -47,6 +48,12 @@ export interface VialView {
   remainingMl: string | null;
   beyondUseDate: string | null;
   beyondUsePassed: boolean;
+  /** ok | approaching (within 3 days) | passed | unknown (no BUD recorded). */
+  budState: BudState;
+  /** Whole days until the BUD; negative once past it. Null when unknown. */
+  budDaysRemaining: number | null;
+  /** Resolved BUD window for this peptide — seeds the recon wizard's default. */
+  budDefaultDays: number;
   remainingDoses: number | null;
   daysLeft: number | null;
   /** For unprepared vials: target dose + syringe to drive the recon wizard preview. */
@@ -219,6 +226,7 @@ export async function getInventory(userId: string, now = new Date()): Promise<Vi
 
     const expiry = v.expiry ? new Date(v.expiry) : null;
     const bud = prep?.beyondUseDate ? new Date(prep.beyondUseDate) : null;
+    const budView = budStatus({ beyondUseDate: bud, now });
 
     return {
       id: v.id,
@@ -236,7 +244,10 @@ export async function getInventory(userId: string, now = new Date()): Promise<Vi
       concentrationMcgPerMl: prep ? prep.concentrationMcgPerMl.toString() : null,
       remainingMl: prep ? prep.remainingMl.toString() : null,
       beyondUseDate: toDateInput(bud),
-      beyondUsePassed: bud ? bud < now : false,
+      beyondUsePassed: budView.state === "passed",
+      budState: budView.state,
+      budDaysRemaining: budView.daysRemaining,
+      budDefaultDays: resolveBudDays({ peptideDefaultBudDays: v.peptide.defaultBudDays }),
       remainingDoses,
       daysLeft,
       recon: prep

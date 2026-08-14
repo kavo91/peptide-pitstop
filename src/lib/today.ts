@@ -10,6 +10,7 @@ import { resolveTitration } from "@/lib/titration/resolve";
 import { buildResolveInput } from "@/lib/titration/from-protocol";
 import { perInjectionDose } from "@/lib/titration/dose-basis";
 import { dosesPerWeek } from "@/lib/schedule/frequency";
+import { budStatus, resolveBudDays, type BudState } from "@/lib/bud";
 import type { ResolvedSlot, PhaseProgress } from "@/lib/titration/types";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { compareStackGrouped, compareTime } from "@/lib/stack-sort";
@@ -62,9 +63,17 @@ export interface DueDose {
    */
   slotKey: string;
   /** Active prep for this peptide, or null if the dry vial isn't reconstituted yet. */
-  preparation: { id: string; concentrationMcgPerMl: string; remainingMl: string } | null;
+  preparation: {
+    id: string;
+    concentrationMcgPerMl: string;
+    remainingMl: string;
+    /** ISO date; drives the beyond-use warning in LogDoseForm. Null when unrecorded. */
+    beyondUseDate: string | null;
+  } | null;
+  /** ok | approaching | passed | unknown, for the badge on the collapsed row. */
+  budState: BudState;
   /** A vial awaiting preparation, when no active prep exists. Drives the recon wizard. */
-  vialForPrep: { id: string; labelStrengthMg: string } | null;
+  vialForPrep: { id: string; labelStrengthMg: string; budDefaultDays: number } | null;
   syringe:
     | { id: string; name: string; graduationType: "units" | "ml"; unitsPerMl: number; capacityMl: string; capacityUnits: number; increment: string }
     | null;
@@ -387,10 +396,22 @@ export async function getTodayDoses(
         doseUnit,
         time: slot.time,
         slotKey: `${p.id}@${slot.time ?? "any"}`,
+        budState: budStatus({ beyondUseDate: prep?.beyondUseDate ?? null, now: new Date() }).state,
         preparation: prep
-          ? { id: prep.id, concentrationMcgPerMl: prep.concentrationMcgPerMl.toString(), remainingMl: prep.remainingMl.toString() }
+          ? {
+              id: prep.id,
+              concentrationMcgPerMl: prep.concentrationMcgPerMl.toString(),
+              remainingMl: prep.remainingMl.toString(),
+              beyondUseDate: prep.beyondUseDate ? prep.beyondUseDate.toISOString() : null,
+            }
           : null,
-        vialForPrep: vialForPrep ? { id: vialForPrep.id, labelStrengthMg: vialForPrep.labelStrengthMg.toString() } : null,
+        vialForPrep: vialForPrep
+          ? {
+              id: vialForPrep.id,
+              labelStrengthMg: vialForPrep.labelStrengthMg.toString(),
+              budDefaultDays: resolveBudDays({ peptideDefaultBudDays: p.peptide.defaultBudDays }),
+            }
+          : null,
         syringe: syringe
           ? {
               id: syringe.id,

@@ -43,7 +43,9 @@ COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 # OpenSSL so Prisma uses the baked musl-openssl-3.0.x engine (no runtime fetch).
 # tzdata so the configured TZ resolves for Python (garmin-sync) + shell, not just Node.
-RUN apk add --no-cache openssl tzdata
+# sqlite so the entrypoint can take a WAL-consistent `.backup` snapshot before
+# running migrations — see the pre-migration snapshot gate in entrypoint.sh.
+RUN apk add --no-cache openssl tzdata sqlite
 RUN chown -R nextjs:nodejs node_modules/.prisma node_modules/@prisma node_modules/prisma
 
 # --- bundled binaries: cloudflared (tunnel) + litestream (backup), both static ---
@@ -68,6 +70,11 @@ RUN chmod +x /entrypoint.sh
 # conventional tradeoff for a single-user self-hosted app on NAS appdata.
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
+# Surfaces app health in `docker ps` (and your NAS UI), so a serving failure is
+# visible without reading logs. start-period covers migrate + snapshot on a cold
+# boot, which can be slow on low-powered ARM hardware.
+HEALTHCHECK --interval=60s --timeout=5s --start-period=120s --retries=3 \
+  CMD wget -qO- "http://127.0.0.1:${PORT:-3000}/api/version" >/dev/null 2>&1 || exit 1
 # Supervisor: migrate → app (critical) + cloudflared + litestream + garmin-sync.
 # cloudflared reads TUNNEL_TOKEN; the named tunnel's "http://app:3000" origin
 # resolves to this container via compose `extra_hosts: app:127.0.0.1`.

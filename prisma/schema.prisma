@@ -96,6 +96,8 @@ model Peptide {
   defaultStrengthMg   Decimal?
   halfLifeHours       Decimal?
   minIntervalHours    Decimal?
+  /// Beyond-use days after reconstitution. Null → global default (28), see lib/bud.ts.
+  defaultBudDays      Int?
   missedDosePolicy    String  @default("prompt") // skip | take_now | prompt
   storageNotes        String?
   route               String  @default("injection") // injection | oral  (oral skips recon/syringe/site)
