@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { startOfDay, addDays } from "@/lib/schedule/schedule";
 import { adherenceOverWindow, heatmapBuckets } from "@/lib/analytics-core";
+import { supersededFrom } from "@/lib/doses-timeline-core";
 import type { AdherenceResult, HeatmapBucket } from "@/lib/analytics-core";
 import type { PlasmaPoint, DosePoint } from "@/lib/plasma";
 import { plasmaCurve } from "@/lib/plasma";
@@ -187,6 +188,8 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
   //   legend and dashed curve show what is scheduled to begin inside the chart
   //   window. A null start date has no future anchor and is treated as current.
   const adherenceProtocols = protocolRows.filter((p) => p.startDate == null || p.startDate <= now);
+  // Where each retired course hands over to its replacement (see supersededFrom).
+  const supersededAt = supersededFrom(protocolRows);
   const plasmaProtocols = protocolRows.filter(
     (p) => p.status === "active" || p.startDate == null || p.startDate <= now,
   );
@@ -295,8 +298,15 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
     }
     if (!resolved) continue;
     const rows = adherenceRowsByPeptide.get(proto.peptideId) ?? [];
+    // A retired course stops where its replacement began: an early-closed
+    // protocol still carries an endDate weeks out, and every slot it emits past
+    // the handover is unloggable (the doses went to the successor) — counted
+    // here they are pure fabricated misses that deflate adherence (prod
+    // Tesamorelin, 2026-08-14). Same stop line the doses timeline uses.
+    const supersededKey = supersededAt.get(proto.id);
     for (const s of resolved.slots) {
       if (s.date < adherenceWindow.from || s.date > adherenceWindow.to) continue; // clip the buffer
+      if (supersededKey && dayKey(s.date) >= supersededKey) continue;
       // Only resolved taken/missed feed the denominator; projected/pending → "planned"
       // (excluded by adherenceOverWindow), skipped → "skipped" (also excluded).
       const status = s.status === "taken" ? "taken" as const

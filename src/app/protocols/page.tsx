@@ -31,6 +31,27 @@ export default async function ProtocolsPage() {
     orderBy: { name: "asc" },
   });
   const today = startOfDay(new Date());
+  // Revisions of one course, oldest first, so each row can link to the protocol
+  // it replaced. The list itself stays flat by design.
+  const byCourse = new Map<string, { id: string; startDate: Date | null }[]>();
+  for (const p of protocols) {
+    const k = p.courseId ?? p.id;
+    const arr = byCourse.get(k) ?? [];
+    arr.push({ id: p.id, startDate: p.startDate });
+    byCourse.set(k, arr);
+  }
+  // Ordered by startDate. Protocol has no createdAt to tiebreak with, so two
+  // revisions of one course that BOTH lack a start date would fall back to query
+  // order. reviseProtocol always sets one on the replacement, so that shape is
+  // not reachable through the revise path — only by hand-editing both rows.
+  for (const arr of byCourse.values()) {
+    arr.sort((a, b) => (a.startDate?.getTime() ?? 0) - (b.startDate?.getTime() ?? 0));
+  }
+  const predecessorOf = (p: { id: string; courseId: string | null }) => {
+    const arr = byCourse.get(p.courseId ?? p.id) ?? [];
+    const i = arr.findIndex((x) => x.id === p.id);
+    return i > 0 ? arr[i - 1] : null;
+  };
   const sortedProtocols = [...protocols].sort((a, b) =>
     compareStackGrouped({
       stackId: a.stackId,
@@ -84,6 +105,21 @@ export default async function ProtocolsPage() {
                     halfLifeHours={p.peptide.halfLifeHours?.toString() ?? null}
                     status={p.status as "active" | "paused" | "completed"}
                   />
+                  {(() => {
+                    // A revision replaced an earlier protocol in the same
+                    // course — link back to the one it superseded. Null for the
+                    // first (and for every unrevised, courseId-less) protocol.
+                    const prev = predecessorOf(p);
+                    if (!prev) return null;
+                    return (
+                      <Link
+                        href={`/protocols/${prev.id}/edit`}
+                        className="mt-1 inline-flex items-center rounded-full bg-line/[0.06] px-2 py-0.5 text-xs text-muted"
+                      >
+                        revised from earlier
+                      </Link>
+                    );
+                  })()}
                   {(() => {
                     // Always-on cycle status (distinct from the dashboard's
                     // banner, which only fires near a boundary). Null when the
