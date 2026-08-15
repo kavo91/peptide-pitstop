@@ -23,6 +23,13 @@
  *         user will run dry — the worse direction to fail for this product.
  *  - R23  Planned off-weeks are NOT skipped. `today.ts` still renders those doses
  *         as due and the user injects them, so the forecast must cost them.
+ *  - R29  IU substances get NO special case. `substanceClass` drives no arithmetic
+ *         anywhere in this app: the strength field is labelled "Strength mg" for
+ *         every peptide, and dose logging, reconstitution and inventory all treat
+ *         "mcg per mL" as strength-units-per-mL. An IU peptide's numbers are
+ *         therefore self-consistent on their own scale, and refusing to forecast
+ *         it made this the ONLY surface that could not answer for HCG or
+ *         Somatropin while the page beside it happily counted their doses.
  */
 import Decimal from "decimal.js";
 import { computeDraw } from "./dosing/engine"; // side effect: Decimal precision 40
@@ -56,7 +63,6 @@ export interface ForecastInput {
   slots: ForecastSlot[];
   containers: ForecastContainer[];
   syringe: Syringe;
-  substanceClass: "mass" | "IU";
   /** False when parseSchedule yields nothing evaluable (R26). */
   scheduleEvaluable: boolean;
   /** Why the slot list stops, when it is not depletion. */
@@ -139,9 +145,6 @@ export function forecastCoverage(input: ForecastInput): ForecastResult {
   // Reporting it as "covered" would manufacture reassurance from missing
   // information — the worst available direction to fail (R3/R26).
   if (!input.scheduleEvaluable || slots.length === 0) return unknown(leadTimeDays);
-
-  // IU substances are never mass-converted (R17; schema: "never auto-convert").
-  if (input.substanceClass === "IU") return unknown(leadTimeDays);
 
   const live: Live[] = input.containers.map((c) => ({
     container: c,

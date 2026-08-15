@@ -2,40 +2,21 @@ import "server-only";
 import { cache } from "react";
 import Decimal from "decimal.js";
 import { prisma } from "@/lib/db";
-import { parseSchedule } from "@/lib/schedule/entries";
-import { startOfDay, addDays } from "@/lib/schedule/schedule";
-import { resolveTitration } from "@/lib/titration/resolve";
-import { buildResolveInput } from "@/lib/titration/from-protocol";
-import { cycleState, cyclePlanEnd } from "@/lib/cycle/state";
+import { startOfDay } from "@/lib/schedule/schedule";
+import { buildForecastPlan, conv1ToLocalDay } from "@/lib/forecast-slots";
 import { resolveBudDays, beyondUseDateFrom } from "@/lib/bud";
 import {
   dayKey,
   forecastCoverage,
   type CoverageBasis,
   type ForecastContainer,
-  type ForecastSlot,
   type ReorderStatus,
 } from "@/lib/reorder-forecast";
 import type { Syringe } from "@/lib/dosing/types";
 
-/**
- * Convention-1 columns (`Protocol.endDate`, `Preparation.beyondUseDate`,
- * `Vial.expiry`) store UTC midnight of a calendar day — see lib/bud.ts. The
- * forecast works in LOCAL calendar days, so those instants are re-read as their
- * own day here, once, at the boundary. Comparing them with a local `startOfDay`
- * instead would shift the day west of UTC and fire every expiry a day early.
- */
-function conv1ToLocalDay(d: Date | null | undefined): Date | null {
-  if (!d) return null;
-  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-}
 
 const DEFAULT_LEAD_DAYS = 14;
 const DEFAULT_BUFFER_DAYS = 3;
-/** How far the walk looks. Bounded by SLOTS, not days — a twice-daily
- *  schedule emits ~730 slots over a year (R17). */
-const HORIZON_DAYS = 365;
-const HORIZON_SLOTS = 800;
 
 /** Fallback syringe when a protocol names none. U-100 is the app-wide default. */
 const DEFAULT_SYRINGE: Syringe = {
@@ -127,79 +108,15 @@ async function loadReorderStatus(userId: string, now = new Date()): Promise<Pept
 
   const results: PeptideReorder[] = [];
   const today = startOfDay(now);
-  // Rebasing reconstructs a WHOLE week; starting the range mid-week hands it a
-  // truncated slot list and it re-anchors already-past grid days forward (R25).
-  const rangeStart = addDays(today, -today.getDay());
 
   for (const proto of protoByPeptide.values()) {
-    const resolved = resolveTitration(
-      buildResolveInput({
-        protocol: proto,
-        deliveredLogs: logsByProtocol.get(proto.id) ?? [],
-        range: { start: rangeStart, end: addDays(today, HORIZON_DAYS) },
-        now,
-      }),
-    );
-
-    // Consume by STATUS, not by date. `date > today` drops today's own unlogged
-    // slot (status "pending") and understates every daily protocol by a dose,
-    // every day (R24).
-    const future: ForecastSlot[] = resolved.slots
-      .filter((s) => s.status === "projected" || s.status === "pending")
-      .map((s) => ({
-        date: s.date,
-        perInjectionValue: s.perInjectionValue,
-        perInjectionUnit: s.perInjectionUnit,
-      }))
-      .slice(0, HORIZON_SLOTS);
-
-    // The cycle gate stops the walk only at a TERMINAL course (R23). Planned
-    // off-weeks are deliberately NOT skipped: nothing else in the app honours
-    // them, so `today.ts` still shows those doses as due and the user takes
-    // them. Skipping them here would overstate coverage on exactly the
-    // protocols this fix targets.
-    const repeats = (proto.cycleOffWeeks ?? 0) > 0;
-    const cyc = cycleState({
-      anchor: proto.cycleAnchor ?? proto.startDate,
-      onWeeks: proto.cycleOnWeeks,
-      offWeeks: proto.cycleOffWeeks,
-      today,
+    // Slot derivation, cycle gating and stop-reason live in forecast-slots.ts so
+    // the inventory page's per-vial figure walks exactly the same schedule.
+    const plan = buildForecastPlan({
+      protocol: proto,
+      deliveredLogs: logsByProtocol.get(proto.id) ?? [],
+      now,
     });
-    // A course with onWeeks but NO offWeeks is terminal: it stops and does not
-    // restart. Gate on that, not on `phase === "ended"` — "ended" only becomes
-    // true AFTER the stop has passed, so gating on it would leave a course
-    // still running toward its planned stop to be walked for a full phantom
-    // year (reporting a 12-month horizon for something that ends in three
-    // weeks). Taking `onCycleEndsOn` in both the "on" and "ended" phases stops
-    // the walk on the right day either way. A repeating course is NOT gated
-    // here: its restart depends on the user manually starting the next cycle,
-    // and its endDate already carries the current cycle's stop (R23).
-    const terminalStop = cyc && !repeats ? cyc.onCycleEndsOn : null;
-    const walked = terminalStop
-      ? future.filter((s) => startOfDay(s.date) <= startOfDay(terminalStop))
-      : future;
-
-    // Why the slot list runs out — carried as data so `covered` can say which.
-    const protoEnd = conv1ToLocalDay(proto.endDate);
-    const planEnd = cyclePlanEnd(proto.cycleAnchor ?? proto.startDate, proto.cycleOnWeeks);
-    const endsOnPlan =
-      protoEnd != null && planEnd != null &&
-      protoEnd.getTime() === startOfDay(planEnd).getTime();
-
-    // The basis must describe why the walk ACTUALLY stopped, not merely what
-    // the protocol says. A course ending in 2028 is only walked for a year, so
-    // claiming "covers doses to 15 Aug 2028" would assert something the
-    // simulation never tested; the same applies once HORIZON_SLOTS truncates a
-    // multi-times-a-day schedule. Both fall back to the horizon claim.
-    const horizonEnd = addDays(today, HORIZON_DAYS);
-    const truncated = future.length >= HORIZON_SLOTS || (protoEnd != null && protoEnd > horizonEnd);
-    const stopReason: CoverageBasis =
-      truncated ? "horizon"
-      : terminalStop || (protoEnd != null && !endsOnPlan) ? "course_end"
-      : endsOnPlan && repeats ? "cycle_end"
-      : protoEnd != null ? "course_end"
-      : "horizon";
-    const courseEndDate = truncated ? null : (terminalStop ?? protoEnd ?? null);
 
     const budDays = resolveBudDays({ peptideDefaultBudDays: proto.peptide.defaultBudDays });
     const vials = vialsByPeptide.get(proto.peptideId) ?? [];
@@ -258,14 +175,12 @@ async function loadReorderStatus(userId: string, now = new Date()): Promise<Pept
       : DEFAULT_SYRINGE;
 
     const r = forecastCoverage({
-      slots: walked,
+      slots: plan.slots,
       containers,
       syringe,
-      substanceClass: proto.peptide.substanceClass === "IU" ? "IU" : "mass",
-      // A rule we cannot parse is a data gap, not comfort (R26).
-      scheduleEvaluable: parseSchedule(proto.scheduleRule).length > 0,
-      stopReason,
-      courseEndDate,
+      scheduleEvaluable: plan.scheduleEvaluable,
+      stopReason: plan.stopReason,
+      courseEndDate: plan.courseEndDate,
       leadTimeDays,
       bufferDays,
       today,
@@ -281,12 +196,12 @@ async function loadReorderStatus(userId: string, now = new Date()): Promise<Pept
       depletionDate: r.depletionDate,
       reorderByDate: r.reorderByDate,
       courseEndDate: r.courseEndDate,
-      phaseToday: cyc?.phase === "on" || cyc?.phase === "off" ? cyc.phase : null,
+      phaseToday: plan.phaseToday,
       // The PROTOCOL has not started — not merely "the next slot is tomorrow".
       // Keying this off the first future slot marked every weekday-only or
       // already-dosed-today protocol as not started.
       notStarted: proto.startDate != null && startOfDay(proto.startDate) > today,
-      firstDoseDate: walked.length > 0 ? dayKey(walked[0].date) : null,
+      firstDoseDate: plan.slots.length > 0 ? dayKey(plan.slots[0].date) : null,
       leadTimeDays: r.leadTimeDays,
     });
   }

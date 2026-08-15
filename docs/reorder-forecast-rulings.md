@@ -96,10 +96,25 @@ subtraction `NaN`, which is falsy, so `||` falls through to the date comparator:
 the order stays deterministic but `reorder_now` quietly loses priority — silent,
 and far harder to notice than a crash.
 
-**R8 — per-vial figures are labelled "at current rate".** `inventory.ts` keeps a
-flat per-vial number answering "how long does THIS vial last at today's cadence".
-It is deliberately not the protocol-aware forecast, and the label says so, so the
-two numbers on the same page cannot be read as the same claim.
+**R8 — SUPERSEDED.** Originally: keep `inventory.ts`'s flat per-vial number and
+label it "at current rate" so it could not be confused with the forecast. That
+was a holding position taken to avoid widening the change while the forecast was
+still unproven. The forecast is now proven, so the per-vial figure walks the same
+slots through `forecastCoverage` with a single container — answering "when does
+THIS vial run out" while honouring course end, cycling, titration and the BUD.
+Both surfaces derive their schedule from `forecast-slots.ts`, which is what stops
+them drifting apart. Labels reverted to "Runs out in" / "Coverage", which are now
+accurate. A vial whose course ends before it does shows "—", not a run-out day it
+will never reach.
+
+**R29 — IU substances get no special case.** `substanceClass` drives no
+arithmetic anywhere in this app: the strength field is labelled "Strength mg" for
+every peptide, and dose logging, reconstitution and inventory all read
+"mcg per mL" as strength-units-per-mL. An IU peptide's numbers are therefore
+self-consistent on their own scale. An earlier blanket refusal made the forecast
+the ONLY surface that could not answer for HCG or Somatropin, while the inventory
+page beside it counted their doses happily. Silence that contradicts the
+neighbouring surface is not caution, it is a second defect.
 
 ## Claims the forecast must not make
 

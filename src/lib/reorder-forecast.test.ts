@@ -51,7 +51,6 @@ function sealed(labelStrengthMg: string): ForecastContainer {
 
 const base = {
   syringe: U100,
-  substanceClass: "mass" as const,
   scheduleEvaluable: true,
   stopReason: "horizon" as const,
   courseEndDate: null,
@@ -186,15 +185,15 @@ describe("forecastCoverage", () => {
     expect(r.status).toBe("unknown");
   });
 
-  // 11 — R17: IU substances are never mass-converted.
-  it("returns unknown for an IU substance", () => {
-    const r = forecastCoverage({
-      ...base,
-      slots: dailySlots(10),
-      containers: [prep("1.2", "5000")],
-      substanceClass: "IU",
-    });
-    expect(r.status).toBe("unknown");
+  // 11 — R29: an IU peptide (HCG, Somatropin) forecasts like any other. Its
+  // numbers live on their own consistent scale, and `substanceClass` drives no
+  // arithmetic anywhere in the app. Refusing it made the tile the only surface
+  // that could not answer while the inventory page counted the same doses.
+  it("forecasts an IU peptide instead of refusing it", () => {
+    // 5000 IU vial reconstituted to 1 mL, 500 IU per dose => 10 doses.
+    const r = forecastCoverage({ ...base, slots: dailySlots(30, "500"), containers: [prep("1.0", "5000")] });
+    expect(r.status).toBe("reorder_now");
+    expect(r.coverageDays).toBe(10);
   });
 
   // 12 — D5: an ml dose cannot be sized against a sealed vial (no concentration).
