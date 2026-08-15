@@ -1,41 +1,78 @@
 import "server-only";
+import { cache } from "react";
 import Decimal from "decimal.js";
 import { prisma } from "@/lib/db";
-import { canonicaliseDose, dosesPerVial } from "@/lib/dosing/engine";
-import { dosesPerWeek } from "@/lib/schedule/frequency";
+import { parseSchedule } from "@/lib/schedule/entries";
+import { startOfDay, addDays } from "@/lib/schedule/schedule";
 import { resolveTitration } from "@/lib/titration/resolve";
 import { buildResolveInput } from "@/lib/titration/from-protocol";
-import { perInjectionDose } from "@/lib/titration/dose-basis";
-import { assessReorder, type ReorderStatus } from "@/lib/reorder-core";
-import type { DoseUnit } from "@/lib/dosing/types";
+import { cycleState, cyclePlanEnd } from "@/lib/cycle/state";
+import { resolveBudDays, beyondUseDateFrom } from "@/lib/bud";
+import {
+  dayKey,
+  forecastCoverage,
+  type CoverageBasis,
+  type ForecastContainer,
+  type ForecastSlot,
+  type ReorderStatus,
+} from "@/lib/reorder-forecast";
+import type { Syringe } from "@/lib/dosing/types";
+
+/**
+ * Convention-1 columns (`Protocol.endDate`, `Preparation.beyondUseDate`,
+ * `Vial.expiry`) store UTC midnight of a calendar day — see lib/bud.ts. The
+ * forecast works in LOCAL calendar days, so those instants are re-read as their
+ * own day here, once, at the boundary. Comparing them with a local `startOfDay`
+ * instead would shift the day west of UTC and fire every expiry a day early.
+ */
+function conv1ToLocalDay(d: Date | null | undefined): Date | null {
+  if (!d) return null;
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
 
 const DEFAULT_LEAD_DAYS = 14;
 const DEFAULT_BUFFER_DAYS = 3;
+/** How far the walk looks. Bounded by SLOTS, not days — a twice-daily
+ *  schedule emits ~730 slots over a year (R17). */
+const HORIZON_DAYS = 365;
+const HORIZON_SLOTS = 800;
+
+/** Fallback syringe when a protocol names none. U-100 is the app-wide default. */
+const DEFAULT_SYRINGE: Syringe = {
+  name: "U-100 1mL",
+  graduationType: "units",
+  unitsPerMl: 100,
+  capacityMl: 1,
+  capacityUnits: 100,
+  increment: 1,
+};
+
+export type { ReorderStatus, CoverageBasis };
 
 export interface PeptideReorder {
   peptideId: string;
   peptideName: string;
   status: ReorderStatus;
   coverageDays: number | null;
+  coverageBasis: CoverageBasis | null;
   depletionDate: string | null;
   reorderByDate: string | null;
+  /** Last scheduled dose the stock covers, when the course has a finite end. */
+  courseEndDate: string | null;
+  /** Cycle phase TODAY. Metadata for the tile — never a status (R1). */
+  phaseToday: "on" | "off" | null;
+  /** True when the protocol's first dose is still in the future. */
+  notStarted: boolean;
+  /** Day of the first scheduled dose ahead, for the "starts 28 Sep" qualifier. */
+  firstDoseDate: string | null;
   leadTimeDays: number;
 }
 
-/** Convert a dose to mcg, or null if its unit can't be mass-resolved (ml/units). */
-function doseToMcg(value: string, unit: DoseUnit): Decimal | null {
-  const v = new Decimal(value);
-  if (unit === "mcg") return v;
-  if (unit === "mg") return v.times(1000);
-  return null; // ml / units → needs concentration; can't size a sealed vial
-}
-
-export async function getReorderStatus(userId: string, now = new Date()): Promise<PeptideReorder[]> {
+async function loadReorderStatus(userId: string, now = new Date()): Promise<PeptideReorder[]> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   const userLead = user?.reorderLeadTimeDays ?? DEFAULT_LEAD_DAYS;
   const bufferDays = user?.reorderBufferDays ?? DEFAULT_BUFFER_DAYS;
 
-  // Peptides with an active protocol (no protocol ⇒ no consumption rate ⇒ skip).
   const protocols = await prisma.protocol.findMany({
     where: { userId, status: "active" },
     include: { peptide: true, steps: true, prescription: true },
@@ -43,8 +80,6 @@ export async function getReorderStatus(userId: string, now = new Date()): Promis
   const protoByPeptide = new Map<string, (typeof protocols)[number]>();
   for (const p of protocols) if (!protoByPeptide.has(p.peptideId)) protoByPeptide.set(p.peptideId, p);
 
-  // The resolver's phase cursor counts delivered doses, so each protocol needs
-  // its full DoseLog history. Loaded once, grouped by protocolId.
   const protocolIds = [...protoByPeptide.values()].map((p) => p.id);
   const logsByProtocol = new Map<string, { id: string; takenAt: Date; localDay: string | null }[]>();
   if (protocolIds.length > 0) {
@@ -60,117 +95,231 @@ export async function getReorderStatus(userId: string, now = new Date()): Promis
     }
   }
 
-  // Most-recent active prescription (with a lead time) per peptide — fallback
-  // when a protocol has no linked prescription.
+  // Standing prescriptions, for the lead-time fallback.
   const standingRx = await prisma.prescription.findMany({
     where: { userId, status: "active", leadTimeDays: { not: null } },
     orderBy: { dateWritten: "desc" },
     select: { peptideId: true, leadTimeDays: true },
   });
   const leadByPeptide = new Map<string, number>();
-  // Skip stack (grouped) prescriptions — they have no single peptide.
   for (const rx of standingRx) if (rx.peptideId && !leadByPeptide.has(rx.peptideId)) leadByPeptide.set(rx.peptideId, rx.leadTimeDays!);
 
+  // All vials for all relevant peptides in ONE query — the per-protocol query
+  // inside the loop was an N+1 (R7).
+  const peptideIds = [...protoByPeptide.keys()];
+  const allVials = peptideIds.length
+    ? await prisma.vial.findMany({
+        where: { userId, peptideId: { in: peptideIds }, status: { in: ["sealed", "in_use"] } },
+        include: { preparations: { where: { active: true }, orderBy: { reconstitutedAt: "desc" }, take: 1 } },
+      })
+    : [];
+  const vialsByPeptide = new Map<string, typeof allVials>();
+  for (const v of allVials) {
+    const arr = vialsByPeptide.get(v.peptideId) ?? [];
+    arr.push(v);
+    vialsByPeptide.set(v.peptideId, arr);
+  }
+
+  // Syringes: `Protocol.defaultSyringeId` is a bare column with no Prisma
+  // relation, so it is resolved by lookup — same pattern as inventory.ts:141.
+  const syringes = await prisma.syringe.findMany({ where: { OR: [{ userId }, { userId: null }] } });
+  const syringeById = new Map(syringes.map((s) => [s.id, s]));
+
   const results: PeptideReorder[] = [];
+  const today = startOfDay(now);
+  // Rebasing reconstructs a WHOLE week; starting the range mid-week hands it a
+  // truncated slot list and it re-anchors already-past grid days forward (R25).
+  const rangeStart = addDays(today, -today.getDay());
 
   for (const proto of protoByPeptide.values()) {
-    // Current per-injection dose via the single source of truth (same as
-    // inventory.ts). This {value,unit} feeds BOTH the in-use prep volume path
-    // (canonicaliseDose) and the sealed-vial mass path (doseToMcg) — neither
-    // may read a raw step.dose/targetDose, or a per_week weekly value would
-    // size the vial estimate 7×–365× too low (spec §6).
     const resolved = resolveTitration(
       buildResolveInput({
         protocol: proto,
         deliveredLogs: logsByProtocol.get(proto.id) ?? [],
-        range: { start: now, end: now },
+        range: { start: rangeStart, end: addDays(today, HORIZON_DAYS) },
         now,
       }),
     );
-    const slot = resolved.slots[0] ?? null;
-    let doseValue: string | null;
-    let doseUnit: DoseUnit;
-    if (slot) {
-      doseValue = slot.perInjectionValue;
-      doseUnit = slot.perInjectionUnit;
-    } else {
-      // No slot for `now`: fall back to the protocol target, but still divide a
-      // per_week target to per-injection so neither vial path sees a raw weekly.
-      doseUnit = (proto.doseInputUnit as DoseUnit) ?? "mcg";
-      if (proto.targetDose == null) {
-        doseValue = null;
-      } else {
-        const per = perInjectionDose({
-          doseBasis: proto.doseBasis === "per_week" ? "per_week" : "per_injection",
-          value: proto.targetDose.toString(),
-          unit: doseUnit,
-          injectionsPerWeek: dosesPerWeek(proto.scheduleRule),
-        });
-        doseValue = per ? per.value : proto.targetDose.toString();
-        if (per) doseUnit = per.unit;
-      }
-    }
 
-    // Lead time: linked prescription → standing prescription → user default.
+    // Consume by STATUS, not by date. `date > today` drops today's own unlogged
+    // slot (status "pending") and understates every daily protocol by a dose,
+    // every day (R24).
+    const future: ForecastSlot[] = resolved.slots
+      .filter((s) => s.status === "projected" || s.status === "pending")
+      .map((s) => ({
+        date: s.date,
+        perInjectionValue: s.perInjectionValue,
+        perInjectionUnit: s.perInjectionUnit,
+      }))
+      .slice(0, HORIZON_SLOTS);
+
+    // The cycle gate stops the walk only at a TERMINAL course (R23). Planned
+    // off-weeks are deliberately NOT skipped: nothing else in the app honours
+    // them, so `today.ts` still shows those doses as due and the user takes
+    // them. Skipping them here would overstate coverage on exactly the
+    // protocols this fix targets.
+    const repeats = (proto.cycleOffWeeks ?? 0) > 0;
+    const cyc = cycleState({
+      anchor: proto.cycleAnchor ?? proto.startDate,
+      onWeeks: proto.cycleOnWeeks,
+      offWeeks: proto.cycleOffWeeks,
+      today,
+    });
+    // A course with onWeeks but NO offWeeks is terminal: it stops and does not
+    // restart. Gate on that, not on `phase === "ended"` — "ended" only becomes
+    // true AFTER the stop has passed, so gating on it would leave a course
+    // still running toward its planned stop to be walked for a full phantom
+    // year (reporting a 12-month horizon for something that ends in three
+    // weeks). Taking `onCycleEndsOn` in both the "on" and "ended" phases stops
+    // the walk on the right day either way. A repeating course is NOT gated
+    // here: its restart depends on the user manually starting the next cycle,
+    // and its endDate already carries the current cycle's stop (R23).
+    const terminalStop = cyc && !repeats ? cyc.onCycleEndsOn : null;
+    const walked = terminalStop
+      ? future.filter((s) => startOfDay(s.date) <= startOfDay(terminalStop))
+      : future;
+
+    // Why the slot list runs out — carried as data so `covered` can say which.
+    const protoEnd = conv1ToLocalDay(proto.endDate);
+    const planEnd = cyclePlanEnd(proto.cycleAnchor ?? proto.startDate, proto.cycleOnWeeks);
+    const endsOnPlan =
+      protoEnd != null && planEnd != null &&
+      protoEnd.getTime() === startOfDay(planEnd).getTime();
+
+    // The basis must describe why the walk ACTUALLY stopped, not merely what
+    // the protocol says. A course ending in 2028 is only walked for a year, so
+    // claiming "covers doses to 15 Aug 2028" would assert something the
+    // simulation never tested; the same applies once HORIZON_SLOTS truncates a
+    // multi-times-a-day schedule. Both fall back to the horizon claim.
+    const horizonEnd = addDays(today, HORIZON_DAYS);
+    const truncated = future.length >= HORIZON_SLOTS || (protoEnd != null && protoEnd > horizonEnd);
+    const stopReason: CoverageBasis =
+      truncated ? "horizon"
+      : terminalStop || (protoEnd != null && !endsOnPlan) ? "course_end"
+      : endsOnPlan && repeats ? "cycle_end"
+      : protoEnd != null ? "course_end"
+      : "horizon";
+    const courseEndDate = truncated ? null : (terminalStop ?? protoEnd ?? null);
+
+    const budDays = resolveBudDays({ peptideDefaultBudDays: proto.peptide.defaultBudDays });
+    const vials = vialsByPeptide.get(proto.peptideId) ?? [];
+    const containers: (ForecastContainer & { openedAt: number })[] = vials.map((v) => {
+      const p = v.preparations[0] ?? null;
+      if (p) {
+        return {
+          openedAt: p.reconstitutedAt.getTime(),
+          kind: "prep" as const,
+          poolMl: new Decimal(p.remainingMl.toString()),
+          concentrationMcgPerMl: new Decimal(p.concentrationMcgPerMl.toString()),
+          poolMcg: null,
+          // `beyondUseDate` is null whenever the user left the field blank at
+          // reconstitution (actions/reconstitution.ts:79) — and a null here
+          // means "no limit" to the walk, which reintroduces exactly the
+          // year-long drain of a single prep that R11 exists to stop. Fall back
+          // to the same resolved BUD window the rest of the app uses.
+          usableUntil:
+            conv1ToLocalDay(p.beyondUseDate) ??
+            conv1ToLocalDay(beyondUseDateFrom(p.reconstitutedAt, budDays)),
+        };
+      }
+      return {
+        openedAt: 0,
+        kind: "sealed" as const,
+        poolMl: null,
+        concentrationMcgPerMl: null,
+        poolMcg: new Decimal(v.labelStrengthMg.toString()).times(1000),
+        usableUntil: conv1ToLocalDay(v.expiry),
+      };
+    });
+    // Open preps first (newest reconstitution first), then sealed — the order
+    // the logger actually picks (today.ts takes the newest active prep across
+    // the peptide). The DB returns vials unordered, so without this explicit
+    // sort a peptide with two open preps would be walked in arbitrary order —
+    // and drawing the SOONER-EXPIRING prep first harvests doses that would in
+    // reality be stranded past its BUD, overstating coverage (R15).
+    containers.sort((a, b) =>
+      a.kind === b.kind ? b.openedAt - a.openedAt : a.kind === "prep" ? -1 : 1,
+    );
+
     const leadTimeDays = proto.prescriptionId
       ? (proto.prescription?.leadTimeDays ?? userLead)
       : (leadByPeptide.get(proto.peptideId) ?? userLead);
 
-    // Aggregate doses across this peptide's non-finished vials.
-    const vials = await prisma.vial.findMany({
-      where: { userId, peptideId: proto.peptideId, status: { in: ["sealed", "in_use"] } },
-      include: { preparations: { where: { active: true }, orderBy: { reconstitutedAt: "desc" }, take: 1 } },
+    const syr = proto.defaultSyringeId ? syringeById.get(proto.defaultSyringeId) : null;
+    const syringe: Syringe = syr
+      ? {
+          name: syr.name,
+          graduationType: syr.graduationType as "units" | "ml",
+          unitsPerMl: syr.unitsPerMl,
+          capacityMl: Number(syr.capacityMl.toString()),
+          capacityUnits: syr.capacityUnits,
+          increment: Number(syr.increment.toString()),
+        }
+      : DEFAULT_SYRINGE;
+
+    const r = forecastCoverage({
+      slots: walked,
+      containers,
+      syringe,
+      substanceClass: proto.peptide.substanceClass === "IU" ? "IU" : "mass",
+      // A rule we cannot parse is a data gap, not comfort (R26).
+      scheduleEvaluable: parseSchedule(proto.scheduleRule).length > 0,
+      stopReason,
+      courseEndDate,
+      leadTimeDays,
+      bufferDays,
+      today,
+      budDaysForSealed: budDays,
     });
 
-    let totalDoses: number | null = null;
-    if (doseValue) {
-      let sum = 0;
-      let computable = true;
-      for (const v of vials) {
-        const prep = v.preparations[0] ?? null;
-        if (prep) {
-          // In-use prep: volume-based, works for any dose unit.
-          try {
-            const { volumeMl } = canonicaliseDose({
-              dose: { value: doseValue, unit: doseUnit },
-              preparation: { prepType: prep.prepType as "reconstituted" | "premixed", concentrationMcgPerMl: new Decimal(prep.concentrationMcgPerMl.toString()) },
-              syringe: { name: "", graduationType: "units", unitsPerMl: 100, capacityMl: 1, capacityUnits: 100, increment: 1 },
-            });
-            if (volumeMl.gt(0)) {
-              sum += dosesPerVial({ totalVolumeMl: prep.remainingMl.toString(), doseVolumeMl: volumeMl.toString() }).toNumber();
-            } else { computable = false; }
-          } catch { computable = false; }
-        } else {
-          // Sealed vial: mass-based estimate (independent of dilution).
-          const doseMcg = doseToMcg(doseValue, doseUnit);
-          if (!doseMcg || doseMcg.lte(0)) { computable = false; }
-          else {
-            const vialMcg = new Decimal(v.labelStrengthMg.toString()).times(1000);
-            sum += vialMcg.div(doseMcg).floor().toNumber();
-          }
-        }
-      }
-      totalDoses = computable ? sum : null;
-    }
-
-    const perWeek = dosesPerWeek(proto.scheduleRule);
-    const r = assessReorder({ totalDoses, dosesPerWeek: perWeek, leadTimeDays, bufferDays, today: now });
     results.push({
       peptideId: proto.peptideId,
       peptideName: proto.peptide.name,
       status: r.status,
       coverageDays: r.coverageDays,
+      coverageBasis: r.coverageBasis,
       depletionDate: r.depletionDate,
       reorderByDate: r.reorderByDate,
+      courseEndDate: r.courseEndDate,
+      phaseToday: cyc?.phase === "on" || cyc?.phase === "off" ? cyc.phase : null,
+      // The PROTOCOL has not started — not merely "the next slot is tomorrow".
+      // Keying this off the first future slot marked every weekday-only or
+      // already-dosed-today protocol as not started.
+      notStarted: proto.startDate != null && startOfDay(proto.startDate) > today,
+      firstDoseDate: walked.length > 0 ? dayKey(walked[0].date) : null,
       leadTimeDays: r.leadTimeDays,
     });
   }
 
-  // reorder_now first, then soonest reorderByDate, then name.
-  const rank: Record<ReorderStatus, number> = { reorder_now: 0, ok: 1, unknown: 2 };
+  // reorder_now first, then soonest reorderByDate, then name. Adding a status
+  // to ReorderStatus is a COMPILE error here until this map is updated — the
+  // good failure mode. Never soften it to Partial<Record<…>>: a missing key
+  // makes `rank[a] - rank[b]` NaN, which is falsy, so `||` silently falls
+  // through to the date comparator — the order stays deterministic but
+  // reorder_now quietly loses its priority, which is far harder to notice
+  // than a crash (R6).
+  const rank: Record<ReorderStatus, number> = { reorder_now: 0, ok: 1, covered: 2, unknown: 3 };
   return results.sort((a, b) =>
     rank[a.status] - rank[b.status] ||
     (a.reorderByDate ?? "9999").localeCompare(b.reorderByDate ?? "9999") ||
     a.peptideName.localeCompare(b.peptideName),
   );
 }
+
+/**
+ * Request-scoped memo (R7). Each of the three call sites currently invokes this
+ * once per request, so today this is insurance rather than a saving — `cache()`
+ * dedupes WITHIN one render pass, never across requests. It earns its place the
+ * moment a second component on the same page needs the data.
+ *
+ * The `typeof` guard is not defensive noise: `react`'s `cache` only exists
+ * under the `react-server` condition, so a bare `cache(...)` at module scope
+ * throws "cache is not a function" the moment anything imports this file
+ * outside an RSC render — including every unit test and offline replay. The
+ * guard keeps request-level dedupe in the app and keeps the module importable.
+ */
+export const getReorderStatus: typeof loadReorderStatus =
+  typeof cache === "function" ? cache(loadReorderStatus) : loadReorderStatus;
+
+/** Uncached seam for tests and offline replays. */
+export const getReorderStatusUncached = loadReorderStatus;

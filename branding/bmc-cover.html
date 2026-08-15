@@ -1,0 +1,109 @@
+<!doctype html>
+<!--
+  Peptide Pitstop — Buy Me a Coffee cover (source).
+  Rebuild with ./build-cover.sh (fetches the Teko font, renders via headless Chrome).
+  Canvas is 1000x250 (4:1); the build renders at 3x -> 3000x750.
+
+  Layout is "title-safe": the essential lockup (kicker / wordmark / tagline) is
+  centred horizontally in the middle ~60% and kept in the top-centre band, so it
+  survives BMC's responsive crop — wide viewports crop top/bottom, narrow ones
+  crop ~12% off each side, and the profile cards overlap the bottom-centre.
+  Decorative streaks / cup / checkered edge bleed to the edges where crop is safe.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@font-face{
+  font-family:'Teko';
+  src:url('./Teko.ttf') format('truetype');
+  font-weight:300 700; font-display:block;
+}
+:root{
+  --carbon:#0E0F12; --ink:#EDEFF2; --muted:#9AA1AA;
+  --orange:#FF5B14; --orange-lt:#FF7A3D; --cyan:#00E5FF; --hiviz:#E8FF3A;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:var(--carbon)}
+.canvas{
+  width:1000px;height:250px;position:relative;overflow:hidden;
+  background:radial-gradient(120% 150% at 50% 34%,#1b1e24 0%,#0E0F12 60%);
+  color:var(--ink);font-family:-apple-system,'SF Pro Text',system-ui,sans-serif;
+}
+.teko{font-family:'Teko',sans-serif;font-weight:600;line-height:.8}
+.weave{position:absolute;inset:0;opacity:.28;
+  background-image:
+   linear-gradient(135deg,rgba(255,255,255,.035) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.035) 50%,rgba(255,255,255,.035) 75%,transparent 75%),
+   linear-gradient(45deg,rgba(0,0,0,.28) 25%,transparent 25%,transparent 50%,rgba(0,0,0,.28) 50%,rgba(0,0,0,.28) 75%,transparent 75%);
+  background-size:6px 6px,6px 6px;}
+.topline{position:absolute;top:0;left:0;width:100%;height:4px;
+  background:linear-gradient(90deg,transparent,var(--orange) 30%,var(--orange-lt) 50%,var(--orange) 70%,transparent)}
+
+/* decorative streaks — mirrored both sides so any side-crop looks intentional */
+.streak{position:absolute;top:-40px;height:330px;transform:skewX(-18deg);border-radius:3px}
+.rA{right:96px;width:60px;background:linear-gradient(180deg,var(--orange-lt),var(--orange))}
+.rB{right:74px;width:26px;background:var(--orange);opacity:.5}
+.rC{right:52px;width:14px;background:var(--cyan);opacity:.28}
+.lA{left:70px;width:44px;background:linear-gradient(180deg,var(--orange),var(--orange-lt));opacity:.75}
+.lB{left:52px;width:20px;background:var(--orange);opacity:.4}
+.lC{left:36px;width:11px;background:var(--cyan);opacity:.22}
+
+/* coffee cup — right, decorative (safe to partially crop on narrow) */
+.cup{position:absolute;right:96px;top:50%;transform:translateY(-50%);
+  filter:drop-shadow(0 6px 16px rgba(0,0,0,.45))}
+.flag{position:absolute;right:0;top:0;width:20px;height:250px;
+  background:repeating-conic-gradient(#EDEFF2 0% 25%, #0E0F12 0% 50%);
+  background-size:11px 11px;opacity:.85}
+.flagedge{position:absolute;right:20px;top:0;width:3px;height:250px;background:var(--orange)}
+
+/* ---- CENTRED title-safe lockup ---- */
+.lock{position:absolute;left:50%;top:47px;transform:translateX(-50%);
+  width:640px;text-align:center}
+.kick{font-size:12px;letter-spacing:4.5px;font-weight:800;text-transform:uppercase;
+  color:var(--hiviz);margin-bottom:7px}
+.kick .dot{color:var(--muted);margin:0 7px}
+/* Wordmark matches the peptidepitstop.com hero lockup: PEPTIDE / PITSTOP
+   in ink with an orange (--accent) slash separator. */
+.wm{white-space:nowrap}
+.wm span{font-size:74px;letter-spacing:1px}
+.wm .p1,.wm .p2{color:var(--ink)}
+.wm .sl{color:var(--orange);margin:0 3px}
+.rule{margin:12px auto 0;width:120px;height:3px;
+  background:linear-gradient(90deg,transparent,var(--orange),transparent);border-radius:2px}
+.tag{margin-top:9px;font-size:13px;letter-spacing:2px;font-weight:600;
+  text-transform:uppercase;color:var(--ink)}
+.tag b{color:var(--orange-lt);font-weight:700}
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="weave"></div>
+  <div class="topline"></div>
+
+  <span class="streak lC"></span><span class="streak lB"></span><span class="streak lA"></span>
+  <span class="streak rC"></span><span class="streak rB"></span><span class="streak rA"></span>
+
+  <svg class="cup" width="150" height="150" viewBox="0 0 168 168">
+    <g fill="none" stroke-linecap="round" stroke-width="5" opacity=".95">
+      <path d="M60 44 C60 34 50 32 50 22 C50 14 58 12 58 4" stroke="#FF7A3D"/>
+      <path d="M84 44 C84 34 74 32 74 22 C74 14 82 12 82 4" stroke="#E8FF3A"/>
+      <path d="M108 44 C108 34 98 32 98 22 C98 14 106 12 106 4" stroke="#00E5FF" opacity=".8"/>
+    </g>
+    <path d="M30 58 h78 v42 a32 32 0 0 1 -32 32 h-14 a32 32 0 0 1 -32 -32 z"
+          fill="none" stroke="#EDEFF2" stroke-width="7"/>
+    <path d="M108 66 h15 a18 18 0 0 1 0 36 h-11" fill="none" stroke="#EDEFF2" stroke-width="7"/>
+    <ellipse cx="69" cy="58" rx="39" ry="7.5" fill="#FF5B14" opacity=".9"/>
+    <path d="M20 146 h98" stroke="#EDEFF2" stroke-width="6" stroke-linecap="round" opacity=".55"/>
+  </svg>
+
+  <div class="flag"></div><div class="flagedge"></div>
+
+  <div class="lock">
+    <div class="kick">Support the build<span class="dot">·</span>Buy me a coffee</div>
+    <div class="wm teko"><span class="p1">PEPTIDE</span><span class="sl">/</span><span class="p2">PITSTOP</span></div>
+    <div class="rule"></div>
+    <div class="tag">Fuel the <b>team</b></div>
+  </div>
+</div>
+</body>
+</html>

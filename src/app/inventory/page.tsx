@@ -53,7 +53,7 @@ function PreparedVial({ v, pit }: { v: VialView; pit?: boolean }) {
           <dd className="font-medium tabular-nums">{v.remainingDoses != null ? `~${v.remainingDoses}` : "—"}</dd>
         </div>
         <div>
-          <dt className="text-xs text-muted">Runs out in</dt>
+          <dt className="text-xs text-muted">At current rate</dt>
           <dd className={`font-medium tabular-nums ${low ? "text-warn" : ""}`}>{v.daysLeft != null ? `~${v.daysLeft} days` : "—"}</dd>
         </div>
       </dl>
@@ -208,7 +208,7 @@ export default async function InventoryPage() {
               </div>
               <div className="rounded-card bg-surface p-3 ring-1 ring-line/10">
                 <div className="font-mono text-lg font-semibold tabular-nums">{coverage}</div>
-                <div className="uppercase text-[8.5px] tracking-[0.14em] text-muted">Coverage</div>
+                <div className="uppercase text-[8.5px] tracking-[0.14em] text-muted">Cover at rate</div>
               </div>
             </div>
           </section>

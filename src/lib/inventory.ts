@@ -216,6 +216,12 @@ export async function getInventory(userId: string, now = new Date()): Promise<Vi
             totalVolumeMl: prep.remainingMl.toString(),
             doseVolumeMl: volumeMl.toString(),
           }).toNumber();
+          // DELIBERATELY a flat "at current rate" figure, per-vial — NOT the
+          // protocol-aware forecast behind the reorder tile (lib/reorder.ts).
+          // This one answers "how long does THIS vial last at today's cadence",
+          // which is why it ignores course end, cycling and titration. The UI
+          // labels it "At current rate" so the two numbers cannot be read as
+          // the same claim. See the R8 ruling in docs/reorder-forecast-rulings.md.
           const perWeek = dosesPerWeek(proto?.scheduleRule);
           if (perWeek && perWeek > 0) daysLeft = Math.round((remainingDoses / perWeek) * 7);
         }
