@@ -3,18 +3,27 @@
  * depletion forecast (remaining doses / days left), and the data the recon
  * wizard needs to prepare an unopened vial. Server-side (reads DB).
  *
- * Depletion is derived, never stored: remainingDoses = floor(remainingMl /
- * per-dose volume), where per-dose volume comes from the peptide's active
- * protocol (titration-aware). All maths is decimal via the dosing engine.
+ * Depletion is derived, never stored. `remainingDoses` answers "how many doses
+ * of THIS vial are left at the current dose"; `daysLeft` answers "when does this
+ * vial run out", and walks the protocol's real future slots through
+ * `forecastCoverage` — so it honours course end, cycling, titration and the
+ * beyond-use date exactly as the reorder tile does. The two surfaces share
+ * `forecast-slots.ts` so they cannot drift apart: this page previously carried a
+ * flat `remainingDoses / dosesPerWeek * 7` estimate and printed it beside the
+ * protocol-aware one, which meant the same page gave two different answers to
+ * what a reader takes to be the same question. All maths is decimal.
  */
 import Decimal from "decimal.js";
 import { prisma } from "@/lib/db";
-import { canonicaliseDose, dosesPerVial } from "@/lib/dosing/engine";
+import { canonicaliseDose, computeDraw, dosesPerVial } from "@/lib/dosing/engine";
 import { dosesPerWeek } from "@/lib/schedule/frequency";
+import { startOfDay } from "@/lib/schedule/schedule";
 import { resolveTitration } from "@/lib/titration/resolve";
 import { buildResolveInput } from "@/lib/titration/from-protocol";
 import { perInjectionDose } from "@/lib/titration/dose-basis";
-import { budStatus, resolveBudDays, type BudState } from "@/lib/bud";
+import { budStatus, resolveBudDays, beyondUseDateFrom, type BudState } from "@/lib/bud";
+import { buildForecastPlan, conv1ToLocalDay } from "@/lib/forecast-slots";
+import { forecastCoverage, type ForecastContainer } from "@/lib/reorder-forecast";
 import type { DoseUnit } from "@/lib/dosing/types";
 
 // Re-export so existing importers (`@/lib/inventory`) keep working after the
@@ -212,12 +221,72 @@ export async function getInventory(userId: string, now = new Date()): Promise<Vi
           },
         });
         if (volumeMl.gt(0)) {
-          remainingDoses = dosesPerVial({
-            totalVolumeMl: prep.remainingMl.toString(),
-            doseVolumeMl: volumeMl.toString(),
-          }).toNumber();
-          const perWeek = dosesPerWeek(proto?.scheduleRule);
-          if (perWeek && perWeek > 0) daysLeft = Math.round((remainingDoses / perWeek) * 7);
+          // Count what the LOGGER will actually draw — the syringe-rounded
+          // volume `actions/doses.ts` decrements — not the nominal volume, so
+          // "doses left" and "runs out in" on the same row cannot disagree
+          // (R14). canonicaliseDose above stays as the >0 sanity gate.
+          const drawn = computeDraw({
+            dose: { value: dose.value, unit: dose.unit },
+            preparation: {
+              prepType: prep.prepType as "reconstituted" | "premixed",
+              concentrationMcgPerMl: new Decimal(prep.concentrationMcgPerMl.toString()),
+            },
+            syringe: {
+              name: "",
+              graduationType: "units",
+              unitsPerMl: syr?.unitsPerMl ?? 100,
+              capacityMl: 1,
+              capacityUnits: 100,
+              increment: 1,
+            },
+          }).deliveredVolumeMl;
+          remainingDoses = drawn.gt(0)
+            ? dosesPerVial({
+                totalVolumeMl: prep.remainingMl.toString(),
+                doseVolumeMl: drawn.toString(),
+              }).toNumber()
+            : null;
+          // Walk this vial alone through the same forecast the reorder tile
+          // uses. Feeding it a single container answers the per-vial question
+          // ("when does THIS vial run out") while still honouring course end,
+          // cycling, titration and the BUD — none of which the previous flat
+          // `remainingDoses / perWeek * 7` could see.
+          if (proto) {
+            const budDays = resolveBudDays({ peptideDefaultBudDays: v.peptide.defaultBudDays });
+            const plan = buildForecastPlan({ protocol: proto, deliveredLogs: logsByProtocol.get(proto.id) ?? [], now });
+            const container: ForecastContainer = {
+              kind: "prep",
+              poolMl: new Decimal(prep.remainingMl.toString()),
+              concentrationMcgPerMl: new Decimal(prep.concentrationMcgPerMl.toString()),
+              poolMcg: null,
+              usableUntil:
+                conv1ToLocalDay(prep.beyondUseDate) ??
+                conv1ToLocalDay(beyondUseDateFrom(prep.reconstitutedAt, budDays)),
+            };
+            const f = forecastCoverage({
+              slots: plan.slots,
+              containers: [container],
+              syringe: {
+                name: "",
+                graduationType: "units",
+                unitsPerMl: syr?.unitsPerMl ?? 100,
+                capacityMl: 1,
+                capacityUnits: 100,
+                increment: 1,
+              },
+              scheduleEvaluable: plan.scheduleEvaluable,
+              stopReason: plan.stopReason,
+              courseEndDate: plan.courseEndDate,
+              leadTimeDays: 0,
+              bufferDays: 0,
+              today: startOfDay(now),
+              budDaysForSealed: budDays,
+            });
+            // `covered` means the course stops before this vial does, so there
+            // is no run-out day to show — null renders as "—" rather than a
+            // number the vial will never actually reach.
+            daysLeft = f.status === "covered" || f.status === "unknown" ? null : f.coverageDays;
+          }
         }
       } catch {
         /* leave nulls on any math edge */

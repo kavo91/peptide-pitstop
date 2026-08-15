@@ -10,6 +10,7 @@
  *     bar (orange when urgent, line/30 otherwise).
  */
 import Link from "next/link";
+import { supplyLine, supplySuffix, supplyAriaLabel } from "@/lib/reorder-copy";
 import type { PeptideReorder } from "@/lib/reorder";
 
 interface Props {
@@ -34,7 +35,7 @@ export function SupplyTile({ item, design }: Props) {
 
   if (pit) {
     return (
-      <Link href="/inventory" className="block h-full">
+      <Link href="/inventory" className="block h-full" aria-label={supplyAriaLabel(item.peptideName, item)}>
         <div
           className={`relative flex h-full flex-col overflow-hidden rounded-card p-4 pb-5 ring-1 shadow-sm ${
             urgent ? "bg-warn/10 ring-warn/20" : "bg-surface ring-line/10"
@@ -64,7 +65,7 @@ export function SupplyTile({ item, design }: Props) {
           <p className="flex items-center gap-1.5 truncate text-[11px] tabular-nums text-muted" style={{ fontFamily: "var(--font-mono), monospace" }}>
             <span className="h-1 w-1 shrink-0 rounded-full" style={{ background: urgent ? "rgb(var(--accent))" : "rgb(var(--muted))" }} aria-hidden />
             <span className="truncate text-ink">{item.peptideName}</span>
-            <span className="shrink-0">· soonest</span>
+            <span className="shrink-0">· {supplySuffix(item)}</span>
           </p>
           <span className={`absolute inset-x-0 bottom-0 h-[3px] ${urgent ? "bg-accent" : "bg-line/30"}`} aria-hidden />
         </div>
@@ -74,18 +75,12 @@ export function SupplyTile({ item, design }: Props) {
 
   // current design — unchanged.
   return (
-    <Link href="/inventory" className="block h-full">
+    <Link href="/inventory" className="block h-full" aria-label={supplyAriaLabel(item.peptideName, item)}>
       <div className={`flex h-full flex-col gap-1 rounded-card p-4 ring-1 shadow-sm ${urgent ? "bg-warn/10 ring-warn/20" : "bg-surface ring-line/10"}`}>
         <p className={`text-xs font-medium ${urgent ? "text-warn" : "text-muted"}`}>Supply</p>
         <p className={`font-medium ${urgent ? "text-warn" : "text-ink"}`}>{item.peptideName}</p>
         <p className={`text-xs ${urgent ? "text-warn" : "text-muted"}`}>
-          {urgent
-            ? "Reorder now"
-            : item.reorderByDate
-              ? `Reorder by ${item.reorderByDate}`
-              : item.coverageDays != null
-                ? `~${item.coverageDays} days remaining`
-                : "Coverage unknown"}
+          {supplyLine(item)}
         </p>
       </div>
     </Link>
