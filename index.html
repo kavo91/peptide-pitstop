@@ -1,0 +1,1135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Self-Hosted Peptide Tracker, Open Source · Peptide Pitstop</title>
+<meta name="description" content="Free, open-source, self-hosted peptide & GLP-1 tracker. Reconstitution math, dose logging, titration stacks, bloodwork, plasma modelling. One Docker container, no telemetry." />
+<meta property="og:title" content="Peptide Pitstop — Free, self-hosted peptide & GLP-1 tracker" />
+<meta property="og:description" content="Open-source, self-hosted tracker for peptide & GLP-1 therapy. Reconstitution math, titration stacks, bloodwork trends, plasma modelling. Docker, PWA, AES-256, no telemetry." />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="https://peptidepitstop.com/public/icons/icon-pitstop-512.png" />
+<link rel="icon" type="image/svg+xml" href="public/icons/icon-pitstop.svg" />
+<link rel="icon" type="image/png" sizes="192x192" href="public/icons/icon-pitstop-192.png" />
+<link rel="apple-touch-icon" href="public/icons/apple-touch-icon-pitstop.png" />
+<link rel="canonical" href="https://peptidepitstop.com/" />
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+<meta name="theme-color" content="#121211" />
+<meta property="og:site_name" content="Peptide Pitstop" />
+<meta property="og:url" content="https://peptidepitstop.com/" />
+<meta property="og:locale" content="en_US" />
+<meta property="og:image:alt" content="Peptide Pitstop self-hosted dashboard showing the dose log and adherence heatmap" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Peptide Pitstop — Free, self-hosted peptide & GLP-1 tracker" />
+<meta name="twitter:description" content="Open-source, self-hosted tracker for peptide & GLP-1 therapy. Reconstitution math, titration stacks, bloodwork trends, plasma modelling. Docker, PWA, AES-256, no telemetry." />
+<meta name="twitter:image" content="https://peptidepitstop.com/public/icons/icon-pitstop-512.png" />
+<meta name="twitter:image:alt" content="Peptide Pitstop self-hosted dashboard showing the dose log and adherence heatmap" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": ["SoftwareApplication", "WebApplication"],
+  "name": "Peptide Pitstop",
+  "url": "https://peptidepitstop.com/",
+  "description": "Free, open-source, self-hosted web app for tracking peptide and GLP-1 therapy: reconstitution and draw-volume math, dose logging, titration stacks, bloodwork trends, single-compartment plasma-level modelling and an adherence heatmap. Deploys as one Docker container, installs as a PWA, encrypts data with AES-256-GCM, and sends no telemetry.",
+  "image": "https://peptidepitstop.com/public/icons/icon-pitstop-512.png",
+  "applicationCategory": "HealthApplication",
+  "applicationSubCategory": "Self-hosted peptide & GLP-1 therapy tracker",
+  "operatingSystem": "Web browser (Chrome, Firefox, Safari, Edge); self-hosted via Docker on Linux, Windows, macOS",
+  "browserRequirements": "Requires JavaScript. Modern browser. Installable as a PWA.",
+  "softwareVersion": "1.9.1",
+  "isAccessibleForFree": true,
+  "license": "https://github.com/kavo91/peptide-pitstop/blob/main/LICENSE",
+  "downloadUrl": "https://github.com/kavo91/peptide-pitstop",
+  "softwareHelp": "https://github.com/kavo91/peptide-pitstop#readme",
+  "featureList": [
+    "Reconstitution & draw-volume calculator",
+    "Dose logging",
+    "Titration & multi-peptide stacks / protocols",
+    "Bloodwork / biomarker trends",
+    "Single-compartment plasma-level modelling",
+    "Adherence heatmap",
+    "CSV / PDF export",
+    "Installable PWA, offline, dark & light themes",
+    "AES-256-GCM field encryption",
+    "No telemetry",
+    "Home Assistant dose reminders",
+    "Garmin wellness sync"
+  ],
+  "offers": { "@type": "Offer", "price": 0, "priceCurrency": "USD" },
+  "author": {
+    "@type": "Organization",
+    "name": "Peptide Pitstop",
+    "url": "https://github.com/kavo91/peptide-pitstop"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Peptide Pitstop",
+  "url": "https://peptidepitstop.com/",
+  "logo": "https://peptidepitstop.com/public/icons/icon-pitstop-512.png",
+  "description": "Free, open-source, self-hosted peptide & GLP-1 therapy tracker.",
+  "foundingDate": "2026-06-28",
+  "sameAs": [
+    "https://github.com/kavo91/peptide-pitstop",
+    "https://buymeacoffee.com/peptidepitstop"
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "Is there a self-hosted peptide tracker?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Peptide Pitstop is a self-hosted peptide and GLP-1 tracker that runs entirely on your own hardware as a single Docker container. There is no cloud account and no managed backend — you host it, back it up, and control it yourself." } },
+    { "@type": "Question", "name": "Is Peptide Pitstop free and open source?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Peptide Pitstop is 100% free and open source under the AGPL-3.0 licence. There are no subscriptions, accounts, or paywalls — you can read, audit, and fork the full source code on GitHub." } },
+    { "@type": "Question", "name": "How do I deploy it with Docker?", "acceptedAnswer": { "@type": "Answer", "text": "Deployment is a single Docker container. Pull the image, point it at a database file, and open it in any modern browser; full Docker, environment-variable, and demo-seed instructions are in the GitHub README. It also installs as a PWA for offline use." } },
+    { "@type": "Question", "name": "Is my peptide and GLP-1 data private?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Your data never leaves your server. Identifying free-text and lab values are encrypted with AES-256-GCM before they touch disk, there is no telemetry or analytics SDK, and fonts are self-hosted — nothing is sent to a third party." } },
+    { "@type": "Question", "name": "Can it do peptide reconstitution and draw-volume math?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. The built-in reconstitution engine computes concentration, draw volume, and syringe markings using exact decimal math (no floating-point drift), for both reconstituted and premixed vials." } },
+    { "@type": "Question", "name": "Can it track how much my peptide protocol costs?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Each order is recorded as an invoice, and its shipping, tax, fees and discounts are shared across the lines it delivered, so every vial carries its honest share rather than its sticker price. Cost per dose is charged by delivered mass, so it stays correct through a part-used vial or a titration change, and consumables such as needles, syringes and swabs are included. Vials with no invoice are reported as uncosted, never as free." } },
+    { "@type": "Question", "name": "What can I track with Peptide Pitstop?", "acceptedAnswer": { "@type": "Answer", "text": "Reconstitution and draw-volume math, dose logs, titration and multi-peptide stacks, cycle plans, landed cost per vial and per dose including shipping and consumables, bloodwork and biomarker trends, single-compartment plasma-level modelling, and an adherence heatmap. Everything exports to CSV or PDF." } }
+  ]
+}
+</script>
+
+<!-- Fonts are genuinely self-hosted: no preconnect, no CDN, no third-party request. -->
+<style>
+  /* Teko, self-hosted. Subset to Latin and converted to woff2: the upstream TTF
+     ships Devanagari too, which this site never sets — 285KB -> 15KB. */
+  @font-face{
+    font-family:'Teko';
+    src:url('assets/fonts/teko-latin.woff2') format('woff2');
+    font-weight:500 700; font-display:swap;
+  }
+  /* Inter, self-hosted. Variable weight 400-700, latin + latin-ext subsets only
+     (cyrillic/greek/vietnamese dropped — 133KB instead of ~500KB).
+     SIL OFL 1.1 — see assets/fonts/Inter-LICENSE.txt */
+  @font-face{
+    font-family:'Inter';
+    src:url('assets/fonts/inter-latin.woff2') format('woff2');
+    font-weight:400 700; font-style:normal; font-display:swap;
+    unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,
+      U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+  }
+  @font-face{
+    font-family:'Inter';
+    src:url('assets/fonts/inter-latin-ext.woff2') format('woff2');
+    font-weight:400 700; font-style:normal; font-display:swap;
+    unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,
+      U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,
+      U+2113,U+2C60-2C7F,U+A720-A7FF;
+  }
+  :root{
+    --bg:#121211; --bg2:#0c0c0b; --surface:#1b1b19; --surface2:#222220;
+    --line:rgba(255,255,255,.08); --ink:#ededeb; --muted:#9b9b95;
+    --accent:#ff5b14; --accent2:#ff8038; --ok:#34c98a;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; line-height:1.6;
+    background-image:radial-gradient(circle, rgba(255,255,255,.045) 1px, transparent 1px);
+    background-size:18px 18px;
+  }
+  a{color:var(--accent2); text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1100px; margin:0 auto; padding:0 24px}
+  .teko{font-family:Teko,Inter,system-ui,sans-serif; font-weight:600; letter-spacing:.5px; line-height:.95; text-transform:uppercase}
+  .slash{color:var(--accent)}
+
+  /* ---------- nav (unchanged from the live site) ---------- */
+  header.nav{position:sticky; top:0; z-index:30; backdrop-filter:blur(8px);
+    background:rgba(18,18,17,.72); border-bottom:1px solid var(--line)}
+  .nav .wrap{display:flex; align-items:center; gap:14px; height:60px}
+  .logo{display:flex; align-items:center; gap:10px; font-family:Teko; font-size:26px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; color:var(--ink)}
+  .logo .mark{width:28px;height:28px;border-radius:7px;flex:0 0 auto;display:block}
+  .nav .spacer{flex:1}
+  .nav a.navlink{color:var(--muted); font-size:14px; font-weight:500}
+  .nav a.navlink:hover{color:var(--ink); text-decoration:none}
+  .btn{display:inline-flex; align-items:center; gap:8px; font-weight:600; font-size:14px;
+    padding:10px 16px; border-radius:8px; border:1px solid var(--line); color:var(--ink); white-space:nowrap}
+  .btn:hover{text-decoration:none; border-color:rgba(255,255,255,.22)}
+  .btn.primary{background:var(--accent); color:#140a04; border-color:var(--accent)}
+  .btn.primary:hover{background:var(--accent2)}
+  .btn.coffee{background:#ffdd00; color:#171000; border-color:#ffdd00}
+
+  /* ---------- flythrough spine ---------- */
+  .spine{position:relative}
+  .stage{position:sticky; top:0; height:100svh; overflow:hidden; background:var(--bg2)}
+  .stage video, .stage .posterfall{
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; display:block;
+  }
+  /* must match the specificity of the `.stage .posterfall` rule above, or the
+     still sits on top of the video and the flight looks frozen */
+  .stage .posterfall{display:none}
+  /* vignette keeps Teko legible over the brightest orange spill */
+  .stage::after{content:''; position:absolute; inset:0; pointer-events:none;
+    background:radial-gradient(120% 80% at 50% 45%, transparent 40%, rgba(9,9,8,.55) 100%),
+               linear-gradient(180deg, rgba(9,9,8,.55) 0%, transparent 22%, transparent 62%, rgba(9,9,8,.72) 100%)}
+
+  .panels{position:absolute; inset:0; z-index:2; pointer-events:none}
+  .panel{
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center;
+    padding:0 24px; opacity:0; transform:translateY(18px);
+    /* no CSS transition: opacity/transform are driven directly from scroll
+       position, and a transition would lag behind and fight the scrub */
+  }
+  .panel.on{opacity:1; transform:none}
+  /* soft scrim directly behind the copy — the garage set itself carries orange
+     signage and trace panels, which otherwise ghost through the headline */
+  .panel::before{content:''; position:absolute; inset:0; z-index:-1; pointer-events:none;
+    background:radial-gradient(58% 44% at 50% 50%, rgba(8,8,7,.82) 0%, rgba(8,8,7,.62) 45%, transparent 75%)}
+  .panel > *{max-width:820px; pointer-events:auto; position:relative}
+  .panel h1,.panel h2{text-shadow:0 4px 30px rgba(0,0,0,.85), 0 1px 3px rgba(0,0,0,.6)}
+  /* real product UI shown DURING the flight, so the screens aren't buried
+     behind the whole cinematic */
+  .panel.split{flex-direction:row; gap:44px; text-align:left; max-width:none;
+    align-items:center; justify-content:center; padding:0 48px}
+  .panel.split .copy{max-width:520px; flex:0 1 520px; min-width:0}
+  .panel.split .copy p{margin-left:0; margin-right:0}
+  .panel.split .ui{flex:0 1 560px; max-width:560px; min-width:0}
+  /* the global .panel h2 clamp tops out at 58px, which cannot fit a two-word
+     Teko heading in a ~520px column — size split headings to their own column,
+     and let long words break rather than overflow under the screenshot */
+  .panel.split h2{font-size:clamp(30px,2.6vw,44px); overflow-wrap:break-word; hyphens:auto}
+  .panel.split .copy .eyebrow{margin-bottom:2px}
+  /* the centre-weighted radial leaves the copy column sitting over whatever the
+     flight is doing; split panels need a flat scrim across the whole frame */
+  .panel.split::before{background:linear-gradient(90deg,
+    rgba(8,8,7,.93) 0%, rgba(8,8,7,.88) 45%, rgba(8,8,7,.66) 100%)}
+  .panel.split .ui img{width:100%; height:auto; display:block; border-radius:12px;
+    border:1px solid rgba(255,255,255,.14); box-shadow:0 30px 80px rgba(0,0,0,.7)}
+  .panel.split .ui .cap{font-size:12px; color:var(--muted); padding-top:8px}
+  /* scroll-driven reveal: the screenshot wipes in left-to-right as you scroll
+     through the panel's dwell, so the chart reads as drawing itself. The wrapper
+     is added by JS — with no JS the image simply shows, uncropped. */
+  /* reserve the box before the lazy screenshot lands: without this the panel
+     collapses to copy-only, jumps when the image arrives, and the reveal has
+     nothing to clip. Every screenshot is 2640x1840. */
+  .panel.split .ui .frame{position:relative; border-radius:12px; overflow:hidden; display:block;
+    aspect-ratio:2640/1840; background:var(--surface)}
+  .panel.split .ui .frame img{width:100%; height:100%; object-fit:cover;
+    clip-path:inset(0 var(--hide,0%) 0 0)}
+  /* the plasma chart is live vector, not a screenshot — its own aspect ratio,
+     and no clip-path (it draws via stroke-dashoffset instead) */
+  .panel.split .ui .frame.plasma{aspect-ratio:600/180; background:#0e0e0d;
+    border:1px solid rgba(255,255,255,.14); box-shadow:0 30px 80px rgba(0,0,0,.7)}
+  .plasmasvg{display:block; width:100%; height:100%}
+  .pp-hist path{stroke-dasharray:var(--len,0); stroke-dashoffset:var(--off,0)}
+  /* adherence heatmap — 7 columns, cells populate as you scroll */
+  /* fixed cell size, not 1fr: across a 560px panel 1fr gives 80px cells, which
+     dwarfs the chart and overflows the stage. The app's is a small calendar. */
+  .ppheat{display:grid; grid-template-columns:repeat(7,13px); grid-auto-rows:13px;
+    gap:3px; margin-top:12px; justify-content:start}
+  .ppheat i{display:block; aspect-ratio:1; border-radius:2px; background:var(--c,transparent);
+    opacity:var(--o,0); transform:scale(var(--s,.7)); transition:none}
+  .ppheat i[data-s="0"]{background:transparent}
+  .ppheat i[data-s="1"]{background:rgba(255,91,20,.65)}
+  .ppheat i[data-s="2"]{background:rgb(255,91,20)}
+  .ppheat i[data-s="3"]{background:rgba(237,239,242,.05); box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+  /* syringe: the app's widget, filling to the computed draw volume */
+  .panel.split .ui .frame.syringe{aspect-ratio:auto; background:#0e0e0d; padding:22px 18px 16px;
+    border:1px solid rgba(255,255,255,.14); box-shadow:0 30px 80px rgba(0,0,0,.7)}
+  .syrsvg{display:block; width:100%; height:auto}
+  .syrread{display:flex; align-items:baseline; gap:8px; margin-top:14px;
+    font-family:Teko; text-transform:uppercase; letter-spacing:1px}
+  .syrread b{font-size:40px; line-height:1; color:var(--ink); font-weight:600}
+  .syrread span{font-size:17px; color:var(--accent)}
+  .syrread em{margin-left:auto; font-style:normal; font-size:20px; color:var(--muted)}
+
+  /* ---- week grid (Doses) ---- */
+  .panel.split .ui .frame.wkf,
+  .panel.split .ui .frame.bwf{aspect-ratio:auto; background:#0e0e0d; padding:18px 16px 14px;
+    border:1px solid rgba(255,255,255,.14); box-shadow:0 30px 80px rgba(0,0,0,.7)}
+  .wk-days,.wk-row{display:grid; grid-template-columns:74px repeat(7,1fr); gap:4px; align-items:center}
+  .wk-days{margin-bottom:6px; padding-left:74px; grid-template-columns:repeat(7,1fr)}
+  .wk-days span{font-family:Teko; font-size:14px; letter-spacing:1px; text-align:center; color:var(--muted)}
+  .wk-days span.on{color:var(--accent)}
+  .wk-row{margin-bottom:4px}
+  .wk-row > b{font-size:11px; font-weight:500; color:rgba(237,239,242,.82); letter-spacing:.2px}
+  .wk-row i{display:flex; align-items:center; justify-content:center; height:24px; border-radius:4px;
+    background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.05);
+    font-size:12px; line-height:1; opacity:var(--o,0); transform:scale(var(--s,.8))}
+  .wk-row i.today{border-color:rgba(255,91,20,.55); background:rgba(255,91,20,.08)}
+  .wk-row i.t{color:#34c98a} .wk-row i.p{color:var(--accent)}
+  .wk-key{display:flex; gap:14px; align-items:center; margin-top:10px;
+    font-family:Teko; font-size:13px; letter-spacing:1px; color:var(--muted)}
+  .wk-key i{width:8px; height:8px; border-radius:2px; display:inline-block; margin-right:5px}
+  .wk-key i.t{background:#34c98a} .wk-key i.p{background:var(--accent)}
+
+  /* ---- blood panel ---- */
+  .bw-row{display:grid; grid-template-columns:88px 1fr 52px; gap:10px; align-items:center;
+    margin-bottom:7px; opacity:var(--o,0); transform:translateY(var(--y,6px))}
+  .bw-row b{font-size:11.5px; font-weight:500; color:rgba(237,239,242,.82)}
+  .bw-track{position:relative; height:5px; border-radius:3px; background:rgba(255,255,255,.06)}
+  .bw-fill{position:absolute; left:0; top:0; bottom:0; border-radius:3px;
+    background:linear-gradient(90deg,#b34110,#ff5b14); width:var(--w,0%)}
+  .bw-dot{position:absolute; top:50%; width:7px; height:7px; margin:-3.5px 0 0 -3.5px;
+    border-radius:50%; background:var(--ink); box-shadow:0 0 0 2px #0e0e0d; left:var(--w,0%)}
+  .bw-val{font-family:Teko; font-size:17px; letter-spacing:.5px; color:var(--accent); text-align:right}
+  .bw-val span{font-size:10px; color:var(--muted); margin-left:3px}
+  .panel.split .ui .frame .edge{
+    position:absolute; top:0; bottom:0; width:2px; pointer-events:none;
+    left:calc(100% - var(--hide,0%)); transform:translateX(-1px);
+    background:var(--accent); box-shadow:0 0 20px 4px rgba(255,91,20,.6);
+    opacity:var(--edge,0); transition:opacity .2s linear}
+  @media (prefers-reduced-motion: reduce){
+    .panel.split .ui .frame img{clip-path:none}
+    .panel.split .ui .frame .edge{display:none}
+    /* reduced motion: show the chart fully drawn, no stroke animation */
+    .pp-hist path{stroke-dasharray:none !important; stroke-dashoffset:0 !important}
+    #pprect{width:302px}
+    #ppnow,#ppnowlbl{opacity:1 !important}
+    .ppheat i{opacity:1 !important; transform:none !important}
+    #syrvol{width:42px}
+    #syrmark{opacity:1 !important}
+    .wk-row i,.bw-row{opacity:1 !important; transform:none !important}
+  }
+  /* side-by-side needs 520 + 44 gap + 560 + 96 padding = 1220px before it is
+     cramped, and a cramped split reads as the screenshot crowding the copy */
+  @media (max-width:1220px){
+    .panel.split{flex-direction:column; gap:20px; text-align:center; padding:0 24px}
+    .panel.split .copy,.panel.split .ui{flex:0 1 auto; max-width:560px}
+    /* width must be explicit: flex-basis auto + an unloaded image gives the
+       frame no width, so aspect-ratio has nothing to derive its height from */
+    .panel.split .ui{max-width:min(78vw,420px); width:min(78vw,420px)}
+    .panel.split h2{font-size:clamp(26px,7vw,38px)}
+    .panel.split .copy p{font-size:15px}
+  }
+  /* very short viewports (landscape phones ~390px tall). Stacked simply cannot
+     fit copy + screenshot, but a landscape phone has width to spare — so go
+     side-by-side there, and drop the screenshot only when it is short AND
+     narrow, where nothing would fit either way. */
+  @media (max-height:520px) and (min-width:680px){
+    .panel.split{flex-direction:row; text-align:left; gap:20px; padding:0 28px; align-items:center}
+    .panel.split .copy{flex:0 1 380px; max-width:380px}
+    .panel.split .ui{flex:0 1 290px; max-width:290px; width:290px}
+    .panel.split .copy p{font-size:13px}
+  }
+  @media (max-height:520px) and (max-width:679px){
+    .panel.split .ui{display:none}
+  }
+  .panel h1{font-size:clamp(54px,11vw,128px); margin:0}
+  .panel h2{font-size:clamp(34px,6vw,58px); margin:0 0 10px}
+  .panel p{color:#cfcfc9; font-size:clamp(16px,1.9vw,19px); margin:12px auto 0; text-shadow:0 2px 18px rgba(0,0,0,.7)}
+  .panel p strong{color:var(--ink)}
+  .kicker{display:inline-block; font-family:Teko; text-transform:uppercase; letter-spacing:3px;
+    color:var(--accent); font-size:18px; border:1px solid rgba(255,91,20,.4); border-radius:999px; padding:2px 14px; margin-bottom:18px}
+  .eyebrow{font-family:Teko; text-transform:uppercase; letter-spacing:2px; color:var(--accent); font-size:20px; margin:0 0 6px}
+  .cta{display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:26px}
+
+  /* sector rail — progress through the flight */
+  .rail{position:absolute; left:18px; top:50%; transform:translateY(-50%); z-index:3;
+    display:flex; flex-direction:column; gap:9px; pointer-events:none}
+  .rail i{display:block; width:3px; height:22px; border-radius:2px; background:rgba(255,255,255,.16); transition:background .3s ease}
+  .rail i.lit{background:var(--accent)}
+  .scrollcue{position:absolute; left:50%; bottom:22px; transform:translateX(-50%); z-index:3;
+    font-family:Teko; letter-spacing:2px; text-transform:uppercase; font-size:15px; color:var(--muted);
+    transition:opacity .4s ease}
+  /* buffering cue — the flight is several MB, and on a cold CDN edge the first
+     visitor waits. A real progress bar reads as deliberate; a frozen poster
+     reads as broken. Hidden the moment enough is buffered to scrub. */
+  .loadbar{position:absolute; left:50%; bottom:52px; transform:translateX(-50%); z-index:3;
+    width:min(240px,42vw); pointer-events:none; transition:opacity .5s ease}
+  .loadbar .track{height:2px; border-radius:2px; background:rgba(255,255,255,.16); overflow:hidden}
+  .loadbar .fill{display:block; height:100%; width:0%; background:var(--accent);
+    transition:width .35s ease}
+  .loadbar .lbl{font-family:Teko; letter-spacing:2px; text-transform:uppercase; font-size:13px;
+    color:var(--muted); text-align:center; padding-top:7px}
+  .loadbar.done{opacity:0}
+
+  /* ---------- conventional sections below the spine ---------- */
+  section.wrap{padding:56px 24px}
+  h2.title{font-size:clamp(34px,6vw,58px); margin:0 0 8px}
+  .sub{color:var(--muted); max-width:720px; margin:0 0 28px; font-size:17px}
+  .band{background:linear-gradient(180deg,var(--surface),var(--bg2)); border-top:1px solid var(--line); border-bottom:1px solid var(--line)}
+  .privacy{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:18px; margin-top:8px}
+  .privacy div{background:rgba(255,255,255,.02); border:1px solid var(--line); border-radius:12px; padding:16px 18px}
+  .privacy h3{margin:0 0 4px; font-size:16px; color:var(--ink)}
+  .privacy p{margin:0; color:var(--muted); font-size:14px}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:18px}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:22px}
+  .card .tag{font-family:Teko; text-transform:uppercase; letter-spacing:1px; color:var(--accent); font-size:18px}
+  .card h3{margin:2px 0 8px; font-size:20px}
+  .card p{margin:0; color:var(--muted); font-size:15px}
+  .pair{display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:10px}
+  .shot{border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--surface)}
+  .shot img{display:block; width:100%; height:auto}
+  .shot .cap{font-size:13px; color:var(--muted); padding:8px 12px; border-top:1px solid var(--line)}
+  .mobiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-top:22px}
+  .mobiles .shot img{max-height:560px; object-fit:cover; object-position:top}
+  footer{border-top:1px solid var(--line); padding:36px 0; color:var(--muted); font-size:14px}
+  footer .wrap{display:flex; gap:18px; flex-wrap:wrap; align-items:center; justify-content:space-between}
+  .disclaimer{font-size:13px; color:#76766f; max-width:640px}
+
+  /* restrained reveal for the conventional sections */
+  /* Hidden ONLY when JS has confirmed it is running (html.js-motion). Without
+     this gate a failed observer leaves the whole lower page at opacity 0. */
+  .js-motion .rise{opacity:0; transform:translateY(20px); transition:opacity .6s ease, transform .6s ease}
+  .js-motion .rise.on{opacity:1; transform:none}
+
+  /* ---- sector rail, continued past the flight ----
+     the in-stage rail dies with the spine; this one tracks the whole document
+     so the motif carries through the conventional sections */
+  .pagerail{position:fixed; left:18px; top:50%; transform:translateY(-50%); z-index:20;
+    display:flex; flex-direction:column; gap:9px; pointer-events:none;
+    opacity:0; transition:opacity .5s ease}
+  .pagerail.show{opacity:1}
+  .pagerail i{display:block; width:3px; height:22px; border-radius:2px; background:rgba(255,255,255,.16);
+    transition:background .3s ease}
+  .pagerail i.lit{background:var(--accent)}
+
+  /* ---- scanline sweep across each card as it arrives ---- */
+  .card{position:relative; overflow:hidden}
+  .card::after{content:''; position:absolute; top:0; bottom:0; width:38%;
+    left:-45%; pointer-events:none; opacity:0;
+    background:linear-gradient(100deg, transparent, rgba(255,91,20,.14) 45%, rgba(255,255,255,.07) 55%, transparent);
+    transform:skewX(-12deg)}
+  .card.on::after{animation:sweep 1.05s cubic-bezier(.22,.61,.36,1) .18s 1 both}
+  @keyframes sweep{ from{left:-45%; opacity:0} 18%{opacity:1} to{left:118%; opacity:0} }
+
+  /* ---- dark/light theme wipe ---- */
+  .themewipe{margin-top:10px}
+  .tw-stack{position:relative; border:1px solid var(--line); border-radius:12px; overflow:hidden;
+    background:var(--surface); aspect-ratio:2640/1840}
+  .tw-stack .tw-base{width:100%; height:100%; object-fit:cover}
+  .tw-stack img{display:block; width:100%; height:auto}
+  .tw-stack .tw-over{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+    clip-path:inset(0 var(--wipe,0%) 0 0)}
+  .tw-stack .tw-edge{position:absolute; top:0; bottom:0; width:2px; pointer-events:none;
+    left:calc(100% - var(--wipe,0%)); transform:translateX(-1px);
+    background:var(--accent); box-shadow:0 0 20px 4px rgba(255,91,20,.55);
+    opacity:var(--wedge,0); transition:opacity .2s linear}
+  .tw-cap{display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+    font-size:13px; color:var(--muted); padding:8px 12px; border:1px solid var(--line);
+    border-top:0; border-radius:0 0 12px 12px; margin-top:-1px}
+  .tw-lbl{font-family:Teko; text-transform:uppercase; letter-spacing:2px; color:var(--accent); font-size:16px}
+
+  /* ---- parallax on the phone shots ---- */
+  .mobiles .shot{will-change:transform}
+  .mobiles .shot img{transform:translate3d(0,var(--par,0px),0)}
+
+  @media (max-width:640px){
+    .pair{grid-template-columns:1fr}
+    .nav a.navlink{display:none}
+    .rail{left:10px}
+    .panel p{font-size:16px}
+    /* portrait crops the 16:9 frame to its centre, which is exactly where the
+       set's own orange signage sits — the desktop scrim isn't enough there */
+    .panel::before{background:radial-gradient(90% 52% at 50% 50%, rgba(8,8,7,.9) 0%, rgba(8,8,7,.78) 55%, transparent 85%)}
+  }
+  /* narrow phones: the nav must not overflow — shrink the wordmark and buttons */
+  @media (max-width:430px){
+    .nav .wrap{gap:8px; padding:0 14px}
+    .logo{font-size:21px}
+    .logo .mark{width:24px;height:24px}
+    .btn{padding:8px 11px; font-size:13px}
+    .kicker{font-size:15px; letter-spacing:2px}
+  }
+
+  /* ---------- reduced motion: no scrubbing, stacked stills instead ---------- */
+  @media (prefers-reduced-motion: reduce){
+    html{scroll-behavior:auto}
+    .spine{height:auto !important}
+    .stage{position:static; height:auto}
+    .stage video{display:none}
+    .stage .posterfall{display:block; position:static; height:auto; object-fit:cover; aspect-ratio:16/9}
+    .stage::after{display:none}
+    .panels{position:static; inset:auto}
+    .panel{position:static; opacity:1; transform:none; padding:56px 24px; min-height:0}
+    .panel.split{flex-direction:column; text-align:center; padding:56px 24px; gap:22px}
+    .panel.split .copy,.panel.split .ui{flex:0 1 auto; max-width:640px}
+    .rail,.scrollcue,.loadbar,.pagerail{display:none}
+    .rise{opacity:1; transform:none}
+    .card.on::after{animation:none; opacity:0}
+    .tw-stack .tw-over{clip-path:none; position:static; height:auto}
+    .tw-stack .tw-edge{display:none}
+    .mobiles .shot img{transform:none}
+  }
+</style>
+</head>
+<body>
+
+<header class="nav"><div class="wrap">
+  <span class="logo"><img class="mark" src="public/icons/icon-pitstop.svg" alt="Peptide Pitstop logo" width="28" height="28" />Peptide&nbsp;Pitstop</span>
+  <span class="spacer"></span>
+  <a class="navlink" href="#features">Features</a>
+  <a class="navlink" href="#screens">Screens</a>
+  <a class="btn" href="https://github.com/kavo91/peptide-pitstop">GitHub</a>
+  <a class="btn coffee" href="https://buymeacoffee.com/peptidepitstop">☕ Coffee</a>
+</div></header>
+
+<!-- ============ FLYTHROUGH SPINE ============ -->
+<div class="spine" id="spine">
+  <div class="stage">
+    <video id="flight" playsinline muted preload="auto" poster="assets/poster/p1.jpg" aria-hidden="true"></video>
+    <img class="posterfall" src="assets/poster/p1.jpg" alt="Peptide Pitstop race garage — the flythrough, shown as a still because reduced motion is enabled." />
+    <div class="rail" id="rail" aria-hidden="true"></div>
+    <div class="loadbar" id="loadbar" aria-hidden="true"><span class="track"><span class="fill" id="loadfill"></span></span><span class="lbl">Loading the flight</span></div>
+    <div class="scrollcue" id="cue">Scroll</div>
+    <div class="panels" id="panels">
+
+      <div class="panel" data-in="0.00" data-out="0.10">
+        <span class="kicker">Self-hosted · open source · Docker · no telemetry</span>
+        <h1 class="teko">Peptide<span class="slash">/</span>Pitstop</h1>
+        <p><strong>The free, open-source, self-hosted peptide &amp; GLP-1 tracker.</strong> Reconstitution and draw-volume math, dose logging, titration stacks, bloodwork, and plasma-level modelling — one Docker container, installable as an offline PWA, living entirely on infrastructure you own.</p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/kavo91/peptide-pitstop">View on GitHub →</a>
+          <a class="btn" href="https://github.com/kavo91/peptide-pitstop#-deploy-self-hosted">Self-host it</a>
+        </div>
+      </div>
+
+      <div class="panel split" data-in="0.13" data-out="0.25">
+        <div class="copy">
+          <p class="eyebrow">Own your own data</p>
+          <h2 class="teko">Your data never leaves your server</h2>
+          <p>It runs on a machine you own. There's no account to sign up for, nothing phones home, and no company in the middle who could be breached or change the terms. Your notes and lab results are encrypted before they're saved, and you can export or delete the lot whenever you like.</p>
+        </div>
+        <div class="ui">
+          <!-- the Doses week grid, rebuilt from the app's own structure and
+               legend with demo values: t=taken, p=planned, .=nothing scheduled.
+               Cells land day by day as you scroll. Demo data, not real doses. -->
+          <div class="frame wkf"><div class="wk" id="wkgrid" role="img"
+               aria-label="A week of scheduled doses for three peptides, some taken and some planned (demo data)">
+            <div class="wk-days"><span>Mo</span><span>Tu</span><span class="on">We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span></div>
+            <div class="wk-row" data-name="TB-500"     data-seq="p..p..."></div>
+            <div class="wk-row" data-name="BPC-157"    data-seq="tttpppp"></div>
+            <div class="wk-row" data-name="Ipamorelin" data-seq="tttpppp"></div>
+            <div class="wk-key"><i class="t"></i>Taken <i class="p"></i>Planned</div>
+          </div></div>
+          <div class="cap">This week&rsquo;s schedule &mdash; demo data</div>
+        </div>
+      </div>
+
+      <div class="panel split" data-in="0.36" data-out="0.49">
+        <div class="copy">
+          <p class="eyebrow">Dosing</p>
+          <h2 class="teko">Reconstitution engine</h2>
+          <p>Concentration, draw volume and syringe markings computed in exact decimal math. Handles reconstituted and premixed vials, and shows the markings against the barrel you're actually drawing into.</p>
+        </div>
+        <!-- the app's own syringe widget, geometry lifted verbatim from /log:
+             1 mL U-100 barrel with 0.25 mL graduations, gradient fill and the
+             dashed draw-to marker. 400 mcg of BPC-157 at 2 mg/mL is 0.20 mL,
+             so the fill rect is 42 of 210 units — the engine's real answer,
+             not a drawing of one. Colours are literals because the app writes
+             rgb(var(--token)), which doesn't resolve against this site's hex. -->
+        <div class="ui">
+          <div class="frame syringe">
+            <svg class="syrsvg" viewBox="0 0 260 64" role="img"
+                 aria-label="1 mL U-100 insulin syringe filled to 0.20 mL, the draw volume for 400 micrograms at 2 mg per mL">
+              <defs>
+                <linearGradient id="syrfill" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="#b34110"/><stop offset="1" stop-color="#FF5B14"/>
+                </linearGradient>
+              </defs>
+              <rect x="8" y="18" width="210" height="28" rx="4" fill="#1b1b19" stroke="#9b9b95" stroke-width="1.5"/>
+              <rect id="syrvol" x="8" y="18" width="0" height="28" rx="4" fill="url(#syrfill)" opacity="0.85"/>
+              <line x1="8" y1="14" x2="8" y2="50" stroke="#9b9b95" stroke-width="1" opacity="0.5"/>
+              <line x1="60.5" y1="14" x2="60.5" y2="50" stroke="#9b9b95" stroke-width="1" opacity="0.5"/>
+              <line x1="113" y1="14" x2="113" y2="50" stroke="#9b9b95" stroke-width="1" opacity="0.5"/>
+              <line x1="165.5" y1="14" x2="165.5" y2="50" stroke="#9b9b95" stroke-width="1" opacity="0.5"/>
+              <line x1="218" y1="14" x2="218" y2="50" stroke="#9b9b95" stroke-width="1" opacity="0.5"/>
+              <line id="syrmark" x1="50" y1="12" x2="50" y2="52" stroke="#FF5B14" stroke-width="1.5" stroke-dasharray="3 2" opacity="0"/>
+              <rect x="218" y="22" width="18" height="20" rx="2" fill="#9b9b95"/>
+              <line x1="236" y1="32" x2="258" y2="32" stroke="#9b9b95" stroke-width="2"/>
+            </svg>
+            <div class="syrread"><b id="syrdose">0</b> <span>mcg</span> <em id="syrml">&mdash;</em></div>
+          </div>
+          <div class="cap">BPC-157 at 2&nbsp;mg/mL &mdash; draw 0.20&nbsp;mL on a 1&nbsp;mL U-100</div>
+        </div>
+      </div>
+
+      <div class="panel split" data-in="0.50" data-out="0.62">
+        <div class="copy">
+          <p class="eyebrow">Bloodwork</p>
+          <h2 class="teko">Biomarker trends</h2>
+          <p>Lab panels over time, in-range summaries and a comparison matrix backed by a curated biomarker library. Doses, labs, journal and wearables all export to CSV or PDF.</p>
+        </div>
+        <div class="ui">
+          <!-- the analyte table, rebuilt from the app's columns (Analyte / Unit
+               / Ref / value) with the demo panel's values. Each row carries its
+               reference range so the marker sits where the value actually falls
+               — the bar is computed, not drawn. Demo data, not real labs. -->
+          <div class="frame bwf"><div class="bw" id="bwtable" role="img"
+               aria-label="Blood panel with seven analytes, each shown against its reference range (demo data)">
+            <div class="bw-row" data-a="ALT"        data-u="U/L"    data-lo="0"   data-hi="45"  data-v="25"></div>
+            <div class="bw-row" data-a="Creatinine" data-u="umol/L" data-lo="60"  data-hi="130" data-v="85"></div>
+            <div class="bw-row" data-a="CRP"        data-u="mg/L"   data-lo="0"   data-hi="4"   data-v="1.0"></div>
+            <div class="bw-row" data-a="Ferritin"   data-u="ug/L"   data-lo="30"  data-hi="320" data-v="150"></div>
+            <div class="bw-row" data-a="Glucose"    data-u="mmol/L" data-lo="3"   data-hi="6"   data-v="5.0"></div>
+            <div class="bw-row" data-a="Haemoglobin" data-u="g/L"   data-lo="135" data-hi="180" data-v="150"></div>
+            <div class="bw-row" data-a="Vitamin D3" data-u="nmol/L" data-lo="49"  data-hi="150" data-v="90"></div>
+          </div></div>
+          <div class="cap">Blood panel against reference ranges &mdash; demo data</div>
+        </div>
+      </div>
+
+      <div class="panel split" data-in="0.63" data-out="0.75">
+        <div class="copy">
+          <p class="eyebrow">Analytics</p>
+          <h2 class="teko">Plasma-level modelling</h2>
+          <p>Single-compartment plasma estimates from your own dose history and each peptide's half-life, plus adherence and a dose-history heatmap. Blends are charted per component, each on its own half-life. Computed locally from your database.</p>
+        </div>
+        <!-- Real vector output from the app, not a picture of it: these path
+             data are the actual computed plasma curves lifted from the running
+             build's SVG chart (3 peptides x solid history + dashed forecast,
+             split at "now"), RDP-simplified from 12.8KB to 3.4KB with peaks
+             intact. History draws itself, then the forecast extends. -->
+        <div class="ui">
+          <div class="frame plasma">
+            <svg class="plasmasvg" viewBox="0 0 600 180" role="img"
+                 aria-label="Single-compartment plasma-level curves for three peptides, solid to the left of now and dashed forecast to the right (demo data)">
+              <defs><clipPath id="ppfore"><rect id="pprect" x="298" y="0" width="0" height="180"/></clipPath></defs>
+              <line x1="8" x2="588" y1="152" y2="152" stroke="rgba(255,255,255,.28)" stroke-width="0.5"/>
+              <g class="pp-hist" fill="none" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round">
+                <path stroke="hsl(18 82% 58%)" d="M9.7,106.8L14.9,120.2L20.1,129.5L27.8,138.6L35.7,144.0L35.7,24.3L38.3,44.6L43.4,75.8L48.6,98.1L52.5,110.6L56.4,120.1L62.9,131.3L69.4,138.6L77.1,144.0L77.2,24.2L79.7,44.2L83.6,68.8L87.5,87.9L92.7,106.8L97.9,120.1L104.3,131.2L110.9,138.6L118.6,144.0L118.7,24.2L125.0,68.5L129.0,88.1L135.4,110.3L141.9,125.0L147.1,132.9L152.4,138.6L160.1,144.0L160.2,24.2L162.7,44.2L167.9,76.0L173.1,98.3L176.8,110.1L180.8,119.9L187.2,131.1L193.8,138.6L201.5,144.0L201.7,24.2L206.8,61.7L209.4,76.0L212.0,88.1L217.1,106.7L222.3,119.9L227.5,129.3L232.7,136.0L237.9,140.7L240.5,142.5L242.4,23.9L247.6,61.4L253.4,90.7L256.0,100.5L261.2,115.6L265.7,125.1L270.0,131.8L276.1,138.5L279.3,141.2L283.9,144.0L283.9,24.2L289.0,61.3L294.2,87.9L296.9,98.3"/>
+                <path stroke="hsl(208 82% 58%)" d="M11.1,152.0L290.8,152.0"/>
+                <path stroke="hsl(138 82% 58%)" d="M11.1,151.9L15.8,152.0L16.7,49.0L19.3,90.8L21.0,108.7L23.6,126.3L26.2,136.7L29.6,144.3L33.1,148.2L37.4,150.4L44.3,151.6L57.3,152.0L58.2,49.0L59.9,79.2L62.5,108.7L65.1,126.3L68.5,139.1L72.0,145.6L74.6,148.2L78.0,150.1L83.6,151.4L98.8,152.0L99.7,49.0L101.4,79.2L104.3,111.6L107.4,130.4L110.0,139.1L114.3,146.6L116.9,148.8L119.5,150.1L125.0,151.4L140.3,152.0L141.2,49.0L143.7,90.8L145.5,108.7L148.9,130.4L151.5,139.1L153.2,142.9L155.8,146.6L158.4,148.8L161.0,150.1L166.5,151.4L181.8,152.0L182.6,49.0L185.2,90.8L187.2,110.7L190.4,130.4L193.0,139.1L194.7,142.9L197.3,146.6L199.0,148.2L202.5,150.1L207.9,151.4L223.3,152.0L224.1,49.0L226.7,90.8L228.4,108.7L231.0,126.3L234.5,139.1L237.9,145.6L240.5,148.2L244.0,150.1L251.8,151.6L264.0,152.0L264.9,49.0L266.6,79.2L269.2,108.7L270.9,121.4L273.5,133.8L276.1,141.2L278.7,145.6L280.4,147.4L285.6,150.4L292.5,151.6"/>
+              </g>
+              <g class="pp-fore" clip-path="url(#ppfore)" fill="none" stroke-width="1.5" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round">
+                <path stroke="hsl(18 82% 58%)" d="M299.4,106.6L304.6,120.1L309.8,129.4L311.5,12.0L314.9,40.9L319.2,68.8L324.4,93.1L327.9,105.5L333.1,119.1L337.4,127.3L342.5,134.5L346.1,138.2L351.2,142.2L352.9,23.5L359.0,66.5L364.2,91.6L368.4,106.6L373.6,119.9L378.8,129.3L384.0,135.9L391.7,142.4L394.3,24.2L396.9,44.5L402.1,76.0L404.7,88.1L409.9,106.8L415.0,120.0L420.2,129.4L425.4,136.0L433.2,142.5L435.8,24.2L440.9,61.6L443.5,76.0L446.1,88.1L451.3,106.8L456.5,120.1L461.7,129.4L466.8,136.0L474.6,142.5L477.2,24.2L479.8,44.5L485.0,76.0L487.5,88.1L492.7,106.8L497.9,120.1L503.1,129.4L508.3,136.0L516.0,142.5L518.6,24.2L521.2,44.5L526.4,76.0L529.0,88.1L534.2,106.8L539.3,120.1L544.5,129.4L549.7,136.0L557.5,142.5L560.0,24.2L565.2,61.6L570.4,88.1L573.0,98.3L578.2,114.0L580.8,120.1L585.9,129.4"/>
+                <path stroke="hsl(208 82% 58%)" d="M301.1,152.0L311.5,46.7L321.8,53.8L342.5,66.5L363.3,77.6L384.0,87.2L404.7,95.6L425.4,102.9L466.8,114.8L477.2,12.0L497.9,30.1L518.6,45.9L529.0,53.0L539.3,59.6L560.0,71.6L580.8,82.0"/>
+                <path stroke="hsl(138 82% 58%)" d="M301.1,151.9L305.5,152.0L306.4,49.0L308.1,79.2L310.7,108.7L311.5,12.0L314.9,82.0L316.7,103.4L319.2,122.6L321.8,134.5L324.4,141.6L327.0,145.8L331.3,149.4L333.9,150.5L339.1,151.5L352.0,152.0L352.9,49.0L354.6,79.2L357.2,108.7L359.8,126.3L361.5,133.8L364.1,141.2L366.7,145.6L368.4,147.4L373.6,150.4L380.5,151.6L393.5,152.0L394.3,49.0L396.9,90.8L398.7,108.7L401.2,126.3L404.7,139.1L408.1,145.6L410.7,148.2L414.2,150.1L422.0,151.6L434.9,152.0L435.8,49.0L437.5,79.2L440.1,108.7L443.5,130.4L446.1,139.1L447.8,142.9L450.4,146.6L453.0,148.8L455.6,150.1L463.4,151.6L476.3,152.0L477.2,49.0L478.9,79.2L481.5,108.7L484.1,126.3L487.5,139.1L491.0,145.6L493.6,148.2L497.0,150.1L504.8,151.6L517.8,152.0L518.6,49.0L520.3,79.2L522.9,108.7L525.5,126.3L528.1,136.7L529.8,141.2L533.3,146.6L535.9,148.8L539.3,150.4L546.2,151.6L559.2,152.0L560.0,49.0L563.5,100.5L566.1,121.4L568.7,133.8L572.1,142.9L576.4,148.2L580.8,150.4L587.7,151.6"/>
+              </g>
+              <line id="ppnow" x1="298" x2="298" y1="12" y2="152" stroke="rgba(255,255,255,.45)" stroke-dasharray="3 3" stroke-width="1" opacity="0"/>
+              <text id="ppnowlbl" x="301" y="20" font-size="9" fill="rgba(255,255,255,.55)" opacity="0">now</text>
+            </svg>
+          </div>
+          <!-- real adherence heatmap: 35 days lifted from the same instance.
+               0 = outside range, 1 = partial, 2 = dosed, 3 = missed. The two
+               3s are genuine missed days — that is what 83% adherence looks
+               like, and faking a perfect grid would be a lie. -->
+          <div class="ppheat" id="ppheat" data-seq="00122222222223222222232222222220000" aria-label="Dose-history heatmap: 35 days, two missed"></div>
+          <div class="cap">Plasma levels &amp; adherence &mdash; three peptides, forecast past &ldquo;now&rdquo;</div>
+        </div>
+      </div>
+
+      <div class="panel" data-in="0.77" data-out="0.87">
+        <p class="eyebrow">Travel</p>
+        <h2 class="teko">Your day, not the&nbsp;server's</h2>
+        <p>Each dose freezes the calendar day and timezone it was logged in, so history stays on the days you actually dosed. Today re-anchors on wake, at local midnight, and when the device changes zone.</p>
+      </div>
+
+      <div class="panel" data-in="0.90" data-out="1.01">
+        <h2 class="teko">Run it yourself</h2>
+        <p>Deployment is a single container. Bring your own database file, point a tunnel at it, and you're running.</p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/kavo91/peptide-pitstop#-deploy-self-hosted">Read the setup guide →</a>
+          <a class="btn coffee" href="https://buymeacoffee.com/peptidepitstop">☕ Buy me a coffee</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ============ conventional sections ============ -->
+<div class="band"><section class="wrap" id="features">
+  <p class="eyebrow rise">Everything it does</p>
+  <h2 class="title teko rise">The full&nbsp;garage</h2>
+  <p class="sub rise">Everything a self-hosted peptide tracker needs — and a few things that only matter once you've been running one for a while.</p>
+  <div class="grid">
+    <div class="card rise"><div class="tag">Dosing</div><h3>Reconstitution engine</h3><p>Concentration, draw volume, and syringe markings computed with decimal math. Handles reconstituted and premixed vials.</p></div>
+    <div class="card rise"><div class="tag">Protocols</div><h3>Titration &amp; stacks</h3><p>Multi-peptide schedules with ramping steps and a live calc-chart showing how each phase is computed. Log a dose that matches the next step and it offers to bring that phase forward.</p></div>
+    <div class="card rise"><div class="tag">Costs</div><h3>What it actually costs</h3><p>Shipping belongs to the order, not the vial &mdash; so it's entered once and shared across every line it delivered. Cost per dose is charged by delivered mass, so it stays right through a half-used vial or a titration change.</p></div>
+    <div class="card rise"><div class="tag">Costs</div><h3>Sundries and waste</h3><p>Needles, syringes, swabs and sharps bins count too. Product a finished vial never delivered is valued separately instead of inflating the doses you did take &mdash; and a vial you got 70&#37; through isn't called waste.</p></div>
+    <div class="card rise"><div class="tag">Protocols</div><h3>Change the plan safely</h3><p>Switch 4&#215; weekly to daily and the old course is completed, not rewritten &mdash; a linked replacement picks up at the dose you&rsquo;re actually on. Your logged doses stay with the protocol they were taken under, and adherence doesn&rsquo;t reset because you changed your schedule.</p></div>
+    <div class="card rise"><div class="tag">Cycles</div><h3>Run eight, break four</h3><p>Give a protocol a course-level on/off plan in weeks and it tracks where you are &mdash; day-of-cycle chip, a banner before the planned last dose and when a break is over. Suggested lengths come from the peptide's own literature, quoted and sourced, as reference only.</p></div>
+    <div class="card rise"><div class="tag">Schedules</div><h3>Roll from a late dose</h3><p>Take an every-N-days dose late and rolling protocols offer to re-base the schedule from the day you actually dosed, with the new dates previewed. Fixed-anchor protocols keep their rigid grid.</p></div>
+    <div class="card rise"><div class="tag">Bloodwork</div><h3>Biomarker trends</h3><p>Lab panels over time, in-range summaries, and a comparison matrix backed by a curated biomarker library.</p></div>
+    <div class="card rise"><div class="tag">Analytics</div><h3>Plasma modelling</h3><p>Adherence, a dose-history heatmap, and single-compartment plasma-level estimates from your history and each peptide's half-life &mdash; with blends charted per component.</p></div>
+    <div class="card rise"><div class="tag">Travel</div><h3>Timezone-proof days</h3><p>Each dose freezes its calendar day and zone at log time. Every date-driven screen anchors to your day, not the server's — abroad, the app stops highlighting tomorrow's column.</p></div>
+    <div class="card rise"><div class="tag">Integrations</div><h3>HA &amp; Garmin</h3><p>Optional Home Assistant dose reminders and Garmin wellness sync — your webhook, your credentials, your schedule. Reminders name your device's clock when you're travelling.</p></div>
+    <div class="card rise"><div class="tag">Experience</div><h3>Installable PWA</h3><p>Add to your home screen and it works offline. A version heartbeat picks up new deploys on its own, so an installed app can't sit on a stale bundle for days.</p></div>
+  </div>
+</section></div>
+
+<section class="wrap" id="screens">
+  <p class="eyebrow rise">A look inside</p>
+  <h2 class="title teko rise">Dark &amp; light. Desk &amp;&nbsp;phone.</h2>
+  <p class="sub rise">A motorsport-inspired “pit-wall” design — carbon and race-orange — with a clean light theme. Dark desktop screens appear in the flythrough above. All screenshots use demo data only.</p>
+  <!-- one frame, both themes: scrolling wipes dark -> light across the same
+       screen, which demonstrates the theme rather than captioning it -->
+  <div class="themewipe rise" id="themewipe">
+    <div class="tw-stack">
+      <img class="tw-base" src="docs/screenshots/analytics-light.png" alt="Analytics and plasma-level modelling chart in the light theme (demo data)" loading="lazy" />
+      <img class="tw-over" src="docs/screenshots/analytics.png" alt="The same analytics and plasma-level modelling screen in the dark carbon theme (demo data)" loading="lazy" />
+      <span class="tw-edge" aria-hidden="true"></span>
+    </div>
+    <div class="tw-cap"><span>Analytics &amp; plasma</span><span class="tw-lbl" id="twlbl">Dark</span></div>
+  </div>
+  <p class="eyebrow rise" style="margin-top:34px">On your phone</p>
+  <div class="mobiles">
+    <div class="shot rise"><img src="docs/screenshots/today-mobile.png" alt="Peptide Pitstop installable PWA — Today screen on mobile (demo data)" loading="lazy" /></div>
+    <div class="shot rise"><img src="docs/screenshots/dosing-mobile.png" alt="Logging a peptide dose on mobile with reconstitution math (demo data)" loading="lazy" /></div>
+    <div class="shot rise"><img src="docs/screenshots/analytics-mobile.png" alt="Adherence heatmap and plasma-level analytics on mobile (demo data)" loading="lazy" /></div>
+    <div class="shot rise"><img src="docs/screenshots/bloodwork-mobile-light.png" alt="Bloodwork and biomarker trends on mobile in the light theme (demo data)" loading="lazy" /></div>
+  </div>
+</section>
+
+<div class="band"><section class="wrap" id="faq">
+  <p class="eyebrow rise">Common questions</p>
+  <h2 class="title teko rise">Self-hosted, open source,&nbsp;yours</h2>
+  <p class="sub rise">Straight answers for self-hosters comparing a free, open-source, Docker-deployable peptide &amp; GLP-1 tracker.</p>
+  <div class="privacy">
+    <div class="rise"><h3>Is there a self-hosted peptide tracker?</h3><p>Yes — Peptide Pitstop is a self-hosted peptide &amp; GLP-1 tracker that runs entirely on your own hardware as a single Docker container. No cloud account, no managed backend: you host it, back it up, and control it yourself.</p></div>
+    <div class="rise"><h3>Is it free and open source?</h3><p>100% free and open source under AGPL-3.0. No subscriptions, accounts, or paywalls — read, audit, and fork the full source on <a href="https://github.com/kavo91/peptide-pitstop">GitHub</a>.</p></div>
+    <div class="rise"><h3>How do I deploy it with Docker?</h3><p>Deployment is a single Docker container. Pull the image, point it at a database file, and open it in any browser — full Docker, env-var, and demo-seed steps are in the README. Installs as a PWA for offline use too.</p></div>
+    <div class="rise"><h3>Is my peptide &amp; GLP-1 data private?</h3><p>Your data never leaves your server. Identifying free-text and lab values are encrypted with AES-256-GCM before they touch disk, there is no telemetry, and fonts are self-hosted — nothing reaches a third party.</p></div>
+    <div class="rise"><h3>Can it do reconstitution math?</h3><p>Yes — the reconstitution engine computes concentration, draw volume, and syringe markings with exact decimal math (no floating-point drift), for both reconstituted and premixed vials.</p></div>
+    <div class="rise"><h3>Can it track what my protocol costs?</h3><p>Yes. Record each order as an invoice and shipping is shared across every line it delivered, so a vial's cost includes its honest share of the courier fee. Cost per dose is charged by delivered mass — correct through a half-used vial or a titration change — and needles, syringes and swabs are counted too. A vial with no invoice is reported as uncosted rather than assumed free.</p></div>
+    <div class="rise"><h3>Does it work if I travel?</h3><p>Yes. Each dose freezes the calendar day and timezone it was logged in, so your history stays on the days you actually dosed. The Today view tracks your device's day and refreshes on wake, at local midnight, and when your timezone changes.</p></div>
+  </div>
+</section></div>
+
+<footer><div class="wrap">
+  <span>© Peptide Pitstop · <a href="https://github.com/kavo91/peptide-pitstop">GitHub</a> · <a href="https://github.com/kavo91/peptide-pitstop/blob/main/LICENSE">AGPL-3.0</a> · <a href="https://buymeacoffee.com/peptidepitstop">Buy me a coffee</a> · <a href="https://outlap.studio" rel="nofollow">Site by Outlap</a></span>
+  <span class="disclaimer">A personal tracking tool, not a medical device, and not a substitute for professional medical advice. It does not diagnose, treat, or make dosing recommendations.</span>
+</div></footer>
+
+<script>
+(function(){
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /* opt in to the hidden-then-revealed treatment only now that JS is running */
+  if (!reduce) document.documentElement.classList.add('js-motion');
+  var spine  = document.getElementById('spine');
+  var video  = document.getElementById('flight');
+  var panels = Array.prototype.slice.call(document.querySelectorAll('.panel'));
+  var rail   = document.getElementById('rail');
+  var cue    = document.getElementById('cue');
+
+  /* ---- restrained reveals for the conventional sections (always on) ---- */
+  var io = new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('on'); io.unobserve(e.target); } });
+  }, {rootMargin:'0px 0px -12% 0px'});
+  document.querySelectorAll('.rise').forEach(function(el,i){
+    el.style.transitionDelay = (Math.min(i,6)*40)+'ms'; io.observe(el);
+  });
+  /* failsafe: if nothing has revealed shortly after load, show it all rather
+     than leave the page blank */
+  setTimeout(function(){
+    if (!document.querySelector('.rise.on'))
+      document.querySelectorAll('.rise').forEach(function(el){ el.classList.add('on'); });
+  }, 2500);
+
+  /* ---------- lower-page motion (independent of the flight) ---------- */
+  if (!reduce){
+    /* sector rail continued across the whole document */
+    var SECTIONS = ['#features','#screens','#faq'];
+    var prail = document.createElement('div');
+    prail.className = 'pagerail'; prail.setAttribute('aria-hidden','true');
+    SECTIONS.forEach(function(){ prail.appendChild(document.createElement('i')); });
+    document.body.appendChild(prail);
+    var ptick = prail.querySelectorAll('i');
+
+    /* theme wipe: dark overlay retreats to reveal the light theme underneath */
+    var tw = document.getElementById('themewipe');
+    var twStack = tw && tw.querySelector('.tw-stack');
+    var twLbl = document.getElementById('twlbl');
+
+    /* phone shots drift at slightly different rates */
+    var phones = [].slice.call(document.querySelectorAll('.mobiles .shot'));
+
+    function lowUpdate(){
+      var vh = window.innerHeight || 0; if (!vh) return;
+
+      /* rail: show once the flight is behind us, light per section passed */
+      var spineBottom = spine.getBoundingClientRect().bottom;
+      prail.classList.toggle('show', spineBottom < vh * 0.5);
+      SECTIONS.forEach(function(sel, i){
+        var el = document.querySelector(sel); if (!el) return;
+        ptick[i].classList.toggle('lit', el.getBoundingClientRect().top < vh * 0.6);
+      });
+
+      /* theme wipe, driven by the frame's own travel through the viewport */
+      if (twStack){
+        var r = twStack.getBoundingClientRect();
+        var k = (vh - r.top) / (vh * 0.75 + r.height * 0.5);
+        k = k < 0 ? 0 : (k > 1 ? 1 : k);
+        var e = 1 - Math.pow(1 - k, 3);
+        twStack.style.setProperty('--wipe', (e * 100).toFixed(2) + '%');
+        twStack.style.setProperty('--wedge', (k > 0.02 && k < 0.98) ? '1' : '0');
+        if (twLbl) twLbl.textContent = e > 0.55 ? 'Light' : 'Dark';
+      }
+
+      /* parallax: a few px of counter-drift, alternating direction */
+      for (var i=0;i<phones.length;i++){
+        var pr = phones[i].getBoundingClientRect();
+        var mid = (pr.top + pr.height/2 - vh/2) / vh;      /* -1..1 through view */
+        var amt = (i % 2 ? -1 : 1) * mid * 14;
+        phones[i].style.setProperty('--par', amt.toFixed(1) + 'px');
+      }
+    }
+    /* synchronous, like the flight engine: rAF is throttled in background tabs
+       and low-power mode, which would freeze the rail, wipe and parallax */
+    window.addEventListener('scroll', lowUpdate, {passive:true});
+    window.addEventListener('resize', lowUpdate, {passive:true});
+    lowUpdate();
+  }
+
+  if (reduce) return;   /* stacked stills; no scrubbing, no video fetch */
+
+  /* ---- pick the encode by DEVICE class, not window width ----
+     window.innerWidth is unreliable here: the script runs before layout settles,
+     so a desktop opening in a narrow pane would latch onto the mobile encode and
+     never upgrade. screen.width reflects the hardware and doesn't move. */
+  var deviceW = Math.max(screen.width || 0, window.innerWidth || 0);
+  var small = deviceW <= 900 || (navigator.deviceMemory && navigator.deviceMemory <= 4)
+              || navigator.connection && /(^|-)2g$/.test(navigator.connection.effectiveType || '');
+  /* Both tiers are deliberately small. Scrubbing is random access, so the file
+     has to buffer END TO END: a 33MB encode only buffered its first 15s before
+     the browser went NETWORK_IDLE, and every seek past that point stalled at
+     readyState 1 with nothing painted. Size beats sharpness here. */
+  video.src = small ? 'assets/vid/flythrough-540.mp4' : 'assets/vid/flythrough-720.mp4';
+
+  /* ---- spine height ----
+     One full viewport per leg meant ~5,700px of scrolling before any
+     conventional section. 46svh/leg keeps every dwell readable while cutting
+     the run-up to the rest of the page by ~54% from the original. */
+  var LEGS = 8, LEG_VH = 46;
+  spine.style.height = (LEGS * LEG_VH) + 'svh';
+
+  /* ---- wrap each split-panel screenshot so it can be wiped in ----
+     Done in JS, not markup: if this script never runs the images render plainly
+     rather than sitting clipped to nothing. */
+  var REVEAL_SPAN = 0.55;   /* reveal completes 55% through the dwell */
+  /* the plasma panel animates real SVG geometry instead of clipping a raster:
+     history strokes draw via dashoffset, then the dashed forecast is revealed
+     by widening a clip rect (dashoffset can't drive a path that already uses
+     stroke-dasharray for its dash pattern) */
+  var plasmaPanel = document.querySelector('.panel.split .frame.plasma');
+  if (plasmaPanel){
+    var host = plasmaPanel.closest('.panel');
+    host._plasma = {
+      hist: [].slice.call(plasmaPanel.querySelectorAll('.pp-hist path')).map(function(p){
+        var L = p.getTotalLength();
+        p.style.setProperty('--len', L); p.style.setProperty('--off', L);
+        return {p:p, L:L};
+      }),
+      rect: plasmaPanel.querySelector('#pprect'),
+      now:  plasmaPanel.querySelector('#ppnow'),
+      lbl:  plasmaPanel.querySelector('#ppnowlbl'),
+      heat: (function(){
+        var h = host.querySelector('#ppheat'); if (!h) return null;
+        var seq = (h.dataset.seq || '').split('');
+        seq.forEach(function(s){
+          var c = document.createElement('i'); c.dataset.s = s; h.appendChild(c);
+        });
+        return {el:h, cells:[].slice.call(h.children)};
+      })()
+    };
+  }
+
+  /* week grid: build cells from the t/p/. sequence, mark today's column */
+  var wk = document.getElementById('wkgrid');
+  if (wk){
+    wk.closest('.frame') && wk.closest('.frame').classList.add('wkf');
+    var wkCells = [];
+    [].slice.call(wk.querySelectorAll('.wk-row')).forEach(function(row){
+      var b = document.createElement('b'); b.textContent = row.dataset.name;
+      row.appendChild(b);
+      row.dataset.seq.split('').forEach(function(ch, i){
+        var c = document.createElement('i');
+        if (ch === 't'){ c.className = 't'; c.textContent = '✓'; }
+        else if (ch === 'p'){ c.className = 'p'; c.textContent = '○'; }
+        if (i === 2) c.className += ' today';
+        row.appendChild(c); wkCells.push(c);
+      });
+    });
+    wk.closest('.panel')._wk = wkCells;
+  }
+
+  /* blood panel: marker sits where the value falls inside its reference range */
+  var bw = document.getElementById('bwtable');
+  if (bw){
+    bw.closest('.frame') && bw.closest('.frame').classList.add('bwf');
+    var bwRows = [].slice.call(bw.querySelectorAll('.bw-row')).map(function(row){
+      var lo = +row.dataset.lo, hi = +row.dataset.hi, v = +row.dataset.v;
+      var pct = Math.max(4, Math.min(96, ((v - lo) / (hi - lo)) * 100));
+      row.innerHTML = '<b>' + row.dataset.a + '</b>' +
+        '<span class="bw-track"><span class="bw-fill"></span><span class="bw-dot"></span></span>' +
+        '<span class="bw-val"><em style="font-style:normal">0</em><span>' + row.dataset.u + '</span></span>';
+      return {el:row, pct:pct, v:v,
+        dec:(row.dataset.v.indexOf('.') > -1) ? 1 : 0,
+        fill:row.querySelector('.bw-fill'), dot:row.querySelector('.bw-dot'),
+        val:row.querySelector('.bw-val em')};
+    });
+    bw.closest('.panel')._bw = bwRows;
+  }
+
+  /* syringe panel: barrel fills to the engine's computed 0.20 mL as you scroll */
+  var syrFrame = document.querySelector('.panel.split .frame.syringe');
+  if (syrFrame){
+    syrFrame.closest('.panel')._syr = {
+      vol:  syrFrame.querySelector('#syrvol'),
+      mark: syrFrame.querySelector('#syrmark'),
+      dose: syrFrame.querySelector('#syrdose'),
+      ml:   syrFrame.querySelector('#syrml')
+    };
+  }
+
+  panels.forEach(function(el){
+    var img = el.querySelector('.ui img');
+    if (!img) return;
+    var frame = document.createElement('span');
+    frame.className = 'frame';
+    img.parentNode.insertBefore(frame, img);
+    frame.appendChild(img);
+    var edge = document.createElement('span');
+    edge.className = 'edge';
+    frame.appendChild(edge);
+    el._frame = frame;
+  });
+
+  /* ---- scroll-dwell curve ----
+     A linear scroll->time map moves the camera at a constant rate whether you
+     are reading a panel or travelling between them. Build a monotonic piecewise
+     map that spends LESS film per pixel while a panel is up (camera almost
+     stops to let you read) and more between them, so pacing follows the copy.
+     Total film is unchanged; only its distribution over the scroll is. */
+  var DWELL_SLOW = 0.55, DWELL_FAST = 1.7;
+  var segs = (function(){
+    var edges = [0];
+    panels.forEach(function(el){
+      edges.push(Math.max(0, Math.min(1, parseFloat(el.dataset.in))));
+      edges.push(Math.max(0, Math.min(1, parseFloat(el.dataset.out))));
+    });
+    edges.push(1);
+    edges = edges.filter(function(v,i,a){ return a.indexOf(v) === i; }).sort(function(a,b){return a-b;});
+    var list = [], acc = 0;
+    for (var i=0;i<edges.length-1;i++){
+      var p0 = edges[i], p1 = edges[i+1];
+      if (p1 <= p0) continue;
+      var mid = (p0+p1)/2;
+      var inPanel = panels.some(function(el){
+        return mid >= parseFloat(el.dataset.in) && mid <= parseFloat(el.dataset.out);
+      });
+      var w = (p1-p0) * (inPanel ? DWELL_SLOW : DWELL_FAST);
+      list.push({p0:p0, p1:p1, w:w, t0:acc}); acc += w;
+    }
+    list.forEach(function(s){ s.t0 /= acc; s.w /= acc; });
+    return list;
+  })();
+  function dwellMap(p){
+    for (var i=0;i<segs.length;i++){
+      var s = segs[i];
+      if (p <= s.p1 || i === segs.length-1){
+        var k = (p - s.p0) / (s.p1 - s.p0);
+        k = k < 0 ? 0 : (k > 1 ? 1 : k);
+        return s.t0 + k * s.w;
+      }
+    }
+    return p;
+  }
+
+  /* sector rail, one tick per leg */
+  for (var i=0;i<LEGS;i++) rail.appendChild(document.createElement('i'));
+  var ticks = rail.querySelectorAll('i');
+
+  /* ---- iOS priming: Safari will not seek a video it has never played ---- */
+  var primed = false;
+  function prime(){
+    if (primed) return; primed = true;
+    var p = video.play();
+    if (p && p.then) p.then(function(){ video.pause(); }).catch(function(){ /* fine — desktop seeks without it */ });
+    else { try{ video.pause(); }catch(e){} }
+  }
+  ['touchstart','pointerdown','wheel','keydown'].forEach(function(ev){
+    window.addEventListener(ev, prime, {once:true, passive:true});
+  });
+
+  /* ---- scroll → currentTime, coalesced through rAF ----
+     Do NOT cache duration off a single 'loadedmetadata' listener: on a warm
+     cache the metadata is already there before this script runs, the event
+     never fires, and the video would sit frozen on frame 0 forever. Read
+     video.duration live, and re-sync on every event that can supply it. */
+  var target = 0, applied = -1, ticking = false;
+  function dur(){
+    var d = video.duration;
+    return (isFinite(d) && d > 0) ? d : 0;
+  }
+  ['loadedmetadata','durationchange','loadeddata','canplay'].forEach(function(ev){
+    video.addEventListener(ev, function(){ applied = -1; update(); });
+  });
+
+  function progress(){
+    var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+    var total = spine.offsetHeight - vh;
+    /* a collapsed/zero-height viewport makes svh resolve to 0 — bail rather
+       than divide by nothing and pin the flight at one frame */
+    if (!vh || total <= 0) return null;
+    return Math.min(1, Math.max(0, -spine.getBoundingClientRect().top / total));
+  }
+
+  function update(){
+    ticking = false;
+    var p = progress();
+    if (p === null) return;          /* viewport not measurable yet */
+    var d = dur();
+    /* never seek to exactly duration — there is no frame at the end boundary and
+       the decoder drops to readyState 1 with nothing painted on the last panel */
+    target = Math.min(dwellMap(p) * d, d - 0.08);
+
+    /* only seek on a meaningful delta — spamming currentTime stalls the decoder.
+       Re-sync if something else moved the playhead behind our back. */
+    if (d){
+      if (Math.abs(video.currentTime - applied) > 0.5) applied = -1;
+      if (Math.abs(target - applied) > 0.016){
+        applied = target;
+        try { video.currentTime = target; } catch(e){}
+      }
+    }
+
+    for (var i=0;i<panels.length;i++){
+      var el = panels[i];
+      var a = parseFloat(el.dataset.in), b = parseFloat(el.dataset.out);
+      /* scroll-linked fade: ramp over the first/last 16% of the dwell so the
+         copy tracks the scroll instead of snapping on a fixed CSS transition */
+      var vis = 0;
+      if (p >= a && p <= b){
+        var span = b - a, ramp = span * 0.16;
+        var din = (p - a) / ramp, dout = (b - p) / ramp;
+        vis = Math.min(1, Math.max(0, Math.min(din, dout)));
+        vis = vis * vis * (3 - 2 * vis);          /* smoothstep */
+      }
+      el.style.opacity = vis.toFixed(3);
+      el.style.transform = vis >= 0.999 ? 'none' : 'translateY(' + ((1 - vis) * 18).toFixed(1) + 'px)';
+      el.classList.toggle('on', vis > 0.02);
+
+      /* draw the screenshot in across the first REVEAL_SPAN of the dwell, so it
+         finishes well before the panel starts leaving and never wipes back out */
+      var fr = el._frame;
+      if (fr){
+        var k = (p - a) / ((b - a) * REVEAL_SPAN);
+        k = k < 0 ? 0 : (k > 1 ? 1 : k);
+        var eased = 1 - Math.pow(1 - k, 3);
+        fr.style.setProperty('--hide', ((1 - eased) * 100).toFixed(2) + '%');
+        fr.style.setProperty('--edge', (k > 0.01 && k < 0.99) ? '1' : '0');
+      }
+
+      /* week grid: cells land left to right, a day at a time */
+      var wkc = el._wk;
+      if (wkc){
+        var wkk = (p - a) / ((b - a) * REVEAL_SPAN);
+        wkk = wkk < 0 ? 0 : (wkk > 1 ? 1 : wkk);
+        var lead = wkk * (wkc.length + 8);
+        for (var w=0;w<wkc.length;w++){
+          /* order by column then row so it reads as days passing, not rows */
+          var col = w % 7, rw = (w / 7) | 0, ord = col * 3 + rw;
+          var cv = Math.min(1, Math.max(0, lead - ord));
+          wkc[w].style.setProperty('--o', cv.toFixed(2));
+          wkc[w].style.setProperty('--s', (0.8 + 0.2*cv).toFixed(2));
+        }
+      }
+
+      /* blood panel: rows arrive, bars fill to the value's place in range */
+      var bwr = el._bw;
+      if (bwr){
+        var bk = (p - a) / ((b - a) * REVEAL_SPAN);
+        bk = bk < 0 ? 0 : (bk > 1 ? 1 : bk);
+        var blead = bk * (bwr.length + 5);
+        for (var r=0;r<bwr.length;r++){
+          var rv = Math.min(1, Math.max(0, blead - r));
+          var ease = 1 - Math.pow(1 - rv, 3);
+          bwr[r].el.style.setProperty('--o', rv.toFixed(2));
+          bwr[r].el.style.setProperty('--y', (6*(1-rv)).toFixed(1) + 'px');
+          bwr[r].fill.style.setProperty('--w', (bwr[r].pct*ease).toFixed(1) + '%');
+          bwr[r].dot.style.setProperty('--w', (bwr[r].pct*ease).toFixed(1) + '%');
+          bwr[r].val.textContent = (bwr[r].v*ease).toFixed(bwr[r].dec);
+        }
+      }
+
+      /* syringe: 0 -> 42 units of a 210-unit barrel = 0 -> 0.20 mL */
+      var sy = el._syr;
+      if (sy){
+        var sk = (p - a) / ((b - a) * REVEAL_SPAN);
+        sk = sk < 0 ? 0 : (sk > 1 ? 1 : sk);
+        var se = 1 - Math.pow(1 - sk, 3);
+        sy.vol.setAttribute('width', (42 * se).toFixed(2));
+        sy.mark.setAttribute('opacity', Math.min(1, se * 1.6).toFixed(2));
+        sy.dose.textContent = Math.round(400 * se);
+        sy.ml.textContent = se > 0.02 ? (0.2 * se).toFixed(2) + ' mL' : '—';
+      }
+
+      /* plasma chart: history draws first, then the forecast extends past now */
+      var pl = el._plasma;
+      if (pl){
+        var kk = (p - a) / ((b - a) * REVEAL_SPAN);
+        kk = kk < 0 ? 0 : (kk > 1 ? 1 : kk);
+        var hk = Math.min(1, kk / 0.62);                    /* history 0 -> 62% */
+        var fk = Math.max(0, (kk - 0.5) / 0.5);             /* forecast 50% -> end */
+        var he = 1 - Math.pow(1 - hk, 3), fe = 1 - Math.pow(1 - fk, 3);
+        for (var q=0;q<pl.hist.length;q++)
+          pl.hist[q].p.style.setProperty('--off', (pl.hist[q].L * (1 - he)).toFixed(1));
+        pl.rect.setAttribute('width', (302 * fe).toFixed(1));
+        var nowOp = Math.min(1, Math.max(0, (kk - 0.42) / 0.18));
+        pl.now.setAttribute('opacity', nowOp.toFixed(2));
+        pl.lbl.setAttribute('opacity', nowOp.toFixed(2));
+
+        /* heatmap fills day by day once the chart is under way */
+        if (pl.heat){
+          var hk = Math.max(0, (kk - 0.45) / 0.5);
+          hk = hk > 1 ? 1 : hk;
+          var n = pl.heat.cells.length, lead = hk * (n + 6);
+          for (var c=0;c<n;c++){
+            var cv = Math.min(1, Math.max(0, lead - c));
+            pl.heat.cells[c].style.setProperty('--o', cv.toFixed(2));
+            pl.heat.cells[c].style.setProperty('--s', (0.7 + 0.3*cv).toFixed(2));
+          }
+        }
+      }
+    }
+    for (var j=0;j<ticks.length;j++){
+      ticks[j].classList.toggle('lit', p >= (j/LEGS) - 0.001);
+    }
+    if (cue) cue.style.opacity = p > 0.02 ? 0 : 1;
+  }
+
+  /* Update synchronously on scroll rather than deferring to rAF.
+     Scroll already fires at most once per frame, update() is a handful of reads,
+     and the seek guard below stops decoder spam — while rAF gets throttled in
+     background tabs and low-power mode, which would freeze the flight mid-scroll. */
+  function onScroll(){ update(); }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  window.addEventListener('resize', function(){ applied = -1; update(); }, {passive:true});
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden){ applied = -1; update(); }
+  });
+
+  /* ---- buffering cue ----
+     Report real buffered progress rather than a spinner, and retire it as soon
+     as the video can actually paint a frame (readyState >= 2). */
+  var loadbar = document.getElementById('loadbar'), loadfill = document.getElementById('loadfill');
+  if (loadbar){
+    var settled = false;
+    var poll = setInterval(function(){
+      var d = dur();
+      var end = video.buffered.length ? video.buffered.end(video.buffered.length - 1) : 0;
+      if (d) loadfill.style.width = Math.min(100, (end / d) * 100).toFixed(1) + '%';
+      if (!settled && video.readyState >= 2){
+        settled = true;
+        loadfill.style.width = '100%';
+        loadbar.classList.add('done');
+        setTimeout(function(){ loadbar.style.display = 'none'; }, 600);
+        clearInterval(poll);
+      }
+    }, 250);
+    /* never leave it hanging if the video fails outright */
+    video.addEventListener('error', function(){
+      loadbar.querySelector('.lbl').textContent = 'Flight unavailable';
+      loadfill.style.background = 'var(--muted)';
+      clearInterval(poll);
+    });
+  }
+
+  update();
+})();
+</script>
+
+</body>
+</html>
