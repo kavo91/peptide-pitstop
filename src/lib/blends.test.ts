@@ -44,4 +44,40 @@ describe("rollUpExposure", () => {
     });
     expect(rows[0].peptideId).toBe("ghk");
   });
+
+  // The analytics roll-up keys this function by peptide NAME (so derived
+  // component rows merge with standalone history), and Peptide carries no
+  // unique-name constraint — two separate peptide rows can therefore arrive
+  // under one key. Overwriting drops a whole course's delivered mass from a
+  // table headed "all time", silently and with no way to notice from the UI.
+  it("ACCUMULATES two standalone entries that share a key, never overwrites", () => {
+    const rows = rollUpExposure({
+      standalone: [
+        { peptideId: "BPC-157", peptideName: "BPC-157", totalMcg: 1000 },
+        { peptideId: "BPC-157", peptideName: "BPC-157", totalMcg: 500 },
+      ],
+      derived: [],
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].standaloneMcg).toBe(1500);
+    expect(rows[0].totalMcg).toBe(1500);
+    expect(rows[0].hasDerived).toBe(false);
+  });
+
+  it("still merges derived mass onto an accumulated standalone row", () => {
+    const rows = rollUpExposure({
+      standalone: [
+        { peptideId: "KPV", peptideName: "KPV", totalMcg: 1000 },
+        { peptideId: "KPV", peptideName: "KPV", totalMcg: 200 },
+      ],
+      derived: [
+        { componentPeptideId: "KPV", componentName: "KPV", doseMcg: 300, fraction: 0.125, source: "label", derived: true },
+      ],
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].standaloneMcg).toBe(1200);
+    expect(rows[0].blendMcg).toBe(300);
+    expect(rows[0].totalMcg).toBe(1500);
+    expect(rows[0].hasDerived).toBe(true);
+  });
 });

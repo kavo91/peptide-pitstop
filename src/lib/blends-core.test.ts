@@ -79,13 +79,13 @@ describe("blendMassCheck", () => {
 });
 
 describe("regression anchor — cumulative blend exposure", () => {
-  // A fixed cumulative total for a blend course: 52.8 mg = 52,800 mcg. Held
+  // A fixed cumulative total for a blend course: 40.0 mg = 40,000 mcg. Held
   // constant so the arithmetic below is a stable anchor rather than a moving target.
-  const KLOW_TOTAL_MCG = 52_800;
+  const KLOW_TOTAL_MCG = 40_000;
 
-  it("recovers the 33.0 mg of GHK-Cu that the blend delivered", () => {
+  it("recovers the 25.0 mg of GHK-Cu that the blend delivered", () => {
     const ghk = expandBlendDose(KLOW_TOTAL_MCG, KLOW).find((p) => p.componentName === "GHK-Cu")!;
-    expect(ghk.doseMcg / 1000).toBeCloseTo(33.0, 6);
+    expect(ghk.doseMcg / 1000).toBeCloseTo(25.0, 6);
   });
 
   it("adds blend-delivered mass to standalone mass for the same compound", () => {
@@ -93,19 +93,19 @@ describe("regression anchor — cumulative blend exposure", () => {
     const standaloneMg = 40.0;
     const blendMg = expandBlendDose(KLOW_TOTAL_MCG, KLOW)
       .find((p) => p.componentName === "GHK-Cu")!.doseMcg / 1000;
-    expect(standaloneMg + blendMg).toBeCloseTo(73.0, 6);
+    expect(standaloneMg + blendMg).toBeCloseTo(65.0, 6);
   });
 
   it("surfaces a component that has no standalone protocol of its own", () => {
     const kpv = expandBlendDose(KLOW_TOTAL_MCG, KLOW).find((p) => p.componentName === "KPV")!;
-    expect(kpv.doseMcg / 1000).toBeCloseTo(6.6, 6);
+    expect(kpv.doseMcg / 1000).toBeCloseTo(5.0, 6);
   });
 });
 
 describe("distinct compounds must not share an identity", () => {
   // TB-500 (Ac-LKKTETQ fragment) and Thymosin Beta-4 (full 43-aa) are different
   // compounds. A standalone TB-4 course and a KLOW blend delivering TB-500 must
-  // stay separate: pointing both at one peptide id reports their sum (18.6 mg)
+  // stay separate: pointing both at one peptide id reports their sum (17.0 mg)
   // against a compound that was never taken on its own. componentPeptideId is
   // the guard — this locks it.
   const KLOW_WITH_TB500: BlendComponent[] = [
@@ -116,17 +116,17 @@ describe("distinct compounds must not share an identity", () => {
   ];
 
   it("keeps KLOW's TB-500 separate from standalone Thymosin Beta-4 exposure", () => {
-    const derived = expandBlendDose(52_800, KLOW_WITH_TB500);
+    const derived = expandBlendDose(40_000, KLOW_WITH_TB500);
     const tb500 = derived.find((p) => p.componentPeptideId === "tb500")!;
-    expect(tb500.doseMcg / 1000).toBeCloseTo(6.6, 6);
+    expect(tb500.doseMcg / 1000).toBeCloseTo(5.0, 6);
 
     const rows = rollUpExposure({
       standalone: [{ peptideId: "tb4", peptideName: "Thymosin Beta-4", totalMcg: 12_000 }],
       derived,
     });
-    // TB-4 stays at 12.0 mg; TB-500 appears separately at 6.6 mg. Never 18.6 mg of either.
+    // TB-4 stays at 12.0 mg; TB-500 appears separately at 5.0 mg. Never 17.0 mg of either.
     expect(rows.find((r) => r.peptideId === "tb4")!.totalMcg / 1000).toBeCloseTo(12.0, 6);
-    expect(rows.find((r) => r.peptideId === "tb500")!.totalMcg / 1000).toBeCloseTo(6.6, 6);
+    expect(rows.find((r) => r.peptideId === "tb500")!.totalMcg / 1000).toBeCloseTo(5.0, 6);
     expect(rows.find((r) => r.peptideId === "tb4")!.hasDerived).toBe(false);
   });
 });

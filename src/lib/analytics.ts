@@ -551,22 +551,35 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
 
   // ── Cumulative exposure roll-up (all time) ────────────────────────────────
   // The one surface where blend-delivered component mass is aggregated with the
-  // same compound's standalone history. Two grouped queries — no per-dose rows.
+  // same compound's standalone history. Grouped queries — no per-dose rows.
+  //
+  // ALL doses count, including ad-hoc ones with no protocol: the table is
+  // headed "all time", and filtering to protocol-linked doses made it disagree
+  // with the CSV and PDF exports, which have always included them. A dose
+  // resolves its peptide preparation-first and protocol-second — the exact
+  // precedence the exports use — so the surfaces cannot drift apart again.
   const blendIds = new Set(dbComponentsByPeptide.keys());
   const doseSums = await prisma.doseLog.groupBy({
-    by: ["protocolId"],
-    where: { userId, protocol: { isNot: null } },
+    by: ["preparationId", "protocolId"],
+    where: { userId },
     _sum: { doseMcg: true },
   });
   const protoPeptide = new Map(
     (await prisma.protocol.findMany({ where: { userId }, select: { id: true, peptideId: true, peptide: { select: { name: true } } } }))
       .map((p) => [p.id, { peptideId: p.peptideId, name: p.peptide.name }]),
   );
+  const prepPeptide = new Map(
+    (await prisma.preparation.findMany({
+      where: { vial: { userId } },
+      select: { id: true, vial: { select: { peptideId: true, peptide: { select: { name: true } } } } },
+    })).map((p) => [p.id, { peptideId: p.vial.peptideId, name: p.vial.peptide.name }]),
+  );
   const standaloneByPeptide = new Map<string, { peptideName: string; totalMcg: number }>();
   const blendTotals = new Map<string, number>();
   for (const row of doseSums) {
-    if (!row.protocolId) continue;
-    const pep = protoPeptide.get(row.protocolId);
+    const pep =
+      (row.preparationId ? prepPeptide.get(row.preparationId) : undefined) ??
+      (row.protocolId ? protoPeptide.get(row.protocolId) : undefined);
     if (!pep) continue;
     const mcg = Number(row._sum.doseMcg?.toString() ?? "0");
     if (blendIds.has(pep.peptideId)) {

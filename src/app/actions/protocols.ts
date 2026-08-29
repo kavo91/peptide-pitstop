@@ -507,9 +507,38 @@ export async function updateProtocol(input: UpdateProtocolInput) {
   // the date alignment below.
   const target = await prisma.protocol.findFirst({
     where: { id: input.id, userId: user.id },
-    select: { startDate: true, endDate: true, stackId: true, cycleOnWeeks: true, cycleOffWeeks: true },
+    select: { startDate: true, endDate: true, stackId: true, courseId: true, cycleOnWeeks: true, cycleOffWeeks: true },
   });
   if (!target) return { ok: false as const, error: "Protocol not found." };
+
+  // Frozen history. reviseProtocol keeps the completed predecessor beside its
+  // live successor (courseId chains them), and courseTips() deliberately drops
+  // the predecessor — so EVERY guard and cascade below would evaluate the live
+  // successor instead of the row actually being edited. Two consequences, both
+  // silent: the titration guard passed on a closed, already-dosed, titrating
+  // predecessor (its steps/doses were never inspected), and the sibling cascade
+  // — `notIn: [input.id, ...superseded]`, which collapses to exactly the
+  // superseded set when input.id is itself superseded — then matched the TIPS
+  // and pushed the predecessor's new date onto the running stack.
+  // Lineage is per COURSE, not per stack: reviseProtocol sets
+  // `courseId: old.courseId ?? old.id` for standalone protocols too.
+  const courseKeyOf = target.courseId ?? input.id;
+  const courseGroup = await prisma.protocol.findMany({
+    where: { userId: user.id, OR: [{ id: courseKeyOf }, { courseId: courseKeyOf }] },
+    select: { id: true, courseId: true, status: true, startDate: true },
+  });
+  // Only conclude "superseded" from a group we actually found the target in —
+  // never block the edit on an unexpectedly empty read.
+  if (
+    courseGroup.some((p) => p.id === input.id) &&
+    !courseTips(courseGroup).some((t) => t.id === input.id)
+  ) {
+    return {
+      ok: false as const,
+      error:
+        "This protocol was revised and replaced — its dates and status are frozen history. Edit the current course instead.",
+    };
+  }
 
   // Titration guard (same principle as assertNoScheduleRewrite and the
   // updateStackSchedule guard): a startDate change re-times every phase

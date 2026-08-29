@@ -111,6 +111,17 @@ export function rollUpExposure(input: {
   const rows = new Map<string, ExposureRow>();
 
   for (const s of input.standalone) {
+    // ACCUMULATE, never overwrite. Two entries can legitimately share a key:
+    // the analytics roll-up keys this by peptide NAME so derived component rows
+    // merge with standalone history, and Peptide has no unique-name constraint.
+    // A plain set() silently dropped one course's entire delivered mass from a
+    // table headed "all time" — invisible, because the row still looked right.
+    const existing = rows.get(s.peptideId);
+    if (existing) {
+      existing.standaloneMcg += s.totalMcg;
+      existing.totalMcg += s.totalMcg;
+      continue;
+    }
     rows.set(s.peptideId, {
       peptideId: s.peptideId,
       peptideName: s.peptideName,

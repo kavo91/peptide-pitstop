@@ -459,3 +459,90 @@ describe("updateProtocol start-date titration guard (review fix)", () => {
     expect(res.ok).toBe(true);
   });
 });
+
+describe("updateProtocol — a revised-out predecessor is frozen history", () => {
+  // reviseProtocol keeps the completed predecessor beside its live successor
+  // (courseId chains them). courseTips() deliberately drops the predecessor —
+  // which meant every guard and cascade in updateProtocol silently evaluated
+  // the LIVE SUCCESSOR instead of the row actually being edited. Editing a
+  // closed, already-dosed, titrating predecessor therefore sailed past the
+  // titration guard, and the sibling cascade — `notIn: [input.id, ...superseded]`,
+  // which collapses to the superseded set when input.id is itself superseded —
+  // then pushed the new start date onto every live tip in the stack.
+  const supersededPredecessor = {
+    startDate: new Date("2026-08-10T00:00:00.000Z"),
+    endDate: null,
+    stackId: "stk1",
+    courseId: null,
+    status: "completed",
+    cycleOnWeeks: null,
+    cycleOffWeeks: null,
+  };
+  const courseGroup = [
+    { id: "p1", courseId: null, status: "completed", startDate: new Date("2026-08-10T00:00:00.000Z"), _count: { steps: 3, doseLogs: 21 } },
+    { id: "p2", courseId: "p1", status: "active", startDate: new Date("2026-08-24T00:00:00.000Z"), _count: { steps: 0, doseLogs: 0 } },
+  ];
+
+  it("refuses a start-date change on the predecessor, and cascades nothing", async () => {
+    protocolFindFirst.mockResolvedValue({ ...supersededPredecessor });
+    protocolFindMany.mockResolvedValue(courseGroup);
+
+    const res = await updateProtocol({ id: "p1", startDateISO: "2026-08-17" });
+
+    expect(res.ok).toBe(false);
+    expect(res.ok ? "" : res.error).toMatch(/revised/i);
+    // The live successor's window must not have moved.
+    expect(protocolUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses an end-date change on the predecessor too", async () => {
+    protocolFindFirst.mockResolvedValue({ ...supersededPredecessor });
+    protocolFindMany.mockResolvedValue(courseGroup);
+
+    const res = await updateProtocol({ id: "p1", endDateISO: "2026-09-30" });
+
+    expect(res.ok).toBe(false);
+    expect(protocolUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses resurrecting the predecessor by status", async () => {
+    protocolFindFirst.mockResolvedValue({ ...supersededPredecessor });
+    protocolFindMany.mockResolvedValue(courseGroup);
+
+    const res = await updateProtocol({ id: "p1", status: "active" });
+
+    expect(res.ok).toBe(false);
+    expect(protocolUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("applies outside a stack as well — lineage is per COURSE, not per stack", async () => {
+    protocolFindFirst.mockResolvedValue({ ...supersededPredecessor, stackId: null });
+    protocolFindMany.mockResolvedValue(courseGroup);
+
+    const res = await updateProtocol({ id: "p1", startDateISO: "2026-08-17" });
+
+    expect(res.ok).toBe(false);
+    // Must be refused as frozen history, NOT incidentally by the titration
+    // guard — a non-titrating predecessor is just as frozen.
+    expect(res.ok ? "" : res.error).toMatch(/revised/i);
+    expect(protocolUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("still allows the edit on the course TIP (the live successor)", async () => {
+    protocolFindFirst.mockResolvedValue({
+      startDate: new Date("2026-08-24T00:00:00.000Z"),
+      endDate: null,
+      stackId: "stk1",
+      courseId: "p1",
+      status: "active",
+      cycleOnWeeks: null,
+      cycleOffWeeks: null,
+    });
+    protocolFindMany.mockResolvedValue(courseGroup);
+    runPlannedDoseGeneration.mockResolvedValue(undefined);
+
+    const res = await updateProtocol({ id: "p2", endDateISO: "2026-10-01" });
+
+    expect(res.ok).toBe(true);
+  });
+});
