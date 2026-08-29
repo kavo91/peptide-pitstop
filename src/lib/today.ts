@@ -53,6 +53,12 @@ export interface DueDose {
   doseValue: string;
   doseUnit: DoseUnit;
   /**
+   * Vendor-blend composition of this peptide (sorted by sortIndex), or null
+   * for a plain compound. Lets the card split the CURRENT dose into derived
+   * per-component masses; the ratio `source` travels with each row.
+   */
+  blendComponents: { componentPeptideId: string; componentName: string; massMg: number; source: string; sortIndex: number }[] | null;
+  /**
    * Scheduled slot time "HH:MM" (local), or null for an untimed dose.
    * Used to pre-fill the log form and label the card.
    */
@@ -75,7 +81,7 @@ export interface DueDose {
   /** A vial awaiting preparation, when no active prep exists. Drives the recon wizard. */
   vialForPrep: { id: string; labelStrengthMg: string; budDefaultDays: number } | null;
   syringe:
-    | { id: string; name: string; graduationType: "units" | "ml"; unitsPerMl: number; capacityMl: string; capacityUnits: number; increment: string }
+    | { id: string; name: string; graduationType: "units" | "ml"; deviceType: "syringe" | "pen"; unitsPerMl: number; capacityMl: string; capacityUnits: number; increment: string }
     | null;
   /**
    * True if this slot is considered already logged.
@@ -195,6 +201,37 @@ export async function getTodayDoses(
     include: { peptide: true, stack: true, steps: true },
   });
 
+  // The user's preferred device — the card-level fallback when a protocol
+  // doesn't pin its own defaultSyringeId.
+  const userDefaultSyringeId =
+    (await prisma.user.findUnique({ where: { id: userId }, select: { defaultSyringeId: true } }))?.defaultSyringeId ?? null;
+
+  // Blend composition for any due blend peptide — ONE batched fetch (no N+1).
+  // Powers the prospective per-component split on the card; rows carry the
+  // ratio source so a derived mass is never presented as measured.
+  const blendRows = protocols.length
+    ? await prisma.blendComponent.findMany({
+        // peptide.userId is defense-in-depth: ownership already holds because
+        // blends are only writable on owned peptides, but the read should not
+        // depend on that single write-path guarantee.
+        where: { peptideId: { in: [...new Set(protocols.map((p) => p.peptideId))] }, peptide: { userId } },
+        include: { componentPeptide: { select: { name: true } } },
+        orderBy: { sortIndex: "asc" },
+      })
+    : [];
+  const blendByPeptide = new Map<string, { componentPeptideId: string; componentName: string; massMg: number; source: string; sortIndex: number }[]>();
+  for (const r of blendRows) {
+    const list = blendByPeptide.get(r.peptideId) ?? [];
+    list.push({
+      componentPeptideId: r.componentPeptideId,
+      componentName: r.componentPeptide.name,
+      massMg: Number(r.massMg),
+      source: r.source,
+      sortIndex: r.sortIndex,
+    });
+    blendByPeptide.set(r.peptideId, list);
+  }
+
   // Rebase overrides for this week: a confirmed snap-back deletes the week's
   // on-grid rows and writes shifted (OFF-grid) ones. Only those off-grid rows
   // count as an override — routine rows materialised by the rolling-dose cron
@@ -311,8 +348,10 @@ export async function getTodayDoses(
           orderBy: { openedAt: "desc" },
         });
 
-    const syringe = !isOral && p.defaultSyringeId
-      ? await prisma.syringe.findUnique({ where: { id: p.defaultSyringeId } })
+    // Protocol default wins; else the user's preferred device.
+    const syringeIdPick = p.defaultSyringeId ?? userDefaultSyringeId;
+    const syringe = !isOral && syringeIdPick
+      ? await prisma.syringe.findUnique({ where: { id: syringeIdPick } })
       : null;
 
     // Half-life timing: most recent DoseLog for this peptide (any protocol).
@@ -394,6 +433,7 @@ export async function getTodayDoses(
         route: p.peptide.route,
         doseValue,
         doseUnit,
+        blendComponents: blendByPeptide.get(p.peptideId) ?? null,
         time: slot.time,
         slotKey: `${p.id}@${slot.time ?? "any"}`,
         budState: budStatus({ beyondUseDate: prep?.beyondUseDate ?? null, now: new Date() }).state,
@@ -417,6 +457,7 @@ export async function getTodayDoses(
               id: syringe.id,
               name: syringe.name,
               graduationType: syringe.graduationType as "units" | "ml",
+              deviceType: (syringe.deviceType === "pen" ? "pen" : "syringe") as "syringe" | "pen",
               unitsPerMl: syringe.unitsPerMl,
               capacityMl: syringe.capacityMl.toString(),
               capacityUnits: syringe.capacityUnits,

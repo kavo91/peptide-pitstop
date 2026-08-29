@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/owner";
 import { decryptField } from "@/lib/crypto/fieldEncryption";
 import { formatSideEffects } from "@/lib/side-effects";
 import { toCsv } from "@/lib/csv";
+import { expandBlendDose, type BlendComponent } from "@/lib/blends-core";
 
 export const dynamic = "force-dynamic";
 
@@ -53,19 +54,42 @@ async function buildDoses(userId: string): Promise<CsvData> {
       protocol: { include: { peptide: true } },
     },
   });
-  return {
-    headers: [
-      "takenAt", "localDay", "tz", "peptide", "route", "doseMcg", "doseInputUnit", "volumeMl", "syringeUnits",
-      "injectionSite", "source", "scheduledAt", "deltaMinutes", "notes",
-    ],
-    // Oral doses have no preparation → name resolves via the protocol; route/site
-    // columns are blank for oral (no body-site recorded). Legacy rows (route null)
-    // are injection by definition.
-    rows: logs.map((d) => [
+
+  // Vendor blends are one Peptide dosing the whole blend. Without expansion the
+  // export hides what was actually administered — a clinician reading
+  // "KLOW 3200 mcg" cannot recover the copper peptide, BPC-157, TB-500 and KPV
+  // inside it. Each blend dose therefore emits its own row PLUS one row per
+  // component carrying the DERIVED mass, tagged in `derivedFromBlend` so it can
+  // never be mistaken for a separately logged dose.
+  const componentRows = await prisma.blendComponent.findMany({
+    where: { peptide: { userId } },
+    include: { peptide: { select: { name: true } }, componentPeptide: { select: { name: true } } },
+    orderBy: { sortIndex: "asc" },
+  });
+  const componentsByBlend = new Map<string, BlendComponent[]>();
+  const blendName = new Map<string, string>();
+  for (const r of componentRows) {
+    blendName.set(r.peptideId, r.peptide.name);
+    const list = componentsByBlend.get(r.peptideId) ?? [];
+    list.push({
+      componentPeptideId: r.componentPeptideId,
+      componentName: r.componentPeptide.name,
+      massMg: Number(r.massMg.toString()),
+      source: r.source as BlendComponent["source"],
+      sortIndex: r.sortIndex,
+    });
+    componentsByBlend.set(r.peptideId, list);
+  }
+
+  const rows: (string | number | null | undefined)[][] = [];
+  for (const d of logs) {
+    const peptideId = d.preparation?.vial?.peptideId ?? d.protocol?.peptideId ?? null;
+    const name = d.preparation?.vial?.peptide?.name ?? d.protocol?.peptide?.name ?? null;
+    const base = [
       iso(d.takenAt),
       d.localDay,
       d.tz,
-      d.preparation?.vial?.peptide?.name ?? d.protocol?.peptide?.name ?? null,
+      name,
       d.route ?? "injection",
       dec(d.doseMcg),
       d.doseInputUnit,
@@ -76,7 +100,39 @@ async function buildDoses(userId: string): Promise<CsvData> {
       iso(d.scheduledAt),
       d.deltaMinutes,
       decryptField(d.notes),
-    ]),
+    ];
+    rows.push([...base, null]);
+
+    const components = peptideId ? componentsByBlend.get(peptideId) : undefined;
+    if (!components?.length) continue;
+    for (const part of expandBlendDose(Number(d.doseMcg.toString()), components)) {
+      rows.push([
+        iso(d.takenAt), d.localDay, d.tz,
+        // Distinct label: a component row must never be name-identical to a
+        // separately LOGGED dose of the same compound, or a per-peptide
+        // grouping silently merges measured and derived mass.
+        `${part.componentName} (derived)`,
+        d.route ?? "injection",
+        // 4 dp — raw float artefacts (…3333333374) read as spurious precision.
+        Math.round(part.doseMcg * 10000) / 10000,
+        "mcg",
+        null, null,
+        d.injectionSite,
+        d.source,
+        iso(d.scheduledAt),
+        d.deltaMinutes,
+        null,
+        `${blendName.get(peptideId!) ?? "blend"} (derived, ${part.source})`,
+      ]);
+    }
+  }
+
+  return {
+    headers: [
+      "takenAt", "localDay", "tz", "peptide", "route", "doseMcg", "doseInputUnit", "volumeMl", "syringeUnits",
+      "injectionSite", "source", "scheduledAt", "deltaMinutes", "notes", "derivedFromBlend",
+    ],
+    rows,
   };
 }
 

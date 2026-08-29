@@ -42,6 +42,9 @@ async function main() {
   await prisma.vial.deleteMany();
   await prisma.prescription.deleteMany();
   await prisma.journalEntry.deleteMany();
+  // BlendComponent holds a RESTRICT FK to Peptide — without this the reseed
+  // aborts on P2003 AFTER the tables above are already wiped.
+  await prisma.blendComponent.deleteMany();
   await prisma.peptide.deleteMany();
   await prisma.biomarker.deleteMany();
   await prisma.syringe.deleteMany();
@@ -67,7 +70,10 @@ async function main() {
     data: { userId: user.id, name: "BPC-157", category: "healing", substanceClass: "mass", halfLifeHours: "6", missedDosePolicy: "take_now" },
   });
   const tb4 = await prisma.peptide.create({
-    data: { userId: user.id, name: "TB-500", aliases: JSON.stringify(["Thymosin Beta-4", "TB4"]), category: "healing", substanceClass: "mass", halfLifeHours: "60", missedDosePolicy: "take_now" },
+    // Aliases stay within TB-500's own identity: "Thymosin Beta-4" / "TB4" belong to
+    // the DISTINCT library entry of that name, and listing them here would both
+    // re-conflate the two compounds and hide that entry from "Add from library".
+    data: { userId: user.id, name: "TB-500", aliases: JSON.stringify(["Ac-LKKTETQ"]), category: "healing", substanceClass: "mass", halfLifeHours: "60", missedDosePolicy: "take_now" },
   });
   const ipa = await prisma.peptide.create({
     data: { userId: user.id, name: "Ipamorelin", category: "growth", substanceClass: "mass", defaultStrengthMg: "10", halfLifeHours: "2", missedDosePolicy: "prompt" },
@@ -137,7 +143,9 @@ async function main() {
   // ~4 weeks of daily BPC-157 + Ipamorelin logs (a couple skipped for realistic
   // <100% adherence) so adherence, the heatmap, and plasma curves populate.
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const sites = ["abdomen L", "abdomen R", "thigh L", "thigh R"];
+  // Canonical codes from src/lib/sites.ts — unrecognised values are silently
+  // ignored there, which would leave the demo BodyMap empty despite the doses below.
+  const sites = ["abdomen_L", "abdomen_R", "thigh_L", "thigh_R"];
   let n = 0;
   const logs = [];
   for (let d = 28; d >= 0; d--) {

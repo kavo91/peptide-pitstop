@@ -29,6 +29,9 @@ model User {
   tokenVersion Int  @default(0) // bump to revoke all existing sessions (auth hardening)
   lastTotpStep Int? // last accepted TOTP time-step — rejects replay within the window
   hydrationTargetMl Int?    // daily water-intake goal (mL); null = no target
+  // Preferred syringe/pen, preselected wherever one isn't pinned on the
+  // protocol (protocol default wins). Soft pointer, cleared on device delete.
+  defaultSyringeId  String?
   symptomList       String? // JSON array of custom side-effect symptoms; null = curated default
   // Reminder anchors ("HH:MM" local, container TZ). Untimed daily doses remind
   // at untimedReminderTime; the still-pending nag fires at nagTime when enabled.
@@ -107,6 +110,28 @@ model Peptide {
   vials         Vial[]
   protocols     Protocol[]
   purchaseItems PurchaseItem[]
+
+  blendComponents BlendComponent[] @relation("BlendParent")
+  memberOfBlends  BlendComponent[] @relation("BlendMember")
+}
+
+/// One component of a vendor blend (e.g. GHK-Cu within KLOW).
+/// `peptideId` is the BLEND; `componentPeptideId` is the compound it delivers,
+/// so blend-delivered mass aggregates with standalone protocols for that compound.
+model BlendComponent {
+  id                 String  @id @default(cuid())
+  peptideId          String
+  peptide            Peptide @relation("BlendParent", fields: [peptideId], references: [id], onDelete: Cascade)
+  componentPeptideId String
+  componentPeptide   Peptide @relation("BlendMember", fields: [componentPeptideId], references: [id])
+  /// Mass of this component in one labelled vial of the blend, in mg.
+  massMg             Decimal
+  /// label | coa | assumed — drives the mandatory "derived" badge.
+  source             String  @default("label")
+  sortIndex          Int     @default(0)
+
+  @@unique([peptideId, componentPeptideId])
+  @@index([componentPeptideId])
 }
 
 model Prescription {
@@ -246,6 +271,9 @@ model Syringe {
   user           User?   @relation(fields: [userId], references: [id])
   name           String
   graduationType String  // units | ml
+  // syringe | pen — pens dial a dose (dose-window graphic) rather than drawing
+  // into a barrel; presentation + wording only, never dose math.
+  deviceType     String  @default("syringe")
   unitsPerMl     Int     @default(100)
   capacityMl     Decimal
   capacityUnits  Int

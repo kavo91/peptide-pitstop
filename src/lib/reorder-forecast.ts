@@ -38,7 +38,7 @@ import type { DoseUnit, Syringe } from "./dosing/types";
 export type ReorderStatus = "ok" | "reorder_now" | "covered" | "unknown";
 
 /** Why coverage ended. Carried as data so the status set stays small (R1). */
-export type CoverageBasis = "depletion" | "cycle_end" | "course_end" | "horizon";
+export type CoverageBasis = "depletion" | "cycle_end" | "course_end" | "horizon" | "projected_restart";
 
 export interface ForecastSlot {
   date: Date;
@@ -68,6 +68,11 @@ export interface ForecastInput {
   /** Why the slot list stops, when it is not depletion. */
   stopReason: CoverageBasis;
   courseEndDate: Date | null;
+  /**
+   * First slot day of a projected next cycle (R30), when the plan carries one.
+   * Demand from this day on is provisional — the restart is a manual action.
+   */
+  projectionStartsOn?: Date | null;
   leadTimeDays: number;
   bufferDays: number;
   today: Date;
@@ -155,6 +160,7 @@ export function forecastCoverage(input: ForecastInput): ForecastResult {
   }));
 
   let lastServed: Date | null = null;
+  let firstUnserved: Date | null = null;
   let depleted = false;
 
   for (const slot of slots) {
@@ -241,6 +247,7 @@ export function forecastCoverage(input: ForecastInput): ForecastResult {
       // Nothing could even price the dose → data gap, not an empty shelf.
       if (!evaluable) return unknown(leadTimeDays);
       depleted = true;
+      firstUnserved = slot.date;
       break;
     }
     lastServed = slot.date;
@@ -278,6 +285,28 @@ export function forecastCoverage(input: ForecastInput): ForecastResult {
   // Dates are clamped to today too. A past `pending` slot can put the real
   // depletion behind us, and "reorder by 29 Jul" shown on 15 Aug is noise.
   const depletionDay = depletion < today ? today : depletion;
+
+  // R30: when the unserved slot sits past a projected restart, the reorder date
+  // keys to the RESTART — the day stock is actually needed — not to the last
+  // served slot. `depletion − leadTime` across a four-week break would demand
+  // an order six weeks early, and false urgency is its own failure in a tile
+  // whose credibility is the product. Depletion inside the committed cycle is
+  // untouched: there the two rules agree to within a day.
+  const proj = input.projectionStartsOn ?? null;
+  if (proj != null && firstUnserved != null && startOfDay(firstUnserved) >= startOfDay(proj)) {
+    const needDay = startOfDay(firstUnserved);
+    const restartReorderBy = addDays(needDay, -leadTimeDays);
+    return {
+      status: daysBetween(today, needDay) <= leadTimeDays + bufferDays ? "reorder_now" : "ok",
+      coverageDays,
+      coverageBasis: "projected_restart",
+      depletionDate: dayKey(depletionDay),
+      reorderByDate: dayKey(restartReorderBy < today ? today : restartReorderBy),
+      courseEndDate: input.courseEndDate ? dayKey(input.courseEndDate) : null,
+      leadTimeDays,
+    };
+  }
+
   const reorderBy = addDays(depletionDay, -leadTimeDays);
   return {
     status: coverageDays <= leadTimeDays + bufferDays ? "reorder_now" : "ok",

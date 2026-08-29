@@ -5,6 +5,9 @@
 import Decimal from "decimal.js";
 import type { DosingWarning, Syringe } from "./types";
 
+/** Display-only mL formatting; guardrail comparisons always use full precision. */
+const fmtMl = (v: Decimal): string => v.toDecimalPlaces(3).toString();
+
 /** Below this many units on an insulin syringe, measurement is unreliable. */
 export const MIN_MEASURABLE_UNITS = new Decimal(2);
 /** Flag rounding error above this fraction of the target dose. */
@@ -26,7 +29,7 @@ export function evaluateGuardrails(args: {
     warnings.push({
       code: "EXCEEDS_SYRINGE_CAPACITY",
       severity: "block",
-      message: `Dose volume ${args.targetVolumeMl.toString()} mL exceeds the ${capacityMl.toString()} mL capacity of the ${args.syringe.name}. Use a larger syringe or split the dose.`,
+      message: `Dose volume ${fmtMl(args.targetVolumeMl)} mL exceeds the ${fmtMl(capacityMl)} mL capacity of the ${args.syringe.name}. Use a larger syringe or split the dose.`,
     });
   }
 
@@ -35,7 +38,7 @@ export function evaluateGuardrails(args: {
     warnings.push({
       code: "EXCEEDS_REMAINING_VIAL",
       severity: "block",
-      message: `Dose needs ${args.targetVolumeMl.toString()} mL but only ${args.remainingMl.toString()} mL remains in the vial.`,
+      message: `Dose needs ${fmtMl(args.targetVolumeMl)} mL but only ${fmtMl(args.remainingMl)} mL remains in the vial.`,
     });
   }
 

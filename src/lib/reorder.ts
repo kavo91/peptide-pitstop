@@ -181,6 +181,7 @@ async function loadReorderStatus(userId: string, now = new Date()): Promise<Pept
       scheduleEvaluable: plan.scheduleEvaluable,
       stopReason: plan.stopReason,
       courseEndDate: plan.courseEndDate,
+      projectionStartsOn: plan.projectionStartsOn,
       leadTimeDays,
       bufferDays,
       today,

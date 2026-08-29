@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/owner";
 import { decryptField } from "@/lib/crypto/fieldEncryption";
 import { deserializeSideEffects } from "@/lib/side-effects";
 import { brandName } from "@/lib/design";
+import { expandBlendDose, type BlendComponent } from "@/lib/blends-core";
 import {
   buildReportPdf,
   type ReportData,
@@ -100,6 +101,26 @@ async function buildReportData(
       protocol: { include: { peptide: true } },
     },
   });
+  // Vendor blends: load component ratios so each blend dose can report what it
+  // actually delivered. One query for all blends the user owns.
+  const bcRows = await prisma.blendComponent.findMany({
+    where: { peptide: { userId } },
+    include: { componentPeptide: { select: { name: true } } },
+    orderBy: { sortIndex: "asc" },
+  });
+  const componentsByBlend = new Map<string, BlendComponent[]>();
+  for (const r of bcRows) {
+    const list = componentsByBlend.get(r.peptideId) ?? [];
+    list.push({
+      componentPeptideId: r.componentPeptideId,
+      componentName: r.componentPeptide.name,
+      massMg: Number(r.massMg.toString()),
+      source: r.source as BlendComponent["source"],
+      sortIndex: r.sortIndex,
+    });
+    componentsByBlend.set(r.peptideId, list);
+  }
+
   const doses: ReportDoseRow[] = doseLogs.map((d) => ({
     takenAt: d.takenAt,
     tz: d.tz,
@@ -109,6 +130,16 @@ async function buildReportData(
     doseUnit: d.doseInputUnit,
     site: d.injectionSite,
     deltaMinutes: d.deltaMinutes,
+    components: (() => {
+      const pid = d.preparation?.vial?.peptideId ?? d.protocol?.peptideId ?? null;
+      const comps = pid ? componentsByBlend.get(pid) : undefined;
+      if (!comps?.length) return undefined;
+      return expandBlendDose(Number(d.doseMcg.toString()), comps).map((c) => ({
+        name: c.componentName,
+        doseMcg: c.doseMcg,
+        source: `derived, ${c.source}`,
+      }));
+    })(),
   }));
 
   // -- Journal (side-effects + wellness aggregates) --

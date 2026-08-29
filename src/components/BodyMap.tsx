@@ -14,7 +14,7 @@ interface BodyMapProps {
 
 // Anatomical fit-male silhouette — composed shapes (180×320 viewBox), shared
 // outline for front/back with view-specific muscle contour lines.
-// Front zones: abdomen_L/R, delt_L/R, thigh_L/R, ventro_L/R. Back zones: glute_L/R.
+// Front zones: abdomen_L/R, delt_L/R, thigh_L/R, ventro_L/R, love_handle_L/R. Back zones: glute_L/R.
 const BODY_OUTLINE = [
   "M82,42 L98,42 L100,55 L80,55 Z", // neck
   // torso (traps → delts → lats → waist)
@@ -99,6 +99,16 @@ const ZONE_PATHS: Record<string, { view: "front" | "back"; d: string; labelX: nu
     view: "front",
     d: "M 132 158 C 124 158 120 163 120 170 C 120 177 124 182 132 182 C 140 182 144 177 144 170 C 144 163 140 158 132 158 Z",
     labelX: 132, labelY: 171,
+  },
+  love_handle_L: {
+    view: "front",
+    d: "M 44 132 C 36 132 32 138 32 146 C 32 154 36 160 44 160 C 50 160 54 154 54 146 C 54 138 50 132 44 132 Z",
+    labelX: 44, labelY: 147,
+  },
+  love_handle_R: {
+    view: "front",
+    d: "M 136 132 C 128 132 124 138 124 146 C 124 154 128 160 136 160 C 142 160 146 154 146 146 C 146 138 142 132 136 132 Z",
+    labelX: 136, labelY: 147,
   },
   glute_L: {
     view: "back",

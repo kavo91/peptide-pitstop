@@ -1,8 +1,7 @@
 /**
  * Custom-schedule engine — pure date logic, no I/O. A schedule is a set of
  * entries; each entry pairs a day-pattern with optional clock times. The
- * schedule is the union of its entries. See
- * docs/superpowers/specs/2026-06-16-custom-schedules-design.md.
+ * schedule is the union of its entries.
  */
 import { type WeekdayCode, weekdayCode, startOfDay, daysBetween, addDays, parseRule, DAY_LABELS } from "./schedule";
 

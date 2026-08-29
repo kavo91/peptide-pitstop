@@ -76,7 +76,10 @@ export default async function SettingsPage() {
   }));
 
   // Library entries the user hasn't already added (matched by name, case-insensitive).
-  // Match by name OR alias so e.g. owning "Thymosin Beta-4" hides the library's "TB-500".
+  // Match by name OR alias, on exact comma-split tokens, so owning a peptide hides the
+  // library entry it came from. Distinct compounds share no token and so never hide each
+  // other — TB-500 and Thymosin Beta-4 both stay offerable, which is the point of
+  // keeping them as separate entries.
   const tokens = (name: string, aliases?: string) =>
     [name, ...(aliases ?? "").split(",")].map((s) => s.trim().toLowerCase()).filter(Boolean);
   const ownedTokens = new Set(peptides.flatMap((p) => tokens(p.name, p.aliases)));
@@ -113,14 +116,30 @@ export default async function SettingsPage() {
   ).sort((a, b) => a.localeCompare(b));
 
   const stacks = await getStacks(user.id);
+
+  // Blend composition for the component editor, keyed by blend peptide id.
+  const blendComponentRows = await prisma.blendComponent.findMany({
+    where: { peptide: { userId: user.id } },
+    orderBy: { sortIndex: "asc" },
+  });
+  const blendComponentsByPeptide: Record<string, { componentPeptideId: string; massMg: string; source: string }[]> = {};
+  for (const r of blendComponentRows) {
+    (blendComponentsByPeptide[r.peptideId] ??= []).push({
+      componentPeptideId: r.componentPeptideId,
+      massMg: r.massMg.toString(),
+      source: r.source,
+    });
+  }
   const wizardEnabled = prescriptionWizardEnabled();
 
+  const me = await prisma.user.findUnique({ where: { id: user.id }, select: { defaultSyringeId: true } });
   const syringes = (
     await prisma.syringe.findMany({ where: { OR: [{ userId: user.id }, { userId: null }] }, orderBy: { name: "asc" } })
   ).map((s) => ({
     id: s.id,
     name: s.name,
     graduationType: s.graduationType,
+    deviceType: s.deviceType,
     unitsPerMl: String(s.unitsPerMl),
     capacityMl: s.capacityMl.toString(),
     capacityUnits: String(s.capacityUnits),
@@ -160,7 +179,7 @@ export default async function SettingsPage() {
                 </Link>
               )}
             </div>
-            <PeptideManager peptides={peptidesWithEnrichment} library={libraryWithEnrichment} />
+            <PeptideManager peptides={peptidesWithEnrichment} library={libraryWithEnrichment} blendComponents={blendComponentsByPeptide} />
             {stacks.length > 0 && (
               <div className="mt-3 space-y-2">
                 {stacks.map((s) => (
@@ -178,7 +197,7 @@ export default async function SettingsPage() {
               mb-0 drops the trailing gap so the left column doesn't over-pad. */}
           <section className="mb-8 min-[1440px]:mb-0">
             <h2 className="mb-3 text-sm font-medium text-muted">Syringes</h2>
-            <SyringeManager syringes={syringes} />
+            <SyringeManager syringes={syringes} defaultSyringeId={me?.defaultSyringeId ?? null} />
           </section>
         </div>
 

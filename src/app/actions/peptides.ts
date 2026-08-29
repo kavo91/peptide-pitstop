@@ -87,16 +87,25 @@ export async function deletePeptide(id: string) {
 
   // Block-if-referenced. DoseLogs reach a peptide only via a vial/preparation or
   // a protocol, so counting vials + protocols + prescriptions covers all history.
-  const [vials, protocols, prescriptions] = await Promise.all([
+  // memberOf: this peptide is a COMPONENT of a blend — the RESTRICT FK would make
+  // the delete below throw a generic P2003, so pre-check and name the blend(s).
+  const [vials, protocols, prescriptions, memberOf] = await Promise.all([
     prisma.vial.count({ where: { peptideId: id, userId: user.id } }),
     prisma.protocol.count({ where: { peptideId: id, userId: user.id } }),
     prisma.prescription.count({ where: { peptideId: id, userId: user.id } }),
+    prisma.blendComponent.findMany({
+      where: { componentPeptideId: id },
+      include: { peptide: { select: { name: true } } },
+    }),
   ]);
-  if (vials + protocols + prescriptions > 0) {
+  if (vials + protocols + prescriptions + memberOf.length > 0) {
     const parts: string[] = [];
     if (vials) parts.push(`${vials} vial${vials === 1 ? "" : "s"}`);
     if (protocols) parts.push(`${protocols} protocol${protocols === 1 ? "" : "s"}`);
     if (prescriptions) parts.push(`${prescriptions} prescription${prescriptions === 1 ? "" : "s"}`);
+    if (memberOf.length) {
+      parts.push(`the ${memberOf.map((m) => m.peptide.name).join(", ")} blend${memberOf.length === 1 ? "" : "s"} (as a component)`);
+    }
     return { ok: false as const, error: `In use by ${parts.join(", ")} — delete those first.` };
   }
 

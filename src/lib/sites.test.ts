@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { SITE_OPTIONS, SITE_CODES, suggestNextSite, zoneView, recencyRank } from "./sites";
 
 describe("SITE_OPTIONS", () => {
-  it("has exactly 10 entries", () => {
-    expect(SITE_OPTIONS).toHaveLength(10);
+  it("has exactly 12 entries", () => {
+    expect(SITE_OPTIONS).toHaveLength(12);
   });
   it("every entry has a code and label", () => {
     for (const opt of SITE_OPTIONS) {
@@ -62,13 +62,13 @@ describe("zoneView", () => {
     }
   });
 
-  it("all 10 codes covered — no code missing, no duplicate mapping", () => {
-    expect(SITE_CODES).toHaveLength(10);
+  it("all 12 codes covered — no code missing, no duplicate mapping", () => {
+    expect(SITE_CODES).toHaveLength(12);
     // Every code maps to something
     SITE_CODES.forEach((c) => expect(() => zoneView(c)).not.toThrow());
   });
 
-  // Front view: abdomen_L, abdomen_R, delt_L, delt_R, thigh_L, thigh_R, ventro_L, ventro_R
+  // Front view: abdomen_L, abdomen_R, delt_L, delt_R, thigh_L, thigh_R, ventro_L, ventro_R, love_handle_L, love_handle_R
   it.each([
     ["abdomen_L"],
     ["abdomen_R"],
@@ -78,6 +78,8 @@ describe("zoneView", () => {
     ["thigh_R"],
     ["ventro_L"],
     ["ventro_R"],
+    ["love_handle_L"],
+    ["love_handle_R"],
   ])("zoneView(%s) === 'front'", (code) => {
     expect(zoneView(code)).toBe("front");
   });

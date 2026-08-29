@@ -34,6 +34,7 @@ export interface SyringeDTO {
   id: string;
   name: string;
   graduationType: "units" | "ml";
+  deviceType: "syringe" | "pen";
   unitsPerMl: number;
   capacityMl: string;
   capacityUnits: number;
@@ -155,6 +156,7 @@ export async function getInventory(userId: string, now = new Date()): Promise<Vi
       id: s.id,
       name: s.name,
       graduationType: s.graduationType as "units" | "ml",
+      deviceType: (s.deviceType === "pen" ? "pen" : "syringe") as "syringe" | "pen",
       unitsPerMl: s.unitsPerMl,
       capacityMl: s.capacityMl.toString(),
       capacityUnits: s.capacityUnits,
@@ -277,6 +279,7 @@ export async function getInventory(userId: string, now = new Date()): Promise<Vi
               scheduleEvaluable: plan.scheduleEvaluable,
               stopReason: plan.stopReason,
               courseEndDate: plan.courseEndDate,
+              projectionStartsOn: plan.projectionStartsOn,
               leadTimeDays: 0,
               bufferDays: 0,
               today: startOfDay(now),

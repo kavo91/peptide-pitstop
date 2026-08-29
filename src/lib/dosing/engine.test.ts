@@ -101,6 +101,28 @@ describe("Thymosin Alpha-1 (real prescription)", () => {
     expect(r.warnings.some((w) => w.code === "EXCEEDS_SYRINGE_CAPACITY")).toBe(true);
   });
 
+  it("capacity-block message rounds the volume to 3 dp instead of leaking the raw decimal", () => {
+    // 1000 mcg / 3000 mcg/mL = 0.333… recurring at 40-digit precision.
+    const r = computeDraw({
+      dose: { value: "1000", unit: "mcg" },
+      preparation: thymosin,
+      syringe: u100_03,
+    });
+    const w = r.warnings.find((x) => x.code === "EXCEEDS_SYRINGE_CAPACITY");
+    expect(w?.message).toContain("Dose volume 0.333 mL exceeds the 0.3 mL capacity");
+  });
+
+  it("remaining-vial block message rounds both volumes to 3 dp", () => {
+    const r = computeDraw({
+      dose: { value: "1000", unit: "mcg" },
+      preparation: thymosin,
+      syringe: u100_1ml,
+      remainingMl: "0.16161616161616161616",
+    });
+    const w = r.warnings.find((x) => x.code === "EXCEEDS_REMAINING_VIAL");
+    expect(w?.message).toContain("Dose needs 0.333 mL but only 0.162 mL remains");
+  });
+
   it("on an mL-graduated syringe, draw to the 0.5 mL mark", () => {
     const r = computeDraw({
       dose: { value: "1.5", unit: "mg" },

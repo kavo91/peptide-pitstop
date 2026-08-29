@@ -13,6 +13,7 @@ export interface SyringeInput {
   id?: string;
   name: string;
   graduationType?: string; // units | ml
+  deviceType?: string; // syringe | pen (presentation + wording only)
   unitsPerMl?: string;
   capacityMl?: string;
   capacityUnits?: string;
@@ -36,6 +37,7 @@ export async function saveSyringe(input: SyringeInput) {
   const data = {
     name,
     graduationType: input.graduationType === "ml" ? "ml" : "units",
+    deviceType: input.deviceType === "pen" ? "pen" : "syringe",
     unitsPerMl: Math.round(unitsPerMl),
     capacityMl: capacityMl.toString(),
     capacityUnits: Math.round(capacityUnits),
@@ -58,12 +60,42 @@ export async function saveSyringe(input: SyringeInput) {
   return { ok: true as const };
 }
 
+/**
+ * Set (or clear, with null) the user's preferred syringe/pen — preselected on
+ * every log surface unless the protocol pins its own. Soft pointer on User;
+ * only an own-or-shared device may be chosen.
+ */
+export async function setDefaultSyringe(syringeId: string | null) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+  if (syringeId != null) {
+    const s = await prisma.syringe.findFirst({ where: { id: syringeId, OR: [{ userId: user.id }, { userId: null }] } });
+    if (!s) return { ok: false as const, error: "Syringe not found." };
+  }
+  try {
+    await prisma.user.update({ where: { id: user.id }, data: { defaultSyringeId: syringeId } });
+  } catch (e) {
+    console.error("setDefaultSyringe failed", e);
+    return { ok: false as const, error: "Could not set the default." };
+  }
+  revalidatePath("/settings");
+  revalidatePath("/log");
+  revalidatePath("/today");
+  return { ok: true as const };
+}
+
 export async function deleteSyringe(id: string) {
   const user = await getCurrentUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
   try {
     const { count } = await prisma.syringe.deleteMany({ where: { id, userId: user.id } });
     if (count === 0) return { ok: false as const, error: "Syringe not found." };
+    // A default pointing at a deleted device would silently fall back — clear
+    // it so the pickers' behaviour is explicit.
+    const u = await prisma.user.findUnique({ where: { id: user.id }, select: { defaultSyringeId: true } });
+    if (u?.defaultSyringeId === id) {
+      await prisma.user.update({ where: { id: user.id }, data: { defaultSyringeId: null } });
+    }
   } catch (e) {
     // Most likely an FK constraint (syringe referenced by a logged dose).
     console.error("deleteSyringe failed", e);

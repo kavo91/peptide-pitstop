@@ -336,4 +336,64 @@ describe("forecastCoverage — review findings (must not regress)", () => {
     // Slot 1 is served by the big vial; slots 2 and 3 still find stock.
     expect(r.status).toBe("covered");
   });
+
+  // R30 — demand that resumes after a projected restart must key the reorder
+  // date to the RESTART, not to the last served slot: `depletion − leadTime`
+  // across a four-week break reads "reorder now" six weeks before any stock is
+  // needed, which is false urgency in a tile whose credibility is the product.
+  describe("projected-restart gap (R30)", () => {
+    // Committed cycle: 13 daily slots 16–28 Aug. Break. Cycle 2 from 26 Sep.
+    const restart = day(42); // 26 Sep
+    const gapped: ForecastSlot[] = [
+      ...dailySlots(13),
+      ...Array.from({ length: 28 }, (_, i) => ({
+        date: day(42 + i),
+        perInjectionValue: "1000",
+        perInjectionUnit: "mcg" as const,
+      })),
+    ];
+
+    it("keys the reorder date to the projected restart, not the last served slot", () => {
+      // 2.6 mL @ 5000 mcg/mL = exactly the 13 committed doses.
+      const r = forecastCoverage({
+        ...base,
+        slots: gapped,
+        containers: [prep("2.6", "5000")],
+        projectionStartsOn: restart,
+      });
+      expect(r.coverageBasis).toBe("projected_restart");
+      expect(r.depletionDate).toBe("2026-08-28"); // stock truthfully lasts to the cycle end
+      expect(r.reorderByDate).toBe("2026-09-12"); // 26 Sep − 14-day lead
+      expect(r.status).toBe("ok"); // restart is 42 days out — no urgency yet
+      expect(r.coverageDays).toBe(13);
+    });
+
+    it("flips to reorder_now inside the restart's lead window", () => {
+      const later = new Date(2026, 8, 10); // 10 Sep, mid-break
+      const r = forecastCoverage({
+        ...base,
+        today: later,
+        slots: gapped.filter((s) => s.date > later),
+        containers: [sealed("0.5")], // 500 mcg — sizable but cannot serve a 1000 mcg dose
+        projectionStartsOn: restart,
+      });
+      expect(r.status).toBe("reorder_now"); // 26 Sep is 16 days out ≤ 14 + 3
+      expect(r.coverageBasis).toBe("projected_restart");
+      expect(r.reorderByDate).toBe("2026-09-12");
+      expect(r.depletionDate).toBe("2026-09-10"); // nothing served — clamped to today
+    });
+
+    it("leaves depletion inside the committed cycle alone", () => {
+      // 1.2 mL = 6 doses; the walk dies on 22 Aug, well before the restart.
+      const r = forecastCoverage({
+        ...base,
+        slots: gapped,
+        containers: [prep("1.2", "5000")],
+        projectionStartsOn: restart,
+      });
+      expect(r.coverageBasis).toBe("depletion");
+      expect(r.status).toBe("reorder_now");
+      expect(r.reorderByDate).toBe("2026-08-15"); // clamped to today, as before
+    });
+  });
 });

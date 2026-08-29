@@ -93,6 +93,7 @@ export default async function TodayPage({
     id: s.id,
     name: s.name,
     graduationType: s.graduationType as "units" | "ml",
+    deviceType: (s.deviceType === "pen" ? "pen" : "syringe") as "syringe" | "pen",
     unitsPerMl: s.unitsPerMl,
     capacityMl: s.capacityMl.toString(),
     capacityUnits: s.capacityUnits,

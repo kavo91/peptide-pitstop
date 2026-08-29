@@ -1,7 +1,7 @@
 /**
  * Protocol revision — changing a live protocol's schedule without corrupting it.
  *
- * PURE. No I/O, no Prisma. See docs/superpowers/specs/2026-08-14-protocol-revision-design.md.
+ * PURE. No I/O, no Prisma.
  */
 
 import { phaseTargets, activePhaseAt } from "@/lib/titration/phase";

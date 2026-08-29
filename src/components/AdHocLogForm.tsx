@@ -5,6 +5,7 @@ import { Syringe } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import Decimal from "decimal.js";
 import { computeDraw } from "@/lib/dosing/engine";
+import { splitProspectiveDose, weakestBlendSource, roundSplitForDisplay, type BlendComponent } from "@/lib/blends-core";
 import { doseUnitBreakdown } from "@/lib/dosing/unit-breakdown";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { budStatus, budWarning } from "@/lib/bud";
@@ -43,6 +44,7 @@ interface SyringeDTO {
   id: string;
   name: string;
   graduationType: "units" | "ml";
+  deviceType: "syringe" | "pen";
   unitsPerMl: number;
   capacityMl: string;
   capacityUnits: number;
@@ -63,6 +65,8 @@ export function AdHocLogForm({
   suggestedSiteByPeptide,
   recentSitesByPeptide,
   protocolOptions = [],
+  blendComponentsByPeptide = {},
+  defaultSyringeId,
 }: {
   options: PrepOption[];
   syringes: SyringeDTO[];
@@ -70,13 +74,17 @@ export function AdHocLogForm({
   suggestedSiteByPeptide: Record<string, string>;
   /** Map from peptideId → raw recent-site codes, most-recent-first. */
   recentSitesByPeptide: Record<string, string[]>;
+  /** Vendor-blend composition per peptideId — enables the live per-component preview. */
+  blendComponentsByPeptide?: Record<string, BlendComponent[]>;
+  /** The user's preferred device — preselected when set (protocol pins still win on Today). */
+  defaultSyringeId?: string;
   /** Active protocols with their resolved per-injection dose (safe resolver path). */
   protocolOptions?: ProtocolDoseOption[];
   design?: "pitstop" | "current";
 }) {
   const [protocolId, setProtocolId] = useState("");
   const [prepId, setPrepId] = useState(options[0]?.preparation.id ?? "");
-  const [syringeId, setSyringeId] = useState(syringes[0]?.id ?? "");
+  const [syringeId, setSyringeId] = useState(() => (defaultSyringeId && syringes.some((s) => s.id === defaultSyringeId) ? defaultSyringeId : syringes[0]?.id ?? ""));
   const [doseValue, setDoseValue] = useState("");
   const [doseUnit, setDoseUnit] = useState<DoseUnit>("mcg");
   const [takenAt, setTakenAt] = useState(nowLocalInput());
@@ -409,6 +417,7 @@ export function AdHocLogForm({
             </div>
           )}
           <VisualSyringe
+            device={syr!.deviceType}
             capacityMl={Number(syr!.capacityMl)}
             fillMl={draw ? draw.targetVolumeMl.toNumber() : 0}
             markingLabel={
@@ -428,6 +437,21 @@ export function AdHocLogForm({
                 <div><dt className="text-xs text-muted">Delivers</dt><dd className="tabular-nums">{draw.deliveredMassMcg.toDecimalPlaces(1).toString()} mcg</dd></div>
                 <div><dt className="text-xs text-muted">Rounding</dt><dd className="tabular-nums">{draw.roundingErrorMcg.toDecimalPlaces(1).toString()} mcg</dd></div>
               </dl>
+              {(() => {
+                // Live per-component split of the DELIVERED mass for a vendor
+                // blend — same derived-at-read numbers the logged views show.
+                const comps = blendComponentsByPeptide[currentPeptideId];
+                if (!comps || comps.length === 0) return null;
+                const split = splitProspectiveDose(draw.deliveredMassMcg.toString(), "mcg", comps);
+                if (!split) return null;
+                const shown = roundSplitForDisplay(split.map((c) => c.doseMcg));
+                return (
+                  <p className="text-center text-xs text-muted tabular-nums">
+                    ↳ {split.map((c, i2) => `${c.componentName} ${shown[i2]} mcg`).join(" · ")}{" "}
+                    <span className="opacity-70">(derived, {weakestBlendSource(comps)})</span>
+                  </p>
+                );
+              })()}
               {draw.warnings.map((w) => (
                 <p key={w.code} className={`rounded-control px-3 py-2 text-sm ${w.severity === "block" ? "bg-danger/10 text-danger" : "bg-warn/10 text-warn"}`}>
                   {w.severity === "block" ? "⛔ " : "⚠ "}{w.message}

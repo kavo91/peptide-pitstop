@@ -17,6 +17,9 @@ import { PitstopHeading } from "@/components/PitstopHeading";
 import { activeDesign } from "@/lib/design";
 import { PAGE_MAIN } from "@/lib/layout";
 import { deletePurchase } from "@/app/actions/purchases";
+import { prisma } from "@/lib/db";
+import { splitCostByComponent } from "@/lib/blend-cost";
+import type { BlendComponent } from "@/lib/blends-core";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +57,26 @@ export default async function CostsPage({
     getPurchases(user.id),
   ]);
   const cur = data.currency;
+
+  // Blend composition: a blend is bought as ONE vial at ONE price, so its spend is
+  // re-sliced across components by label mass fraction. Derived — never new spend.
+  const blendRows = await prisma.blendComponent.findMany({
+    where: { peptide: { userId: user.id } },
+    include: { componentPeptide: { select: { name: true } } },
+    orderBy: { sortIndex: "asc" },
+  });
+  const blendComponents = new Map<string, BlendComponent[]>();
+  for (const r of blendRows) {
+    const list = blendComponents.get(r.peptideId) ?? [];
+    list.push({
+      componentPeptideId: r.componentPeptideId,
+      componentName: r.componentPeptide.name,
+      massMg: Number(r.massMg.toString()),
+      source: r.source as BlendComponent["source"],
+      sortIndex: r.sortIndex,
+    });
+    blendComponents.set(r.peptideId, list);
+  }
   const design = activeDesign();
 
   const uncostedVials = data.coverage.vialsTotal - data.coverage.vialsCosted;
@@ -177,7 +200,7 @@ export default async function CostsPage({
                       </tr>
                     </thead>
                     <tbody>
-                      {data.byPeptide.map((r) => (
+                      {data.byPeptide.flatMap((r) => [
                         <tr key={r.peptideId} className="border-t border-line/10">
                           <td className="py-2">
                             {r.peptideName}
@@ -193,8 +216,24 @@ export default async function CostsPage({
                           <td className="py-2 text-right tabular-nums">{Number(r.spend) > 0 ? fmtMoney(r.spend, cur) : "—"}</td>
                           <td className="py-2 text-right tabular-nums">{fmtRate(r.costPerDose, cur)}</td>
                           <td className="py-2 text-right tabular-nums">{fmtRate(r.costPerMg, cur)}</td>
-                        </tr>
-                      ))}
+                        </tr>,
+                        /* A blend's spend split across its components by label mass
+                           fraction. Derived — it re-slices money already counted on
+                           the row above, and must never be summed with it. */
+                        ...splitCostByComponent(
+                          Number(r.spend) > 0 ? r.spend : null,
+                          blendComponents.get(r.peptideId) ?? [],
+                        ).map((c) => (
+                          <tr key={`${r.peptideId}:${c.componentPeptideId}`} className="text-xs text-muted">
+                            <td className="py-1 pl-4">↳ {c.componentName}</td>
+                            <td className="py-1 text-right tabular-nums">
+                              {fmtMoney(String(c.cost), cur)} (derived, {c.source})
+                            </td>
+                            <td className="py-1 text-right">—</td>
+                            <td className="py-1 text-right">—</td>
+                          </tr>
+                        )),
+                      ])}
                     </tbody>
                   </table>
                 )}

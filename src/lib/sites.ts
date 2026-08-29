@@ -22,6 +22,8 @@ export const SITE_OPTIONS: SiteOption[] = [
   { code: "delt_R",     label: "Deltoid — Right"      },
   { code: "ventro_L",   label: "Ventroglute — Left"   },
   { code: "ventro_R",   label: "Ventroglute — Right"  },
+  { code: "love_handle_L", label: "Love Handle — Left"  },
+  { code: "love_handle_R", label: "Love Handle — Right" },
 ];
 
 /** Ordered list of all valid site codes — matches SITE_OPTIONS order. */
