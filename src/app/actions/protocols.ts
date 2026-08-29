@@ -906,13 +906,37 @@ export async function reviseProtocol(input: ReviseProtocolInput) {
 
   const old = await prisma.protocol.findFirst({
     where: { id: input.id, userId: user.id },
-    select: { id: true, peptideId: true, courseId: true, status: true, stackId: true, vialId: true },
+    select: { id: true, peptideId: true, courseId: true, status: true, stackId: true, vialId: true, startDate: true },
   });
   if (!old) return { ok: false as const, error: "Protocol not found." };
   if (old.status !== "active") return { ok: false as const, error: "Only a live protocol can be revised." };
 
   const startDate = input.startDate?.slice(0, 10) || new Date().toISOString().slice(0, 10);
   const newStart = new Date(`${startDate}T00:00:00.000Z`);
+
+  // A revision must start AFTER the course it replaces. The dialog is a bare date
+  // input with no min. Two distinct problems, with different reach:
+  //
+  //  - courseTips' date fallback would elect the frozen predecessor as the
+  //    operable tip once both rows completed, inverting the lineage. Reachable
+  //    from the UI.
+  //  - The predecessor's endDate is the day BEFORE this start, floored at its
+  //    last delivered dose. Via the UI that floor holds (the revise flow is only
+  //    offered once a dose is logged), so the window is not inverted there; but
+  //    this action has no dose gate of its own, and on a protocol with no logged
+  //    doses the floor does not apply and the predecessor ends before it starts.
+  //
+  // Refuse rather than clamp — the user picked a date that cannot mean what they
+  // intended. `<=`, not `<`: same-day is rejected too, because the per-course
+  // same-day dedup that would make an overlap safe is implemented on the stack
+  // logging path (logStack), not for a standalone protocol. Revisit only with
+  // that dedup proven for both paths.
+  if (old.startDate && newStart.getTime() <= old.startDate.getTime()) {
+    return {
+      ok: false as const,
+      error: `A revision must start after the protocol it replaces (${old.startDate.toISOString().slice(0, 10)}). Pick a later date.`,
+    };
+  }
 
   // Validate + canonicalise exactly as saveProtocol does. Without this the
   // revision path is a hole in the validation: normaliseScheduleRule also

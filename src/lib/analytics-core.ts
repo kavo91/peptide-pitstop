@@ -1,3 +1,5 @@
+import { expandBlendDose, rollUpExposure, type ExposureRow } from "./blends-core";
+
 /** KEY — local-date string YYYY-MM-DD, zero-padded. Monday-first convention from doses-timeline. */
 function KEY(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -109,4 +111,84 @@ export function heatmapBuckets(args: {
   }
 
   return buckets;
+}
+
+/** One grouped dose-sum row — the shape of `groupBy(["preparationId","protocolId"])`. */
+export interface DoseSumRow {
+  preparationId: string | null;
+  protocolId: string | null;
+  totalMcg: number;
+}
+
+/** What a preparation id or protocol id resolves to. */
+export interface PeptideRef {
+  peptideId: string;
+  name: string;
+}
+
+/**
+ * Cumulative exposure, all time — PURE. No I/O; the caller supplies the grouped
+ * dose sums and the two id→peptide lookups.
+ *
+ * Two rules this encodes, both of which were once defects:
+ *
+ * 1. EVERY dose counts, including ad-hoc ones with no protocol. Filtering to
+ *    protocol-linked doses made this table disagree with the CSV and PDF
+ *    exports, which have always included them.
+ * 2. A dose resolves its peptide PREPARATION-first, protocol-second — the exact
+ *    precedence the exports use — so the surfaces cannot drift apart again.
+ *
+ * A dose that resolves to neither is skipped rather than guessed at. Blend
+ * parents never appear under their own name: their mass is expanded into the
+ * components they deliver, which then aggregate with those compounds' standalone
+ * history. The roll-up is keyed by NAME so derived rows merge with standalone
+ * ones, and `rollUpExposure` accumulates on key collision — two peptide rows can
+ * share a name, since nothing constrains it.
+ */
+export function buildExposureRollup(args: {
+  doseSums: DoseSumRow[];
+  prepPeptide: Map<string, PeptideRef>;
+  protoPeptide: Map<string, PeptideRef>;
+  componentsByBlendId: Map<string, { name: string; mg: number }[]>;
+}): ExposureRow[] {
+  const { doseSums, prepPeptide, protoPeptide, componentsByBlendId } = args;
+  const blendIds = new Set(componentsByBlendId.keys());
+  const standaloneByPeptide = new Map<string, { peptideName: string; totalMcg: number }>();
+  const blendTotals = new Map<string, number>();
+
+  for (const row of doseSums) {
+    const pep =
+      (row.preparationId ? prepPeptide.get(row.preparationId) : undefined) ??
+      (row.protocolId ? protoPeptide.get(row.protocolId) : undefined);
+    if (!pep) continue;
+    if (blendIds.has(pep.peptideId)) {
+      blendTotals.set(pep.peptideId, (blendTotals.get(pep.peptideId) ?? 0) + row.totalMcg);
+    } else {
+      const cur = standaloneByPeptide.get(pep.peptideId);
+      if (cur) cur.totalMcg += row.totalMcg;
+      else standaloneByPeptide.set(pep.peptideId, { peptideName: pep.name, totalMcg: row.totalMcg });
+    }
+  }
+
+  const derived = [...blendTotals.entries()].flatMap(([blendId, totalMcg]) =>
+    expandBlendDose(
+      totalMcg,
+      (componentsByBlendId.get(blendId) ?? []).map((c, i) => ({
+        componentPeptideId: c.name, // roll-up key: name (stable across environments)
+        componentName: c.name,
+        massMg: c.mg,
+        source: "label" as const,
+        sortIndex: i,
+      })),
+    ),
+  );
+
+  return rollUpExposure({
+    standalone: [...standaloneByPeptide.values()].map((v) => ({
+      peptideId: v.peptideName, // keyed by name so derived rows merge correctly
+      peptideName: v.peptideName,
+      totalMcg: v.totalMcg,
+    })),
+    derived,
+  });
 }

@@ -10,9 +10,21 @@
  *
  * Tip selection per course group (`courseId ?? id`):
  *   1. a non-completed member if one exists (the live successor);
- *   2. else the latest startDate (revisions always start after their
- *      predecessor; null sorts earliest);
- *   3. else the largest id (cuids are time-ordered; stable final tie-break).
+ *   2. else a SUCCESSOR over the course ORIGIN — within one course only the
+ *      origin carries `courseId === null`. This outranks the date because a
+ *      revision's startDate is user-supplied: a backdated revision would
+ *      otherwise invert the lineage here once both rows are completed, electing
+ *      the frozen predecessor as the operable tip. reviseProtocol now refuses
+ *      such a revision; this rule additionally covers rows created before that
+ *      guard existed. SCOPE: courses are FLAT — reviseProtocol writes
+ *      `courseId: old.courseId ?? old.id`, so every successor in a chain carries
+ *      the ORIGIN's id, not its immediate predecessor's. This rule therefore
+ *      separates origin from successors, but CANNOT order two successors of the
+ *      same origin; a 3+ revision chain still falls through to the date below.
+ *      Ordering those would need a real predecessor pointer or a createdAt
+ *      column, neither of which the schema has;
+ *   3. else the latest startDate (null sorts earliest);
+ *   4. else the largest id (cuids are time-ordered; stable final tie-break).
  * A never-revised protocol is its own group's tip, so pre-revision stacks —
  * including fully completed legacy ones — behave byte-identically.
  */
@@ -40,6 +52,15 @@ export function courseTips<T extends LineageProtocol>(protocols: T[]): T[] {
     const pool = live.length > 0 ? live : g;
     tips.push(
       pool.reduce((best, p) => {
+        // Structure before date: only the course ORIGIN has courseId === null, and
+        // a successor is by definition later in the lineage. startDate cannot be
+        // trusted for this — it is user-supplied and a backdated revision would
+        // flip the order, handing tip status to the row that is frozen history.
+        // Separates origin from successors only; two successors of the same
+        // origin are indistinguishable here (flat courseId) and fall to the date.
+        const bestIsOrigin = best.courseId === null;
+        const pIsOrigin = p.courseId === null;
+        if (pIsOrigin !== bestIsOrigin) return pIsOrigin ? best : p;
         const a = best.startDate?.getTime() ?? -Infinity;
         const b = p.startDate?.getTime() ?? -Infinity;
         if (b !== a) return b > a ? p : best;

@@ -546,3 +546,64 @@ describe("updateProtocol — a revised-out predecessor is frozen history", () =>
     expect(res.ok).toBe(true);
   });
 });
+
+describe("reviseProtocol refuses a backdated revision", () => {
+  // A revision's startDate is user-supplied (ReviseProtocolDialog is a bare date
+  // input with no min). Starting a revision on or before the protocol it replaces
+  // is incoherent and actively corrupting: the predecessor's endDate is computed
+  // as the day BEFORE the new start, so it lands before its own startDate — an
+  // inverted window — and courseTips' date fallback would elect the frozen
+  // predecessor as the operable tip once both rows completed.
+  function armRevision(old: Record<string, unknown>) {
+    currentUser.mockResolvedValue({ id: "u1" });
+    protocolFindFirst.mockResolvedValue(old);
+    doseLogFindFirst.mockResolvedValue(null);
+    protocolCreate.mockResolvedValue({ id: "p-new" });
+    transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        protocol: { updateMany: protocolUpdateMany, create: protocolCreate },
+        auditLog: { create: auditLogCreate },
+      }),
+    );
+    runPlannedDoseGeneration.mockResolvedValue(undefined);
+  }
+  const LIVE = {
+    id: "p-old",
+    peptideId: "pep1",
+    courseId: null,
+    status: "active",
+    stackId: null,
+    vialId: null,
+    startDate: new Date("2026-08-20T00:00:00.000Z"),
+  };
+  const next = { name: "rev", peptideId: "pep1", scheduleType: "fixed_times" as const, steps: [] };
+
+  it("refuses a start date BEFORE the protocol it replaces", async () => {
+    armRevision({ ...LIVE });
+    const res = await reviseProtocol({ id: "p-old", startDate: "2026-08-10", next });
+    expect(res.ok).toBe(false);
+    expect(res.ok ? "" : res.error).toMatch(/after the protocol it replaces/i);
+    expect(protocolCreate).not.toHaveBeenCalled();
+    expect(protocolUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses a start date ON the same day as the protocol it replaces", async () => {
+    armRevision({ ...LIVE });
+    const res = await reviseProtocol({ id: "p-old", startDate: "2026-08-20", next });
+    expect(res.ok).toBe(false);
+    expect(protocolCreate).not.toHaveBeenCalled();
+  });
+
+  it("allows a start date after it — the ordinary case", async () => {
+    armRevision({ ...LIVE });
+    const res = await reviseProtocol({ id: "p-old", startDate: "2026-08-21", next });
+    expect(res.ok).toBe(true);
+    expect(protocolCreate).toHaveBeenCalled();
+  });
+
+  it("allows the revision when the predecessor has no start date to compare against", async () => {
+    armRevision({ ...LIVE, startDate: null });
+    const res = await reviseProtocol({ id: "p-old", startDate: "2026-08-10", next });
+    expect(res.ok).toBe(true);
+  });
+});
