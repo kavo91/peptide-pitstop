@@ -116,6 +116,38 @@ the ONLY surface that could not answer for HCG or Somatropin, while the inventor
 page beside it counted their doses happily. Silence that contradicts the
 neighbouring surface is not caution, it is a second defect.
 
+**R30 — a repeating course's next on-cycles are projected as provisional
+demand.** A repeating course whose `endDate` is the cycle plan's own stop
+(`endsOnPlan`) used to end the walk there. The forecast then went blind at the
+break: covered-to-cycle-end all through the off-weeks, and the flip to
+`reorder_now` came only when the user clicked "start next cycle" — after the
+shipping window had closed. Now the walk resolves with the end lifted, drops
+every slot inside an off-window, and continues into the projected next
+on-cycles. Three consequences, each deliberate:
+
+- **The reorder date keys to the restart, not the last served slot.** When the
+  first UNSERVED slot sits past `projectionStartsOn`, `reorderByDate` is
+  `restart − leadTime` and the status compares the restart's distance against
+  `leadTime + buffer`. `depletion − leadTime` across a four-week break would
+  demand the order six weeks early; false urgency is its own failure in a tile
+  whose credibility is the product. Depletion inside the committed cycle keeps
+  the old arithmetic untouched. The basis is carried as `projected_restart` so
+  the copy can say WHY the date is early ("for next cycle").
+- **The projection assumes the restart happens on plan.** Restarts are manual
+  (`startNextCycle` moves the anchor); a user who restarts late simply sees the
+  projection — and the reorder date — slide with reality on the next render.
+- **A mid-ladder titration can sit up to a step ahead in projected cycles.** The
+  resolver's phase cursor walks the (later discarded) break days too, so a
+  dose-count ladder advances through the break in the projection while the real
+  course resumes where it stopped. Conservative direction: orders earlier,
+  never later. Revisit only if a real course is mid-ladder across a break.
+- `cycle_end` is no longer emitted as a stop reason (the walk no longer stops
+  there); the type member and its copy remain for older readers of the field.
+- An `endDate` that is NOT the plan's stop means the user chose to finish
+  early: that stays a plain `course_end` with no projection. Likewise an
+  endDate-less repeating course keeps R23 — its break days still cost stock,
+  because `today.ts` still shows them as due.
+
 ## Claims the forecast must not make
 
 - Coverage to a date the walk never simulated. The end is clamped to the last

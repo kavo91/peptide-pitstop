@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Decimal from "decimal.js";
 import { computeDraw } from "@/lib/dosing/engine";
+import { splitProspectiveDose, weakestBlendSource, roundSplitForDisplay, type BlendComponent } from "@/lib/blends-core";
 import { doseUnitBreakdown } from "@/lib/dosing/unit-breakdown";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { budWarning } from "@/lib/bud";
@@ -26,6 +27,7 @@ interface SyringeDTO {
   id: string;
   name: string;
   graduationType: "units" | "ml";
+  deviceType: "syringe" | "pen";
   unitsPerMl: number;
   capacityMl: string;
   capacityUnits: number;
@@ -33,6 +35,8 @@ interface SyringeDTO {
 }
 
 interface Props {
+  /** Vendor-blend composition for a blend peptide — enables the live per-component preview. */
+  blendComponents?: BlendComponent[] | null;
   protocolId?: string;
   peptideName: string;
   preparation: {
@@ -70,7 +74,7 @@ function toLocalInput(d: Date): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
-export function LogDoseForm({ protocolId, peptideName, preparation, syringes, defaultSyringeId, defaultTakenAtISO, useLiveTakenAt = false, initialDoseValue, initialDoseUnit, hoursSinceLast, halfLifeHours, minIntervalHours, recentSites }: Props) {
+export function LogDoseForm({ protocolId, peptideName, preparation, syringes, defaultSyringeId, defaultTakenAtISO, useLiveTakenAt = false, initialDoseValue, initialDoseUnit, hoursSinceLast, halfLifeHours, minIntervalHours, recentSites, blendComponents = null }: Props) {
   const [doseValue, setDoseValue] = useState(initialDoseValue);
   const [doseUnit, setDoseUnit] = useState<DoseUnit>(initialDoseUnit);
   const [syringeId, setSyringeId] = useState(defaultSyringeId ?? syringes[0]?.id ?? "");
@@ -265,6 +269,7 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
       {draw && (
         <>
           <VisualSyringe
+            device={syringe.deviceType}
             capacityMl={Number(syringe.capacityMl)}
             fillMl={draw.targetVolumeMl.toNumber()}
             markingLabel={
@@ -280,6 +285,20 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
             <div><dt className="text-xs text-muted">Delivers</dt><dd className="tabular-nums">{draw.deliveredMassMcg.toDecimalPlaces(1).toString()} mcg</dd></div>
             <div><dt className="text-xs text-muted">Rounding</dt><dd className="tabular-nums">{draw.roundingErrorMcg.toDecimalPlaces(1).toString()} mcg</dd></div>
           </dl>
+          {(() => {
+            // Live per-component split of the DELIVERED mass (syringe-rounded) —
+            // OUTSIDE the stats grid so its columns keep their reading order.
+            if (!blendComponents || blendComponents.length === 0) return null;
+            const split = splitProspectiveDose(draw.deliveredMassMcg.toString(), "mcg", blendComponents);
+            if (!split) return null;
+            const shown = roundSplitForDisplay(split.map((c) => c.doseMcg));
+            return (
+              <p className="mt-1 text-xs text-muted tabular-nums">
+                ↳ {split.map((c, i2) => `${c.componentName} ${shown[i2]} mcg`).join(" · ")}{" "}
+                <span className="opacity-70">(derived, {weakestBlendSource(blendComponents)})</span>
+              </p>
+            );
+          })()}
 
           {draw.warnings.map((w) => (
             <p key={w.code} className={`rounded-control px-3 py-2 text-sm ${w.severity === "block" ? "bg-danger/10 text-danger" : "bg-warn/10 text-warn"}`}>

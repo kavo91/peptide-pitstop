@@ -8,7 +8,7 @@ import {
   ENRICHMENT_SOURCE,
   type EnrichmentEntry,
 } from "./peptide-enrichment";
-import { PEPTIDE_LIBRARY } from "./peptide-library";
+import { PEPTIDE_LIBRARY, libraryHalfLifeHours } from "./peptide-library";
 import { toNeutralReferenceEntry } from "./compliance";
 
 const unitScale: Record<string, number> = { mcg: 1, ug: 1, mg: 1000 };
@@ -196,6 +196,90 @@ describe("manual entries (5-Amino-1MQ hybrid)", () => {
     expect(
       neutral.references.some((r) => /peptideprotocolwiki|peptidedosages|alpha-rejuvenation|pmc\.ncbi/.test(r.href)),
     ).toBe(false);
+  });
+});
+
+describe("manual entries (NAD+ hybrid)", () => {
+  it("resolves by canonical name and by alias", () => {
+    expect(getEnrichmentSeed("NAD+")?.name).toBe("NAD+");
+    expect(getEnrichmentSeed("nicotinamide adenine dinucleotide")?.name).toBe("NAD+");
+    expect(getEnrichmentSeed("nad")?.name).toBe("NAD+");
+  });
+
+  it("is present in the library so the picker offers it, with a mass class", () => {
+    const lib = PEPTIDE_LIBRARY.find((p) => p.name === "NAD+");
+    expect(lib).toBeTruthy();
+    expect(lib?.substanceClass).toBe("mass");
+  });
+
+  it("carries a half-life the plasma chart can plot (short — intact NAD+ clears in minutes)", () => {
+    // Not a measured subQ elimination t½; an order-of-magnitude figure anchored
+    // to the human IV infusion study (PMID 31572171). Guard the CONTRACT the
+    // consumers rely on: a finite, positive, sub-hour number.
+    const halfLife = libraryHalfLifeHours("NAD+");
+    expect(halfLife).toBe("0.25");
+    const asNumber = Number(halfLife);
+    expect(Number.isFinite(asNumber)).toBe(true);
+    expect(asNumber).toBeGreaterThan(0);
+    expect(asNumber).toBeLessThan(1);
+  });
+
+  it("carries the peptidedosages mix (reconstitution ratio → calculator)", () => {
+    const e = getEnrichmentSeed("NAD+") as EnrichmentEntry;
+    expect(e.reconstitutionRatio).toBe("3 mL = ~166.7 mg/mL");
+    expect(e.reconstitution.some((s) => /3\.0 mL bacteriostatic water/i.test(s))).toBe(true);
+    // Both vial sizes documented, so the calculator prefill is not silently 500-only.
+    expect(e.reconstitution.some((s) => /333\.3 mg\/mL/.test(s))).toBe(true);
+  });
+
+  it("carries the subQ titration ramp (50 → 75 → 100 mg daily)", () => {
+    const e = getEnrichmentSeed("NAD+") as EnrichmentEntry;
+    expect(e.templates).toHaveLength(1);
+    const ramp = e.templates[0].ramp ?? [];
+    expect(ramp.map((r) => r.dose)).toEqual([50, 75, 100]);
+    expect(ramp.every((r) => r.unit === "mg")).toBe(true);
+    expect(e.templates[0].targetDose).toBe(100);
+    expect(e.templates[0].doseBasis).toBe("per_injection");
+  });
+
+  it("states plainly that no human subcutaneous PK exists and the ladder is vendor convention", () => {
+    // The evidence caveat is the point of this entry — if a future re-curation
+    // drops it, the dose ladder starts reading as trial-backed.
+    const e = getEnrichmentSeed("NAD+") as EnrichmentEntry;
+    expect(e.dosingReference).toMatch(/no published human study characterises subcutaneous/i);
+    expect(e.dosingReference).toMatch(/vendor convention, not trial evidence/i);
+    // Reconstitution is vendor practice too — every published-standard claim for
+    // NAD+ BUD failed adversarial verification, so the entry must not imply one.
+    expect(e.reconstitution[0]).toMatch(/vendor convention, not a published standard/i);
+  });
+
+  it("records the 6 h saturation finding, not just the 2 h non-detection", () => {
+    // Quoting only "no rise for 2 h" overstates the case: clearance is
+    // capacity-limited and plasma NAD+ does rise ~398% by 6 h.
+    const e = getEnrichmentSeed("NAD+") as EnrichmentEntry;
+    expect(e.mechanism).toMatch(/398%/);
+    expect(e.mechanism).toMatch(/capacity-limited rather than first-order/i);
+  });
+
+  it("attributes the mix to peptidedosages and the pharmacology to PubMed sources", () => {
+    const e = getEnrichmentSeed("NAD+") as EnrichmentEntry;
+    expect(e.sourceUrl).toBe(
+      "https://peptidedosages.com/single-peptide-dosages/nad-500-mg-10ml-vial-dosage-protocol/",
+    );
+    expect(e.attribution).toMatch(/peptidedosages\.com/i);
+    expect(e.attribution).toMatch(/pubmed/i);
+  });
+
+  it("exposes only allow-listed PubMed + DOI literature links through the neutral boundary", () => {
+    const e = getEnrichmentSeed("NAD+") as EnrichmentEntry;
+    const neutral = toNeutralReferenceEntry({ name: e.name, aliases: e.aliases, references: e.references });
+    // 1 PubMed (Grant 2019 IV infusion) + 9 DOIs survive; both peptidedosages
+    // links are stored for provenance but stripped from the UI.
+    expect(neutral.references).toHaveLength(10);
+    expect(neutral.references.filter((r) => r.kind === "pubmed")).toHaveLength(1);
+    expect(neutral.references.some((r) => r.href === "https://pubmed.ncbi.nlm.nih.gov/31572171/")).toBe(true);
+    expect(neutral.references.every((r) => /pubmed\.ncbi|doi\.org/.test(r.href))).toBe(true);
+    expect(neutral.references.some((r) => /peptidedosages/.test(r.href))).toBe(false);
   });
 });
 

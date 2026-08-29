@@ -74,15 +74,23 @@ export function libraryComponents(
 
 const RECON_FRIDGE = "Lyophilised — reconstitute with BAC water; refrigerate, use within ~28 days.";
 const GLP1_FRIDGE = "Refrigerate; protect from light. Reconstituted vials per label.";
+const NAD_STORAGE =
+  "Lyophilised — store frozen at −20 °C, protected from light. Reconstitute with BAC water; " +
+  "refrigerate at 2–8 °C and use within ~14 days; avoid freeze–thaw cycles.";
 
 export const PEPTIDE_LIBRARY: LibraryPeptide[] = [
   { name: "BPC-157", aliases: "Body Protection Compound 157", category: "Healing / recovery", substanceClass: "mass", halfLifeHours: "7", storageNotes: RECON_FRIDGE },
-  { name: "TB-500", aliases: "Thymosin Beta-4, TB4", category: "Healing / recovery", substanceClass: "mass", halfLifeHours: "2.5", storageNotes: RECON_FRIDGE },
+  // TB-500 (synthetic Ac-LKKTETQ fragment) and Thymosin Beta-4 (full 43-aa peptide) are
+  // DIFFERENT compounds, routinely conflated by vendors. As one entry, a blend's
+  // TB-500 rolls up into standalone TB-4 exposure and reports their sum against a
+  // compound that was never taken on its own. Separate entries; must not alias each other.
+  { name: "TB-500", aliases: "Ac-LKKTETQ, thymosin beta-4 fragment", category: "Healing / recovery", substanceClass: "mass", halfLifeHours: "2.5", storageNotes: RECON_FRIDGE },
+  { name: "Thymosin Beta-4", aliases: "TB-4, TB4, Tβ4", category: "Healing / recovery", substanceClass: "mass", halfLifeHours: "2.5", storageNotes: RECON_FRIDGE },
   { name: "Thymosin Alpha-1", aliases: "Tα1, Thymalfasin", category: "Immune", substanceClass: "mass", halfLifeHours: "2", storageNotes: RECON_FRIDGE },
   { name: "GHK-Cu", aliases: "Copper peptide", category: "Cosmetic / healing", substanceClass: "mass", halfLifeHours: "1", storageNotes: RECON_FRIDGE },
   { name: "KPV", aliases: "Lys-Pro-Val, alpha-MSH (11-13)", category: "Anti-inflammatory", substanceClass: "mass", storageNotes: RECON_FRIDGE },
   { name: "Ipamorelin", category: "GH secretagogue", substanceClass: "mass", halfLifeHours: "2.5", storageNotes: RECON_FRIDGE },
-  { name: "CJC-1295 (no DAC)", aliases: "Mod GRF 1-29", category: "GH secretagogue", substanceClass: "mass", halfLifeHours: "0.5", storageNotes: RECON_FRIDGE },
+  { name: "CJC-1295 (no DAC)", aliases: "CJC-1295 no-DAC, Mod GRF 1-29, Modified GRF (1-29)", category: "GH secretagogue", substanceClass: "mass", halfLifeHours: "0.5", storageNotes: RECON_FRIDGE },
   { name: "CJC-1295 (with DAC)", category: "GH secretagogue", substanceClass: "mass", halfLifeHours: "144", storageNotes: RECON_FRIDGE },
   { name: "Sermorelin", category: "GH secretagogue", substanceClass: "mass", halfLifeHours: "0.2", storageNotes: RECON_FRIDGE },
   { name: "Tesamorelin", category: "GH secretagogue", substanceClass: "mass", halfLifeHours: "0.5", storageNotes: RECON_FRIDGE },
@@ -92,6 +100,7 @@ export const PEPTIDE_LIBRARY: LibraryPeptide[] = [
   { name: "PT-141", aliases: "Bremelanotide", category: "Sexual health", substanceClass: "mass", halfLifeHours: "2.7", storageNotes: RECON_FRIDGE },
   { name: "Melanotan II", aliases: "MT-II", category: "Pigmentation", substanceClass: "mass", halfLifeHours: "1", storageNotes: RECON_FRIDGE },
   { name: "MOTS-c", category: "Metabolic / mitochondrial", substanceClass: "mass", storageNotes: RECON_FRIDGE },
+  { name: "SS-31", aliases: "Elamipretide, Bendavia, MTP-131", category: "Mitochondria-targeting (cardiolipin-binding)", substanceClass: "mass", halfLifeHours: "4", storageNotes: RECON_FRIDGE },
   { name: "Epitalon", aliases: "Epithalon", category: "Longevity", substanceClass: "mass", storageNotes: RECON_FRIDGE },
   { name: "Selank", category: "Nootropic", substanceClass: "mass", halfLifeHours: "0.5", storageNotes: RECON_FRIDGE },
   { name: "Semax", category: "Nootropic", substanceClass: "mass", halfLifeHours: "0.5", storageNotes: RECON_FRIDGE },
@@ -106,6 +115,35 @@ export const PEPTIDE_LIBRARY: LibraryPeptide[] = [
   // reference sources converge on ~4–6 h subQ / ~3.8–6.9 h plasma; consistent with
   // the whole library's "approximate reference, PK often debated" convention above.
   { name: "5-Amino-1MQ", aliases: "5-Amino-1-methylquinolinium, 5A1MQ, 5-Amino-1MQ iodide", category: "Metabolic / NAD+", substanceClass: "mass", halfLifeHours: "5", storageNotes: RECON_FRIDGE },
+
+  // Manually-curated hybrid entry (see enrichment/manual-entries.ts): mix +
+  // subQ titration ramp from peptidedosages.com, pharmacology and every
+  // literature reference from PubMed-indexed sources.
+  //
+  // Half-life "0.25" (~15 min) is a MODELLING PLACEHOLDER, not a pharmacokinetic
+  // claim. Read this before quoting it anywhere:
+  //
+  //   * NO human study establishes a plasma half-life, clearance or volume of
+  //     distribution for exogenous NAD+ BY ANY ROUTE, and none exists for the
+  //     subcutaneous route at all. Vendor/clinic half-life figures for NAD+ are
+  //     unsupported by published human data. (Independently verified 3-0 against
+  //     the primary literature, 2026-08-16.)
+  //   * The nearest evidence is Grant 2019 (PMID 31572171): 750 mg IV over 6 h at
+  //     3 µmol/min in 8 exposed males, in which plasma NAD+ and its metabolites
+  //     showed no detectable rise for the first 2 h — the authors infer removal
+  //     about as fast as delivery — but by 6 h plasma NAD+ was ~398% above
+  //     baseline as clearance capacity saturated. Clearance is capacity-limited,
+  //     not first-order, so a single scalar t½ is the wrong shape for NAD+.
+  //   * That finding is also rate-specific and IV. Extrapolating it to a subQ
+  //     bolus is exactly the move the verification pass flagged as unsupported.
+  //
+  // So this number exists only to give the plasma chart something finite to draw
+  // for the intact dinucleotide, and the entry says so in dosingReference. The
+  // library's own convention would be to OMIT it (as Epitalon/MOTS-c/KPV do) —
+  // that remains the more honest option and is a one-line change. It is kept
+  // because the value was explicitly requested; prefer omitting it to shipping it
+  // anywhere it could be read as a measured PK parameter.
+  { name: "NAD+", aliases: "Nicotinamide Adenine Dinucleotide, NAD, Coenzyme I, Diphosphopyridine nucleotide", category: "Metabolic / NAD+", substanceClass: "mass", halfLifeHours: "0.25", storageNotes: NAD_STORAGE },
 
   // Multi-peptide blends (one vial, combined components). Enrichment scraped from
   // peptidedosages.com/peptide-blend-dosages (see BLEND_SLUG_MAP). Half-lives

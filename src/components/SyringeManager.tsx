@@ -1,15 +1,16 @@
 "use client";
 
-import { Pencil, Trash2, Save, X, Plus } from "lucide-react";
+import { Pencil, Trash2, Save, X, Plus, Star } from "lucide-react";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveSyringe, deleteSyringe, type SyringeInput } from "@/app/actions/syringes";
+import { saveSyringe, deleteSyringe, setDefaultSyringe, type SyringeInput } from "@/app/actions/syringes";
 
 interface Syringe {
   id: string;
   name: string;
   graduationType: string;
+  deviceType: string;
   unitsPerMl: string;
   capacityMl: string;
   capacityUnits: string;
@@ -19,6 +20,7 @@ interface Syringe {
 const BLANK: SyringeInput = {
   name: "",
   graduationType: "units",
+  deviceType: "syringe",
   unitsPerMl: "100",
   capacityMl: "1",
   capacityUnits: "100",
@@ -27,7 +29,7 @@ const BLANK: SyringeInput = {
 
 const input = "w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-sm text-ink";
 
-export function SyringeManager({ syringes }: { syringes: Syringe[] }) {
+export function SyringeManager({ syringes, defaultSyringeId = null }: { syringes: Syringe[]; defaultSyringeId?: string | null }) {
   const router = useRouter();
   const [form, setForm] = useState<SyringeInput | null>(null);
   const [busy, setBusy] = useState(false);
@@ -62,16 +64,37 @@ export function SyringeManager({ syringes }: { syringes: Syringe[] }) {
     router.refresh();
   }
 
+  async function makeDefault(id: string | null) {
+    setBusy(true);
+    setError(null);
+    const res = await setDefaultSyringe(id);
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    router.refresh();
+  }
+
   return (
     <div className="space-y-2">
       <ul className="space-y-2">
         {syringes.map((s) => (
           <li key={s.id} className="flex items-center justify-between rounded-card bg-surface px-4 py-3 text-sm shadow-sm ring-1 ring-line/10">
             <div>
-              <p className="font-medium">{s.name}</p>
+              <p className="font-medium">
+                {s.name}
+                {s.id === defaultSyringeId && (
+                  <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-accentStrong">
+                    <Star className="h-3 w-3" aria-hidden /> Default
+                  </span>
+                )}
+              </p>
               <p className="text-xs text-muted">{s.graduationType} · {s.capacityMl} mL / {s.capacityUnits}u · step {s.increment}</p>
             </div>
             <div className="flex gap-3">
+              {s.id === defaultSyringeId ? (
+                <button type="button" onClick={() => makeDefault(null)} disabled={busy} className="inline-flex items-center gap-1 text-xs font-medium text-muted"><Star className="h-3.5 w-3.5" aria-hidden /> Clear default</button>
+              ) : (
+                <button type="button" onClick={() => makeDefault(s.id)} disabled={busy} className="inline-flex items-center gap-1 text-xs font-medium text-accentStrong"><Star className="h-3.5 w-3.5" aria-hidden /> Set default</button>
+              )}
               <button type="button" onClick={() => setForm({ ...s })} className="inline-flex items-center gap-1 text-xs font-medium text-accentStrong"><Pencil className="h-3.5 w-3.5" aria-hidden /> Edit</button>
               <button type="button" onClick={() => remove(s.id)} disabled={busy} className="inline-flex items-center gap-1 text-xs font-medium text-danger"><Trash2 className="h-3.5 w-3.5" aria-hidden /> Delete</button>
             </div>
@@ -83,6 +106,10 @@ export function SyringeManager({ syringes }: { syringes: Syringe[] }) {
         <div className="space-y-2 rounded-card bg-surface p-4 shadow-sm ring-1 ring-line/10">
           <p className="text-sm font-medium">{form.id ? "Edit syringe" : "New syringe"}</p>
           <input className={input} placeholder="Name (e.g. 1 mL U-100 insulin)" value={form.name} onChange={(e) => set("name", e.target.value)} />
+          <select className={input} value={form.deviceType ?? "syringe"} onChange={(e) => set("deviceType", e.target.value)} aria-label="Device type">
+            <option value="syringe">Syringe (draw to a mark)</option>
+            <option value="pen">Pen (dial a dose)</option>
+          </select>
           <select className={input} value={form.graduationType} onChange={(e) => set("graduationType", e.target.value)} aria-label="Graduation type">
             <option value="units">unit-graduated (insulin)</option>
             <option value="ml">mL-graduated</option>

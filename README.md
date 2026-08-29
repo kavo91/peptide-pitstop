@@ -86,14 +86,17 @@ The motorsport "pit-wall" dark theme ships alongside a clean light theme, and th
 - **Reconstitution engine.** Concentration, draw volume, and syringe markings computed with `decimal.js` — pure decimal maths, no floating-point drift. Handles reconstituted *and* premixed vials.
 - **Exhaustively tested.** The dosing and schedule logic is covered by an extensive vitest suite including property tests, real-world regression cases, unit-equivalence checks, and syringe-bound guardrails.
 - **Quick logging.** Log a dose in seconds — on your phone — with a visual syringe picker and injection-site body map. Supports injections, oral peptides, and ad-hoc doses.
+- **Syringes and pens.** A device can be a barrel syringe or a dial-a-dose pen. Pens get a dose-window graphic and pen wording instead of a drawn barrel — presentation only, never a change to the dose maths. Set one device as your default and it is preselected wherever a protocol hasn't pinned its own.
 
 ### Protocols, prescriptions & inventory
 - **Protocols with titration & stacks.** Multi-peptide schedules, ramping/titration steps, and stacked protocols with human-readable cadence and half-life shown inline. Protocols are grouped by lifecycle — active, scheduled to start later, paused, past their end date, and completed — so a protocol queued for next month never sits indistinguishable from one running today.
 - **Revise a protocol instead of editing it.** Changing a live protocol's dosing schedule — 4× weekly to daily, or the shape of a titration ramp — completes the current course and starts a linked replacement, rather than rewriting the one your doses were logged against. The replacement resumes at the dose you are actually on, with the rest of the ladder carried across and editable before you confirm; your logged doses stay with the protocol they were taken under, and the two are linked as one course so adherence doesn't reset. Editing in place is refused, because it silently re-times every step: step lengths are stored in days but the ladder advances on a dose count derived from your injection frequency, so changing that frequency re-derives every past step's target and moves you up or down your own ramp with no warning.
 - **Cycle planning.** Give a protocol a course-level on/off plan in weeks — run for eight, break for four — and the app tracks where you are in it: a day-of-cycle chip on the list, a banner as the planned last dose approaches and once a break is over, and notifications on the same exactly-once ledger as dose reminders. Distinct from an intra-week dosing rhythm: this governs whether the protocol should be running at all. The suggested length is drawn from the peptide's own literature and shown with its source quote, as reference only.
+- **Titration inside a stack.** A stack's components can each carry their own ramp, built at creation time and optionally moved in lockstep. Every stack surface resolves the dose you are actually on rather than the protocol's headline target, and schedule rewrites are refused on a stack that is mid-ladder — the same guard that protects a standalone protocol.
+- **Gantt view.** A timeline of concurrent courses, with cycle boundaries and end dates editable in place, for seeing how overlapping protocols actually line up.
 - **Prescriptions & vials.** Full CRUD for prescriptions, vials, and preparations, with per-dose vial-volume accounting.
 - **Guided prescription wizard (opt-in).** A step-by-step flow for entering a prescription and its protocol, reachable from Prescriptions. Off by default — set `ENABLE_PRESCRIPTION_WIZARD=1` to switch it on.
-- **Inventory & reorder.** Depletion forecasting (doses remaining / days of supply) and lead-time-aware reorder status so you restock before you run dry.
+- **Inventory & reorder.** Depletion forecasting (doses remaining / days of supply) and lead-time-aware reorder status so you restock before you run dry. A repeating course projects its next on-cycle as provisional demand, so the reorder date keys to the restart rather than going quiet through the off-weeks and flipping to *order now* after the shipping window has closed.
 
 ### Cost tracking
 - **Landed cost, not sticker price.** Shipping, tax, fees and discounts belong to the *order*, not to any one item, so they are recorded once on the invoice and shared across its lines — pro-rata by value, equally per unit, or left unallocated. The split is exact: the rounding residual lands on the largest line, so three lines sharing $10 still sum to $10.00 and the invoice reconciles.
@@ -110,6 +113,7 @@ The motorsport "pit-wall" dark theme ships alongside a clean light theme, and th
 - **Bloodwork.** Biomarker panels with trends and a comparison matrix, backed by a curated biomarker library.
 - **Analytics & insights.** Adherence tracking, streaks, heatmaps, and derived insights.
 - **Plasma modelling.** Single-compartment, first-order-elimination plasma-level projections — quiet telemetry for your own regimen — from your dose history and each peptide's half-life (relative units — clearly labelled, not clinical serum levels). Blends whose composition is known are charted **per component**, each decaying on its own half-life, because a blend has no meaningful single half-life: KLOW's GHK-Cu clears in about an hour while its TB-500 persists for days. Anything with no half-life on record is named beneath the chart rather than silently omitted.
+- **Blend composition.** Record what a vendor blend actually contains — each component and its mass in one labelled vial — and every dose of that blend is split into the compounds it delivers. Blend-delivered mass then aggregates with any standalone protocol for the same compound, so cumulative exposure stops understating itself and a component with no protocol of its own stops being invisible. The split is derived, never entered twice: it flows through the dose CSV, the doctor-report PDF, per-component cost, the cumulative-exposure table, the plasma chart, and the prospective split shown on Today and in the log form. Components carry their provenance (label, CoA, or assumed) and every derived figure is badged as derived. Two compounds that share a family name stay separate identities, so neither inherits the other's exposure.
 - **Journal & wellness.** Free-text journal plus wellness logging, charted over time.
 
 ### Integrations
@@ -165,7 +169,7 @@ npm test          # vitest — dosing engine, schedule, analytics, auth, …
 npm run typecheck
 ```
 
-1000 tests across 106 files, plus a TypeScript typecheck, run against every release.
+1437 tests across 127 files, plus a TypeScript typecheck, run against every release.
 
 ---
 

@@ -15,6 +15,7 @@ interface SyringeDTO {
   id: string;
   name: string;
   graduationType: "units" | "ml";
+  deviceType: "syringe" | "pen";
   unitsPerMl: number;
   capacityMl: string;
   capacityUnits: number;
@@ -213,6 +214,7 @@ export function EditDoseForm({ dose, prep, syringe, peptideName }: Props) {
       {draw && (
         <>
           <VisualSyringe
+            device={syringe.deviceType}
             capacityMl={Number(syringe.capacityMl)}
             fillMl={draw.targetVolumeMl.toNumber()}
             markingLabel={

@@ -42,7 +42,9 @@ export function StackCard({ stack, manage = false }: { stack: StackView; manage?
       return;
     }
     if (res.logged > 0) {
-      setMsg(`Logged ${res.logged} dose${res.logged === 1 ? "" : "s"}.`);
+      // Append any per-component skip reason — a silently skipped component
+      // otherwise just stops being recorded behind a cheerful "Logged N".
+      setMsg(`Logged ${res.logged} dose${res.logged === 1 ? "" : "s"}.${res.error ? ` ${res.error}` : ""}`);
       router.refresh();
     } else {
       // Nothing logged — surface the real reason (already logged today, no prep, etc.).
@@ -70,11 +72,34 @@ export function StackCard({ stack, manage = false }: { stack: StackView; manage?
       <ul className="space-y-1">
         {stack.components.map((c) => (
           <li key={c.protocolId} className="text-xs text-muted">
-            <span className="text-ink">{c.peptideName}</span> — {c.doseMl} ml
-            {c.perInjectionMcg ? ` → ${c.perInjectionMcg} mcg` : ""}
+            <span className="text-ink">{c.peptideName}</span>
+            {c.resolved ? (
+              c.resolved.doseValue === "" ? (
+                // Resolver fail-safe: never render a raw number here (spec §6).
+                <> — <span className="text-warn">dose unresolvable — check schedule</span></>
+              ) : (
+                <>
+                  {" "}— {c.resolved.doseValue} {c.resolved.doseUnit}
+                  {c.resolved.altDisplay ? ` (${c.resolved.altDisplay})` : ""}
+                </>
+              )
+            ) : (
+              <>
+                {/* A revised successor may dose in mcg/mg — render its real unit;
+                    the ml → mcg pair only holds for an ml dose. */}
+                {" "}— {c.doseMl} {c.doseInputUnit}
+                {c.perInjectionMcg ? ` → ${c.perInjectionMcg} mcg` : ""}
+              </>
+            )}
             {c.halfLifeHours ? ` · t½ ${c.halfLifeHours}h` : ""}
             {c.remainingMl ? ` · ${c.remainingMl} ml left` : ""}
             {c.expiry ? ` · exp ${c.expiry}` : ""}
+            {c.resolved && c.resolved.doseValue !== "" ? (
+              <span className="ml-1 text-accentStrong">
+                · Phase {c.resolved.phaseIndex + 1} of {c.resolved.phaseCount}
+                {c.resolved.targetInPhase != null ? ` — ${c.resolved.deliveredInPhase}/${c.resolved.targetInPhase} doses` : ""}
+              </span>
+            ) : null}
           </li>
         ))}
       </ul>

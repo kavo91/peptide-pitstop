@@ -20,7 +20,7 @@
  * either; a manual entry here is durable.
  *
  * REFERENCE ONLY — dose numbers are educational reference figures lifted from the
- * cited sources. Not medical advice, not for anyone but the operator. Every entry
+ * cited sources. Not medical advice and not a recommendation. Every entry
  * still carries source attribution + a source URL and passes the same seed
  * integrity + template-consistency tests as the scraped entries.
  */
@@ -123,5 +123,131 @@ export const MANUAL_ENTRIES: EnrichmentEntry[] = [
     attribution:
       "Mix / reconstitution from peptidedosages.com; titration / protocol from alpha-rejuvenation.com; overview and references from peptideprotocolwiki.com. Reference only — not medical advice.",
     curatedAt: "2026-07-15T00:00:00.000Z",
+  },
+  {
+    // Hybrid: MIX (reconstitution) and the subQ TITRATION ramp from
+    // peptidedosages.com's 500 mg / 1000 mg NAD+ vial pages (both pages give the
+    // same 50 → 75 → 100 mg daily ramp and the same 3.0 mL BAC water mix);
+    // PHARMACOLOGY + every literature reference from PubMed-indexed sources,
+    // because peptidedosages publishes no PK for NAD+.
+    //
+    // Evidence posture, deliberately explicit: NAD+ is the only entry in this
+    // file whose ROUTE is not the route its human evidence was collected on. The
+    // one published human parenteral study is a 6 h IV infusion (Grant 2019);
+    // there is NO published human subcutaneous PK, and the subQ dose ladder below
+    // is educational/practitioner practice, not a trial-backed protocol. The
+    // benefits list therefore separates precursor-trial findings (NR / NMN /
+    // nicotinamide, where human RCT data exist) from direct-NAD+ claims (where
+    // they do not).
+    name: "NAD+",
+    aliases: "Nicotinamide Adenine Dinucleotide, NAD, Coenzyme I, Diphosphopyridine nucleotide",
+    benefits: [
+      "Central redox coenzyme (NAD+/NADH) in glycolysis, the TCA cycle and oxidative phosphorylation, and the substrate consumed by sirtuins, PARPs and CD38.",
+      "Tissue NAD+ availability falls with age; restoring it improves glucose and lipid metabolism, attenuates hepatic steatosis and extends health span in animal models (Endocrine Reviews, 2023).",
+      "The human evidence for raising NAD+ sits almost entirely with ORAL PRECURSORS, not with injected NAD+: a single 1,000 mg oral dose of nicotinamide riboside raised PBMC NAD+ from ~12 to ~18 µM (~90% higher 24 h AUC, n=12 randomised crossover), and 14 days of dosing raised whole-blood NAD+ by 22%, 51% and 142% at 100, 300 and 1,000 mg/day (n=140 randomised placebo-controlled).",
+      "Oral NMN 250 mg/day for 12 weeks raised whole-blood NAD+ versus placebo in 30 healthy adults, with levels back at baseline 4 weeks after stopping — the effect does not persist once dosing ends.",
+      "Reported by clinics for fatigue, mental clarity, recovery and craving reduction after IV infusion — these are practitioner reports, not findings from controlled human trials.",
+      "Direct evidence for injected NAD+ in humans is one 6 h IV infusion pilot (8 exposed males) that measured metabolite handling, and one retrospective 14-client clinic chart review of tolerability. Neither measured a clinical outcome, so nothing here establishes that raising NAD+ by any route produces a health, cognitive or longevity benefit.",
+      "Compartment caveat: blood/PBMC NAD+ is not tissue NAD+. Oral NR has repeatedly failed to raise skeletal-muscle NAD+ in humans, so a blood-level rise must not be read as tissue repletion.",
+    ],
+    sideEffects: [
+      "IV NAD+ is poorly tolerated in the one published tolerability series: 6 of 6 clients given 500 mg IV reported moderate-to-severe abdominal cramping, diarrhoea, nausea, vomiting, raised heart rate, throat pain, congestion and chest pressure during the infusion, resolving immediately on completion (retrospective n=14 chart review authored by employees of the clinic that generated the data — weak evidence, disclosed).",
+      "The burden appears to track infusion rate: with clients setting their own rate to tolerance, 500 mg of NAD+ took 97 ± 56 min to infuse versus 37 ± 13 min for the same dose of nicotinamide riboside (p < 0.05).",
+      "Educational subcutaneous sources report insomnia, anxiety or fatigue when the dose is escalated quickly, and mild injection-site reactions (redness, itching, soreness). These are vendor reports; no trial has studied subcutaneous NAD+.",
+      "Long-term human safety data for parenteral NAD+ are not established; total published human exposure is a handful of people over days.",
+      "High-dose oral nicotinamide (a related NAD+ precursor) raised plasma methyl-nicotinamide more than 600-fold in a phase 2a trial, indicating a large methylation load (Alzheimer's Res Ther, 2025).",
+      "Purity and endotoxin content vary by supplier; third-party-tested material is preferable for anything injected.",
+    ],
+    dosingReference:
+      "NAD+ is dosed at 50 mg–100 mg daily by subcutaneous injection in vendor protocols, titrated 50 mg (week 1) → 75 mg (week 2) → 100 mg (weeks 3–16), escalating by roughly 25 mg per week as tolerated. Two intravenous regimens appear in the published record: 750 mg in normal saline over 6 h at ~2 mg/min (3 µmol/min) in the 2019 pilot, and 500 mg diluted into 500 mL normal saline on four consecutive days with the rate self-titrated by the client in the 2026 clinic series. Every quantitative IV finding is bound to its infusion rate and none of it transfers to faster clinic pushes or to subcutaneous injection. Oral NAD+ is hydrolysed before absorption and is poorly bioavailable as the intact dinucleotide, which is why oral regimens use precursors (NR, NMN, nicotinamide) instead. No published human study characterises subcutaneous NAD+ pharmacokinetics, dose ranges, titration schedules, reconstitution volumes or beyond-use dating — the subQ ladder below is vendor convention, not trial evidence. This information is for research and educational use only.",
+    reconstitution: [
+      "Vendor convention, not a published standard — no peer-reviewed source establishes reconstitution volumes, resulting concentrations or beyond-use dating for lyophilised NAD+.",
+      "Allow the lyophilised vial to reach room temperature before opening (limits moisture condensation).",
+      "Draw 3.0 mL bacteriostatic water with a sterile syringe.",
+      "Inject slowly down the vial wall; do not aim at the powder, and avoid foaming.",
+      "Gently swirl/roll until dissolved — solution should be clear (do not shake).",
+      "500 mg vial + 3.0 mL yields ~166.7 mg/mL; a 1000 mg vial + 3.0 mL yields ~333.3 mg/mL.",
+      "Label and refrigerate at 2–8 °C (35.6–46.4 °F), protected from light; the source gives a 14-day beyond-use date. Store the unreconstituted powder frozen at −20 °C and avoid freeze–thaw cycles.",
+    ],
+    reconstitutionRatio: "3 mL = ~166.7 mg/mL",
+    mechanism:
+      "NAD+ (nicotinamide adenine dinucleotide) is a pyridine dinucleotide with two distinct roles. As a redox cofactor it cycles between NAD+ and NADH to carry electrons through glycolysis, the TCA cycle, fatty-acid oxidation and oxidative phosphorylation. As a consumed substrate it is cleaved by sirtuins (SIRT1–7, deacetylation), PARPs (DNA repair), the ectoenzymes CD38/CD157, and SARM1 (axonal degeneration) — each of these reactions destroys an NAD+ molecule and releases nicotinamide, which the NAMPT-dependent salvage pathway recycles back to NAD+. Exogenous NAD+ is not taken up intact by most cells: cell-surface ectoenzymes (CD38, ENPP1, CD73) hydrolyse it to NMN, NR and nicotinamide, which cross the membrane and are re-synthesised into intracellular NAD+. The single human infusion study is consistent with that extracellular-first metabolism, and its shape matters: during a 750 mg / 6 h IV infusion at 3 µmol/min there was no detectable rise above baseline in plasma NAD+, nicotinamide, methylnicotinamide, ADP-ribose or NMN for the first two hours — the authors infer that the infused dinucleotide was removed from plasma about as fast as it arrived, and note the arriving dose should have added at least 18 µM every 30 min, well above their detection limit. By 6 h, however, plasma NAD+ was ~398% above baseline with parallel rises in nicotinamide (409%) and ADP-ribose (393%), which the authors read as clearance capacity saturating and as evidence that a major fate of infused NAD+ is glycosidic cleavage to nicotinamide + ADP-ribose rather than intact circulation. Clearance is therefore capacity-limited rather than first-order, and every one of these numbers is specific to that infusion rate — none of it has been shown to transfer to faster infusions or to subcutaneous injection.",
+    templates: [
+      {
+        name: "Standard / Gradual Approach (subcutaneous titration)",
+        doseBasis: "per_injection",
+        targetDose: 100,
+        unit: "mg",
+        frequency: "Once daily subcutaneous",
+        ramp: [
+          { phase: "Week 1 (tolerance)", dose: 50, unit: "mg", doseLabel: "50 mg" },
+          { phase: "Week 2 (step-up)", dose: 75, unit: "mg", doseLabel: "75 mg" },
+          { phase: "Weeks 3–16 (standard)", dose: 100, unit: "mg", doseLabel: "100 mg" },
+        ],
+      },
+    ],
+    references: [
+      {
+        label:
+          "Front Aging Neurosci (2019) — Grant et al.: 750 mg IV NAD+ over 6 h at 3 µmol/min in 8 exposed males; no detectable plasma rise for 2 h, then ~398% at 6 h as clearance saturates (the only published human parenteral NAD+ PK study)",
+        url: "https://pubmed.ncbi.nlm.nih.gov/31572171/",
+      },
+      {
+        label:
+          "Front Aging (2026) — retrospective clinic series: 500 mg IV NAD+ vs 500 mg IV nicotinamide riboside over four consecutive days; NAD+ took 97 ± 56 min to infuse vs 37 ± 13 min, with moderate-to-severe symptoms in all six NAD+ recipients (n=14, authored by clinic employees)",
+        url: "https://doi.org/10.3389/fragi.2026.1652582",
+      },
+      {
+        label:
+          "Nat Commun (2016) — Trammell et al.: nicotinamide riboside is orally bioavailable in humans; single 1,000 mg dose raised PBMC NAD+ ~12 → ~18 µM (n=12 randomised crossover)",
+        url: "https://doi.org/10.1038/ncomms12948",
+      },
+      {
+        label:
+          "Sci Rep (2019) — Conze, Brenner & Kruger: 8-week randomised placebo-controlled NR trial (n=140); whole-blood NAD+ up 22 / 51 / 142% at 100 / 300 / 1,000 mg/day",
+        url: "https://doi.org/10.1038/s41598-019-46120-z",
+      },
+      {
+        label:
+          "Front Nutr (2022) — oral NMN 250 mg/day for 12 weeks raised whole-blood NAD+ vs placebo in 30 healthy adults, returning to baseline 4 weeks after cessation",
+        url: "https://doi.org/10.3389/fnut.2022.868640",
+      },
+      {
+        label:
+          "Endocrine Reviews (2023) — Bhasin et al.: NAD+ in aging biology — clinical pharmacology of NAD+ precursors, what human trials do and do not show",
+        url: "https://doi.org/10.1210/endrev/bnad019",
+      },
+      {
+        label: "Nutrients (2020) — Mehmel et al.: nicotinamide riboside — research state, bioavailability and safety",
+        url: "https://doi.org/10.3390/nu12061616",
+      },
+      {
+        label:
+          "Free Radic Biol Med (2023) — Li et al.: head-to-head acute human comparison of NAD+ precursors (nicotinamide, niacin, NR, NMN) on the plasma metabolome",
+        url: "https://doi.org/10.1016/j.freeradbiomed.2023.05.032",
+      },
+      {
+        label:
+          "Alzheimer's Res Ther (2025) — Ketron et al.: phase 2a PK/PD of high-dose oral nicotinamide — plasma nicotinamide up >130-fold, methyl-nicotinamide up >600-fold, CSF levels below quantitation in most participants",
+        url: "https://doi.org/10.1186/s13195-025-01693-y",
+      },
+      {
+        label: "Antioxidants (2021) — Rotllan et al.: NAD+-increasing strategies in cardiovascular disease",
+        url: "https://doi.org/10.3390/antiox10121939",
+      },
+      {
+        label: "Mix / reconstitution + subQ titration reference — peptidedosages.com NAD+ (500 mg vial) dosage protocol",
+        url: "https://peptidedosages.com/single-peptide-dosages/nad-500-mg-10ml-vial-dosage-protocol/",
+      },
+      {
+        label: "Mix / reconstitution reference — peptidedosages.com NAD+ (1000 mg vial) dosage protocol",
+        url: "https://peptidedosages.com/single-peptide-dosages/nad-1000-mg-vial-dosage-protocol/",
+      },
+    ],
+    source: "peptidedosages.com",
+    sourceUrl: "https://peptidedosages.com/single-peptide-dosages/nad-500-mg-10ml-vial-dosage-protocol/",
+    attribution:
+      "Mix / reconstitution and the subcutaneous titration ramp from peptidedosages.com; pharmacology, pharmacokinetics and all literature references from PubMed-indexed sources (see references). Reference only — not medical advice.",
+    curatedAt: "2026-08-16T00:00:00.000Z",
   },
 ];

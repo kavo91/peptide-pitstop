@@ -10,9 +10,11 @@ import {
   updateProtocolStep,
   moveProtocolStep,
 } from "@/app/actions/protocols";
+import { NEGATIVE_DURATION_ERROR, isNegativeDuration } from "@/lib/titration/step-duration";
 import { RampGenerator } from "@/components/RampGenerator";
 import { TitrationCalcChart } from "@/components/TitrationCalcChart";
 import { type DoseUnit } from "@/lib/dosing/types";
+
 
 interface Step {
   id: string;
@@ -49,6 +51,7 @@ function StepRow({
   const [durationDays, setDurationDays] = useState(step.durationDays);
 
   async function save() {
+    if (isNegativeDuration(durationDays)) { onError(NEGATIVE_DURATION_ERROR); return; }
     onBusy(true);
     onError(null);
     const res = await updateProtocolStep({
@@ -198,6 +201,7 @@ export function StepsEditor({
   const [error, setError] = useState<string | null>(null);
 
   async function add() {
+    if (isNegativeDuration(durationDays)) { setError(NEGATIVE_DURATION_ERROR); return; }
     setBusy(true);
     setError(null);
     const res = await addProtocolStep({ protocolId, dose, doseInputUnit: unit, durationDays });

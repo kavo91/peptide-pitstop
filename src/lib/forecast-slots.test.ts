@@ -52,8 +52,11 @@ describe("buildForecastPlan", () => {
     expect(p.slots[p.slots.length - 1].date).toEqual(d(2026, 8, 20));
   });
 
-  // A repeating course's endDate is the CURRENT cycle's stop, not the course's.
-  it("reports cycle_end for a plan-derived end on a repeating course", () => {
+  // R30: a repeating course's endDate is the CURRENT cycle's stop, not the
+  // course's — so the walk no longer stops there. The next on-cycles are
+  // projected as provisional demand and the basis reflects the walk's true
+  // extent (horizon), never a cycle end it walked straight past.
+  it("no longer stops at a plan-derived end on a repeating course", () => {
     const p = plan({
       startDate: d(2026, 8, 1),
       cycleAnchor: d(2026, 8, 1),
@@ -61,7 +64,8 @@ describe("buildForecastPlan", () => {
       cycleOffWeeks: 4,
       endDate: utc(2026, 8, 28), // 1 Aug + 28 days - 1 = 28 Aug
     });
-    expect(p.stopReason).toBe("cycle_end");
+    expect(p.stopReason).toBe("horizon");
+    expect(p.projectionStartsOn).toEqual(d(2026, 9, 26));
   });
 
   // "ended" only becomes true AFTER the stop passes, so gating on it would walk
@@ -76,6 +80,77 @@ describe("buildForecastPlan", () => {
   it("does not gate a repeating course on its cycle", () => {
     const p = plan({ cycleAnchor: d(2026, 8, 1), cycleOnWeeks: 4, cycleOffWeeks: 4 });
     expect(p.slots.length).toBeGreaterThan(300); // walks past the on-cycle end
+  });
+
+  // R30 — a repeating course whose endDate carries the current cycle's stop
+  // used to go blind past the break: the walk stopped at the endDate, the tile
+  // stayed green all break, and the reorder flip came only when the user
+  // clicked restart — after the shipping window had closed.
+  describe("next-cycle projection (R30)", () => {
+    // anchor 1 Aug, 4 on / 4 off: on 1–28 Aug, off 29 Aug – 25 Sep,
+    // cycle 2 on 26 Sep – 23 Oct, off 24 Oct – 20 Nov, cycle 3 from 21 Nov.
+    const repeating: Partial<ProtocolForForecast> = {
+      startDate: d(2026, 8, 1),
+      cycleAnchor: d(2026, 8, 1),
+      cycleOnWeeks: 4,
+      cycleOffWeeks: 4,
+      endDate: utc(2026, 8, 28), // = cyclePlanEnd → endsOnPlan
+    };
+
+    it("projects future on-cycles and skips the breaks", () => {
+      const p = plan(repeating);
+      // committed cycle still walked to its stop
+      expect(p.slots.some((s) => s.date.getTime() === d(2026, 8, 28).getTime())).toBe(true);
+      // the break emits nothing — these slots will never exist unless the user
+      // doses off-plan, and costing them would misstate demand
+      expect(p.slots.filter((s) => s.date > d(2026, 8, 28) && s.date < d(2026, 9, 26))).toHaveLength(0);
+      // cycle 2 resumes on the plan's restart day
+      expect(p.slots.some((s) => s.date.getTime() === d(2026, 9, 26).getTime())).toBe(true);
+      // the SECOND break is skipped too — the pattern repeats to the horizon
+      expect(p.slots.filter((s) => s.date > d(2026, 10, 23) && s.date < d(2026, 11, 21))).toHaveLength(0);
+      expect(p.slots.some((s) => s.date.getTime() === d(2026, 11, 21).getTime())).toBe(true);
+    });
+
+    it("reports the first projected day", () => {
+      expect(plan(repeating).projectionStartsOn).toEqual(d(2026, 9, 26));
+    });
+
+    it("projects the restart even when today is already inside the break", () => {
+      // anchor 1 Jul: on 1–28 Jul, off 29 Jul – 25 Aug (today = 15 Aug), cycle 2 from 26 Aug.
+      const p = plan({
+        startDate: d(2026, 7, 1),
+        cycleAnchor: d(2026, 7, 1),
+        cycleOnWeeks: 4,
+        cycleOffWeeks: 4,
+        endDate: utc(2026, 7, 28),
+      });
+      expect(p.slots.length).toBeGreaterThan(0);
+      expect(p.slots[0].date).toEqual(d(2026, 8, 26));
+      expect(p.projectionStartsOn).toEqual(d(2026, 8, 26));
+      expect(p.phaseToday).toBe("off");
+    });
+
+    it("does not project when the endDate is not the plan's stop", () => {
+      // The user chose to finish early — that is a course end, not a cycle stop.
+      const p = plan({ ...repeating, endDate: utc(2026, 8, 20) });
+      expect(p.stopReason).toBe("course_end");
+      expect(p.projectionStartsOn).toBeNull();
+      expect(p.slots.every((s) => s.date <= d(2026, 8, 20))).toBe(true);
+    });
+
+    it("does not project a terminal course", () => {
+      const p = plan({ cycleAnchor: d(2026, 8, 1), cycleOnWeeks: 4, cycleOffWeeks: null });
+      expect(p.projectionStartsOn).toBeNull();
+    });
+
+    it("leaves an endDate-less repeating course alone (R23)", () => {
+      // Without a committed stop the app still shows break doses as due, so
+      // they still cost stock — projection applies only past a committed end.
+      const p = plan({ cycleAnchor: d(2026, 8, 1), cycleOnWeeks: 1, cycleOffWeeks: 1 });
+      const inBreak = p.slots.filter((s) => s.date >= d(2026, 8, 22) && s.date <= d(2026, 8, 28));
+      expect(inBreak.length).toBe(7);
+      expect(p.projectionStartsOn).toBeNull();
+    });
   });
 
   // R23: off-weeks are not discounted, so a slot inside the planned break is

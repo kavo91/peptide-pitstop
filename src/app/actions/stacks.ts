@@ -12,9 +12,12 @@ import { encryptField } from "@/lib/crypto/fieldEncryption";
 import { getTodayDoses } from "@/lib/today";
 import { resolveTrackingDayStamp, dayAnchor } from "@/lib/tz-day";
 import { localDayOf } from "@/lib/local-day";
+import { generateRamp, type GeneratedStep } from "@/lib/titration/generate-ramp";
 import { runPlannedDoseGeneration } from "@/lib/planned/run";
 import { peptideTokens } from "@/lib/stacks/server";
+import { courseTips, courseGroupIds, type LineageProtocol } from "@/lib/stacks/lineage";
 import { logDose } from "./doses";
+import type { DoseUnit } from "@/lib/dosing/types";
 
 // getStacks (a data reader) + its stack-view types now live in a server-only lib
 // module, since a "use server" module should export only server actions. Re-export
@@ -42,16 +45,33 @@ function utcDate(v?: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+export interface StackRampInput {
+  startDose: string;
+  targetDose: string;
+  increment: string;
+  weeksPerStep: string;
+  doseInputUnit: string; // whitelisted to mcg|mg|ml|units, else coerced to mcg
+}
 export interface StackComponentInput {
   peptideName: string;
   concentrationMcgPerMl: string; // premixed
   vialSizeMl: string;
   qty: string; // integer ≥ 1
   doseMl: string;
+  /** Optional creation-time titration ladder; requires CreateStackInput.startDateISO. */
+  ramp?: StackRampInput;
 }
 export interface CreateStackInput {
   name: string;
   components: StackComponentInput[];
+  /**
+   * Stack start date (yyyy-mm-dd), written to EVERY component protocol —
+   * components share one schedule. REQUIRED when any component carries a ramp:
+   * the resolver treats a ladder without startDate as inert (resolve.ts:23),
+   * and an inert ladder that later springs to life on an unrelated schedule
+   * edit is a surprise dose change.
+   */
+  startDateISO?: string;
 }
 
 /** Strict whole-vial quantity: a positive integer (>= 1) → number, else null.
@@ -134,6 +154,39 @@ export async function createStack(input: CreateStackInput) {
   if (qtys.some((q) => q === null)) return { ok: false as const, error: "Each component needs a whole vial quantity of 1 or more." };
   if (qtys.some((q) => q! > 50)) return { ok: false as const, error: "Each component can have at most 50 vials." };
 
+  // Titration ramps: generate + validate BEFORE the transaction so a bad ramp
+  // refuses the whole stack with the component named (refuse, never clamp).
+  const startDate = utcDate(input.startDateISO);
+  const rampSteps = new Map<StackComponentInput, GeneratedStep[]>();
+  for (const c of valid) {
+    if (!c.ramp) continue;
+    if (!startDate) {
+      return { ok: false as const, error: "A titration ramp needs a stack start date." };
+    }
+    // "units" is syringe-relative and stack logging is one-button with no
+    // syringe picker — the dose's meaning would depend on whichever syringe
+    // sorts first. Refuse (mirror guard in logStack for ladders added later).
+    if (c.ramp.doseInputUnit === "units") {
+      return { ok: false as const, error: `${c.peptideName.trim()}: units ladders aren't supported for stacks — use mcg, mg or ml.` };
+    }
+    const unit = ["mcg", "mg", "ml"].includes(c.ramp.doseInputUnit) ? c.ramp.doseInputUnit : "mcg";
+    try {
+      rampSteps.set(
+        c,
+        generateRamp({
+          startDose: c.ramp.startDose,
+          targetDose: c.ramp.targetDose,
+          increment: c.ramp.increment,
+          weeksPerStep: Number(c.ramp.weeksPerStep),
+          doseInputUnit: unit as "mcg" | "mg" | "ml" | "units",
+        }),
+      );
+    } catch (e) {
+      const why = e instanceof Error ? e.message : "invalid ramp";
+      return { ok: false as const, error: `${c.peptideName.trim()}: ${why}` };
+    }
+  }
+
   try {
     const stackId = await prisma.$transaction(async (tx) => {
       const stack = await tx.stack.create({ data: { userId: user.id, name } });
@@ -173,6 +226,7 @@ export async function createStack(input: CreateStackInput) {
             });
           }
         }
+        const steps = rampSteps.get(c);
         await tx.protocol.create({
           data: {
             userId: user.id,
@@ -187,11 +241,40 @@ export async function createStack(input: CreateStackInput) {
             doseInputUnit: "ml",
             doseBasis: "per_injection",
             status: "active",
+            // One shared schedule: when a start date is given it goes on EVERY
+            // component (ramped or not) — updateStackSchedule keeps them in
+            // sync the same way, and getStacks reads it off the first.
+            ...(startDate ? { startDate } : {}),
+            // Contiguous stepIndex 0..n-1 with a null-duration final
+            // maintenance step, straight from generateRamp.
+            ...(steps
+              ? {
+                  steps: {
+                    create: steps.map((g) => ({
+                      stepIndex: g.stepIndex,
+                      dose: g.dose,
+                      doseInputUnit: g.doseInputUnit,
+                      durationDays: g.durationDays,
+                    })),
+                  },
+                }
+              : {}),
           },
         });
       }
       return stack.id;
     });
+    // A start date makes the protocols generate planned rows — materialise now
+    // (same trigger discipline as updateStackSchedule). The stack is already
+    // COMMITTED: a generation hiccup must not report creation failure (a retry
+    // would duplicate the stack) — the daily tick / next save regenerates.
+    if (startDate) {
+      try {
+        await runPlannedDoseGeneration(user.id);
+      } catch (e) {
+        console.error("createStack: planned-dose generation failed post-commit (self-heals on next run)", e);
+      }
+    }
     revalidatePath("/settings");
     revalidatePath("/inventory");
     revalidatePath("/protocols");
@@ -231,16 +314,28 @@ export async function logStack(stackId: string, stamp?: { localDay?: string; tz?
   // Only log components actually DUE today — reuse the same authority that
   // drives the today view (getTodayDoses applies the start/end window, the
   // schedule, and override rebasing). A component whose protocol has not started
-  // or is not scheduled for today is skipped, never logged.
-  const dueProtocolIds = new Set((await getTodayDoses(user.id, dayRef, loggedAt)).map((d) => d.protocolId));
+  // or is not scheduled for today is skipped, never logged. The item ALSO
+  // carries the resolver's per-slot dose (spec §6) — the only legitimate dose
+  // source now that a stack component may carry a titration ladder; first slot
+  // per protocol wins (stacks are single-slot daily).
+  const dueByProtocol = new Map<string, { doseValue: string; doseUnit: DoseUnit }>();
+  for (const d of await getTodayDoses(user.id, dayRef, loggedAt)) {
+    if (!dueByProtocol.has(d.protocolId)) dueByProtocol.set(d.protocolId, { doseValue: d.doseValue, doseUnit: d.doseUnit });
+  }
 
   // Stack components are premixed injections, so every logDose call needs a
-  // syringe (logDose returns ok:false without one). Resolve the user's default
-  // syringe once — same selection the log forms use (own-or-shared, name asc).
-  const syringe = await prisma.syringe.findFirst({
-    where: { OR: [{ userId: user.id }, { userId: null }] },
-    orderBy: { name: "asc" },
-  });
+  // syringe (logDose returns ok:false without one). The user's PREFERRED
+  // device wins; only without one fall back to the alphabetical own-or-shared
+  // pick (the old behaviour, kept for users who never set a default).
+  const pref = (await prisma.user.findUnique({ where: { id: user.id }, select: { defaultSyringeId: true } }))?.defaultSyringeId;
+  const syringe =
+    (pref
+      ? await prisma.syringe.findFirst({ where: { id: pref, OR: [{ userId: user.id }, { userId: null }] } })
+      : null) ??
+    (await prisma.syringe.findFirst({
+      where: { OR: [{ userId: user.id }, { userId: null }] },
+      orderBy: { name: "asc" },
+    }));
   if (!syringe) return { ok: false as const, error: "Add a syringe before logging a stack." };
 
   const startOfDay = new Date(dayRef);
@@ -258,21 +353,44 @@ export async function logStack(stackId: string, stamp?: { localDay?: string; tz?
 
   let logged = 0;
   let firstError: string | null = null;
-  for (const p of stack.protocols) {
-    if (!dueProtocolIds.has(p.id)) {
+  // Course TIPS only — a revised component's completed predecessor stays in the
+  // stack; logging must see exactly one protocol per peptide course.
+  const lineage = stack.protocols as (typeof stack.protocols[number] & LineageProtocol)[];
+  for (const p of courseTips(lineage)) {
+    const due = dueByProtocol.get(p.id);
+    if (!due) {
       firstError ??= "No components are due today.";
+      continue;
+    }
+    // Resolver fail-safe: an unresolvable frequency yields "" (the today card
+    // disables submit for the same reason). Never substitute targetDose here —
+    // that is the raw-value-reaches-a-dose-path overdose class of bug.
+    if (due.doseValue === "") {
+      firstError ??= "Dose unresolvable for a stack component — not logged.";
+      continue;
+    }
+    // "units" is syringe-relative (volume = units / unitsPerMl) and this
+    // one-button path has no syringe picker — an alphabetically-first syringe
+    // would silently define the dose. Refuse rather than guess.
+    if (due.doseUnit === "units") {
+      firstError ??= "A stack component doses in syringe units — log it individually (units depend on the syringe).";
       continue;
     }
     // Already-logged dedup on the SAME day bucket the views use: stamped rows
     // by localDay, legacy rows by the instant window of that day.
+    // Dedup across the WHOLE course lineage, not just this protocol id: on the
+    // day a component is revised, the predecessor may already hold today's dose
+    // — the successor must not log the same peptide again ("idempotent for the
+    // day" is a per-course contract).
+    const groupIds = courseGroupIds(lineage, p);
     const already = await prisma.doseLog.count({
       where: stampDay
         ? {
-            protocolId: p.id,
+            protocolId: { in: groupIds },
             userId: user.id,
             OR: [{ localDay: stampDay }, { localDay: null, takenAt: { gte: startOfDay, lt: nextDay } }],
           }
-        : { protocolId: p.id, userId: user.id, takenAt: { gte: startOfDay, lt: nextDay } },
+        : { protocolId: { in: groupIds }, userId: user.id, takenAt: { gte: startOfDay, lt: nextDay } },
     });
     if (already > 0) {
       firstError ??= "Already logged today.";
@@ -291,8 +409,8 @@ export async function logStack(stackId: string, stamp?: { localDay?: string; tz?
       protocolId: p.id,
       preparationId: prep.id,
       syringeId: syringe.id,
-      doseValue: p.targetDose?.toString() ?? "0",
-      doseUnit: "ml",
+      doseValue: due.doseValue,
+      doseUnit: due.doseUnit,
       // Device-local day/zone from the StackCard client — same travel-proof
       // stamp the individual log forms send (already validated above; logDose
       // re-validates against its own takenAt).
@@ -308,8 +426,10 @@ export async function logStack(stackId: string, stamp?: { localDay?: string; tz?
   revalidatePath("/settings");
   // Keep the ok-true contract, but surface the first real reason when nothing
   // got logged so the UI can explain the no-op instead of a bland "Logged 0".
+  // Surface the first per-component problem even when others logged — a
+  // silently-skipped component otherwise just stops being recorded.
   return logged > 0
-    ? { ok: true as const, logged }
+    ? { ok: true as const, logged, ...(firstError ? { error: firstError } : {}) }
     : { ok: true as const, logged, error: firstError ?? "Nothing to log." };
 }
 
@@ -582,13 +702,53 @@ export async function updateStackSchedule(stackId: string, scheduleRule: string,
   if (!norm.ok) return { ok: false as const, error: norm.error };
   const rule = norm.rule;
 
+  // Material-change guard (same principle as assertNoScheduleRewrite): a
+  // titrating component's phase targets are DERIVED from the schedule frequency
+  // (durationDays × injectionsPerWeek → dose counts), so rewriting the rule or
+  // start under delivered doses silently re-times every phase and rewrites the
+  // historical adherence display. An echoed unchanged schedule passes through.
+  const allComps = await prisma.protocol.findMany({
+    where: { stackId: stack.id, userId: user.id },
+    select: { id: true, courseId: true, status: true, scheduleRule: true, startDate: true, _count: { select: { steps: true, doseLogs: true } } },
+  });
+  // Course TIPS only: a revised-out predecessor is frozen history — comparing
+  // against its rule falsely flags an echo as a change, its old steps+logs
+  // would lock the schedule forever, and writing to it retro-edits a closed
+  // course (the exact rewrite reviseProtocol exists to prevent).
+  const comps = courseTips(allComps);
+  const newStart = startDate !== undefined ? utcDate(startDate) : undefined;
+
+  // A ladder without a start date is inert (resolve.ts:23) — clearing (or
+  // typo-ing: utcDate treats malformed as null) the date on a ramped stack
+  // silently downgrades every titrating component to its flat targetDose.
+  const anySteps = comps.some((c) => c._count.steps > 0);
+  if (startDate !== undefined && newStart === null && anySteps) {
+    return {
+      ok: false as const,
+      error: "Components carry titration ladders — a valid start date is required (clearing it would silently disable the ramps).",
+    };
+  }
+
+  const ruleChanged = comps.some((c) => c.scheduleRule !== rule);
+  const startChanged =
+    newStart !== undefined && comps.some((c) => (c.startDate?.getTime() ?? null) !== (newStart?.getTime() ?? null));
+  const liveTitrating = comps.some((c) => c._count.steps > 0 && c._count.doseLogs > 0);
+  if ((ruleChanged || startChanged) && liveTitrating) {
+    return {
+      ok: false as const,
+      error:
+        "This stack is titrating with logged doses — a schedule change would rewrite its phase targets. Revise the component protocols instead (close + start new).",
+    };
+  }
+
   try {
     await prisma.protocol.updateMany({
-      where: { stackId: stack.id, userId: user.id },
+      // Tips only — superseded predecessors keep their frozen schedule/start.
+      where: { id: { in: comps.map((c) => c.id) }, userId: user.id },
       data: {
         scheduleRule: rule,
         // Only touch startDate when the caller passed the argument; "" clears it.
-        ...(startDate !== undefined ? { startDate: utcDate(startDate) } : {}),
+        ...(startDate !== undefined ? { startDate: newStart } : {}),
       },
     });
   } catch (e) {

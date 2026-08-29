@@ -44,7 +44,13 @@ export function supplyQualifier(item: SupplyCopyInput): string | null {
 /** Third line of the default (neon) pack. */
 export function supplyLine(item: SupplyCopyInput): string {
   const base = (() => {
-    if (item.status === "reorder_now") return "Reorder now";
+    // "for next cycle" is a supply fact, not advice: the demand the date keys
+    // to is the PROJECTED restart of a repeating course (R30), and saying so is
+    // what stops "Reorder by 12 Sep" reading as a mistake beside a tile that
+    // also says the current cycle is covered.
+    if (item.status === "reorder_now") {
+      return item.coverageBasis === "projected_restart" ? "Reorder now for next cycle" : "Reorder now";
+    }
     if (item.status === "unknown") return "Coverage unknown";
     if (item.status === "covered") {
       if (item.coverageBasis === "cycle_end" && item.courseEndDate) {
@@ -61,7 +67,11 @@ export function supplyLine(item: SupplyCopyInput): string {
       return "Covers doses beyond 12 months";
     }
     // ok — keeps its existing invariant: a real reorder-by date.
-    if (item.reorderByDate) return `Reorder by ${fmt(item.reorderByDate)}`;
+    if (item.reorderByDate) {
+      return item.coverageBasis === "projected_restart"
+        ? `Reorder by ${fmt(item.reorderByDate)} for next cycle`
+        : `Reorder by ${fmt(item.reorderByDate)}`;
+    }
     if (item.coverageDays != null) return `~${item.coverageDays} days remaining`;
     return "Coverage unknown";
   })();
@@ -85,6 +95,11 @@ export function supplySuffix(item: SupplyCopyInput): string {
 
 function supplyBasis(item: SupplyCopyInput): string | null {
   if (item.status === "unknown") return "coverage unknown";
+  // Both packs must state the same R30 fact, or the two designs disagree about
+  // what the same item says — the exact drift this module exists to prevent.
+  if (item.coverageBasis === "projected_restart" && item.reorderByDate) {
+    return `next cycle — by ${fmt(item.reorderByDate)}`;
+  }
   if (item.status === "covered") {
     if (item.coverageBasis === "cycle_end" && item.courseEndDate) {
       return `this cycle, to ${fmt(item.courseEndDate)}`;

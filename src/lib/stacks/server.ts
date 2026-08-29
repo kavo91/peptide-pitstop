@@ -2,7 +2,8 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import { PEPTIDE_LIBRARY } from "@/lib/peptide-library";
-import { perInjectionMcg } from "@/lib/stacks/compute";
+import { perInjectionMcg, stackComponentResolution, type StackComponentResolution } from "@/lib/stacks/compute";
+import { courseTips } from "@/lib/stacks/lineage";
 
 /** Name + aliases (lower-cased) for a peptide. Tolerates both JSON-array and
  *  comma-separated alias storage (the codebase has both). */
@@ -37,7 +38,15 @@ export interface StackComponentView {
   protocolId: string;
   peptideName: string;
   doseMl: string;
+  /** The protocol's dose unit — "ml" for stack-created rows; a revised successor may differ. */
+  doseInputUnit: string;
   perInjectionMcg: string | null;
+  /**
+   * Resolver-sourced current dose + phase for a TITRATING component (steps +
+   * startDate); null otherwise so no-steps stacks render exactly as before.
+   * doseValue "" = unresolvable — render a hint, never a number (spec §6).
+   */
+  resolved: StackComponentResolution | null;
   remainingMl: string | null;
   expiry: string | null; // ISO date (yyyy-mm-dd) or null
   halfLifeHours: string | null; // stored value, else library fallback by name/alias
@@ -71,7 +80,19 @@ export async function getStacks(userId: string): Promise<StackView[]> {
   const stacks = await prisma.stack.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
-    include: { protocols: { include: { peptide: true }, orderBy: { id: "asc" } }, prescriptions: true },
+    include: {
+      protocols: {
+        include: {
+          peptide: true,
+          steps: true,
+          // FULL history — the resolver's phase cursor is dose-count based and
+          // range-independent; a horizon slice would misplace the phase.
+          doseLogs: { select: { id: true, takenAt: true, localDay: true } },
+        },
+        orderBy: { id: "asc" },
+      },
+      prescriptions: true,
+    },
   });
   const out: StackView[] = [];
   for (const s of stacks) {
@@ -86,7 +107,12 @@ export async function getStacks(userId: string): Promise<StackView[]> {
         }
       : null;
     const components: StackComponentView[] = [];
-    for (const p of s.protocols) {
+    // Course TIPS only: after a revision the completed predecessor stays in the
+    // stack as frozen history — listing it would duplicate the peptide, leak a
+    // zombie resolved dose, and (worse) seed the schedule editor from the OLD
+    // rule. Never-revised stacks (incl. fully completed legacy ones) pass through.
+    const tips = courseTips(s.protocols);
+    for (const p of tips) {
       const prep = await prisma.preparation.findFirst({
         // Prefer the pinned vial; legacy rows (null vialId) fall back to peptideId.
         where: p.vialId ? { active: true, vialId: p.vialId } : { active: true, vial: { peptideId: p.peptideId, userId } },
@@ -102,15 +128,21 @@ export async function getStacks(userId: string): Promise<StackView[]> {
         protocolId: p.id,
         peptideName: p.peptide.name,
         doseMl: dose,
-        perInjectionMcg: prep ? perInjectionMcg(dose, prep.concentrationMcgPerMl.toString()) : null,
+        doseInputUnit: p.doseInputUnit ?? "ml",
+        // ml × conc only makes sense for an ml dose — a revised successor may
+        // hold mcg/mg, where this product would be a fabricated number.
+        perInjectionMcg: prep && (p.doseInputUnit ?? "ml") === "ml" ? perInjectionMcg(dose, prep.concentrationMcgPerMl.toString()) : null,
+        resolved: stackComponentResolution(p, p.doseLogs, prep ? prep.concentrationMcgPerMl.toString() : null),
         remainingMl: prep?.remainingMl?.toString() ?? null,
         expiry: prep?.vial?.expiry ? prep.vial.expiry.toISOString().slice(0, 10) : null,
         halfLifeHours,
       });
     }
     // Components share one schedule (createStack seeds them identically and
-    // updateStackSchedule writes all of them together) — read it off the first.
-    const first = s.protocols[0] ?? null;
+    // updateStackSchedule writes all of them together) — read it off the first
+    // TIP, never a revised-out predecessor (whose frozen rule would re-seed the
+    // editor with the pre-revision schedule).
+    const first = tips[0] ?? null;
     out.push({
       id: s.id,
       name: s.name,

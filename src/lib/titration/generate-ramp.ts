@@ -34,9 +34,14 @@ export function generateRamp(p: RampParams): GeneratedStep[] {
   const start = parseDose(p.startDose, "startDose");
   const target = parseDose(p.targetDose, "targetDose");
   const inc = parseDose(p.increment, "increment");
+  if (start.lte(0)) throw new Error("startDose must be > 0");
   if (start.gt(target)) throw new Error("startDose must be <= targetDose");
   if (inc.lte(0)) throw new Error("increment must be > 0");
   if (!Number.isFinite(p.weeksPerStep) || p.weeksPerStep <= 0) throw new Error("weeksPerStep must be > 0");
+  // An increment typo (e.g. 0.1 instead of 100) would otherwise build a
+  // multi-thousand-step ladder that freezes the UI and bloats the protocol.
+  const span = target.minus(start);
+  if (span.div(inc).gt(99)) throw new Error("ramp would need more than 100 steps — check the increment");
 
   const doses: Decimal[] = [];
   let cur = start;

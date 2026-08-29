@@ -30,6 +30,11 @@ export interface ReportDoseRow {
   site: string | null;
   /** Minutes early(−)/late(+) vs the scheduled time, or null when unscheduled. */
   deltaMinutes: number | null;
+  /**
+   * For a vendor blend: the component masses this dose delivered, DERIVED from
+   * the label ratio. Absent/empty for an ordinary peptide. Never a logged value.
+   */
+  components?: { name: string; doseMcg: number; source: string }[];
 }
 
 export interface ReportSideEffect {
@@ -119,7 +124,11 @@ function fmtDelta(min: number | null): string {
 
 function fmtDose(value: string | number | null, unit: string | null): string {
   if (value == null) return "—";
-  const v = typeof value === "number" ? String(value) : value;
+  // Display at 1 dp — matches the component rows' rounding, and keeps the cell
+  // on one line: a raw DB decimal (e.g. "1234.56789012345") wraps inside the
+  // 16 pt row and overprints the row beneath. CSV keeps 4 dp; this is display only.
+  const n = Number(value);
+  const v = Number.isFinite(n) ? String(Math.round(n * 10) / 10) : String(value);
   return unit ? `${v} ${unit}` : v;
 }
 
@@ -307,7 +316,7 @@ function table(doc: Doc, columns: { label: string; width: number }[], rows: stri
     doc.font("Helvetica-Bold").fontSize(9).fillColor(MUTED);
     let x = left;
     for (const col of columns) {
-      doc.text(col.label, x + 2, y + 4, { width: col.width - 4, ellipsis: true });
+      doc.text(col.label, x + 2, y + 4, { width: col.width - 4, height: 11, ellipsis: true });
       x += col.width;
     }
     const lineY = y + headerH - 2;
@@ -334,7 +343,11 @@ function table(doc: Doc, columns: { label: string; width: number }[], rows: stri
     const y = doc.y;
     let x = left;
     for (let i = 0; i < columns.length; i++) {
-      doc.text(row[i] ?? "", x + 2, y + 3, { width: columns[i].width - 4, ellipsis: true });
+      // height caps the cell at ONE line: pdfkit only honours `ellipsis` when a
+      // height is given — without it an over-wide value WRAPS inside the fixed
+      // 16 pt row and overprints the row beneath (UAT defects D1 and D9).
+      // Overflow now renders as a visible "…", never as an overprint.
+      doc.text(row[i] ?? "", x + 2, y + 3, { width: columns[i].width - 4, height: 11, ellipsis: true });
       x += columns[i].width;
     }
     doc.y = y + rowH;
@@ -418,24 +431,47 @@ function writeDoses(doc: Doc, data: ReportData): void {
     mutedText(doc, "No doses in this range.");
     return;
   }
-  const rows = data.doses.map((d) => [
-    formatDoseDateTime(d.takenAt, d.tz),
-    d.peptide ?? "—",
-    fmtDose(d.doseValue, d.doseUnit),
-    d.site ?? "—",
-    fmtDelta(d.deltaMinutes),
-  ]);
+  // A blend dose renders its own row, then one indented row per component so a
+  // clinician can see what was actually administered. Component masses are
+  // DERIVED from the vendor label ratio and are marked as such.
+  const rows: string[][] = [];
+  let anyDerived = false;
+  for (const d of data.doses) {
+    rows.push([
+      formatDoseDateTime(d.takenAt, d.tz),
+      d.peptide ?? "—",
+      fmtDose(d.doseValue, d.doseUnit),
+      d.site ?? "—",
+      fmtDelta(d.deltaMinutes),
+    ]);
+    for (const c of d.components ?? []) {
+      anyDerived = true;
+      // Keep the cell inside the 90 pt Dose column — the long form
+      // "1333.3 mcg (derived, label)" wraps and overprints the next row.
+      // The footnote below carries the provenance instead.
+      rows.push(["", `    ${c.name}`, `${round1(c.doseMcg)} mcg*`, "", ""]);
+    }
+  }
   table(
     doc,
     [
       { label: "Date / time", width: 120 },
-      { label: "Peptide", width: 130 },
+      // 140: "CJC-1295 no-DAC + Ipamorelin" measures 126.7 pt — it must fit on
+      // one line un-truncated (UAT defect D9). Site's longest value
+      // ("love_handle_R") needs far less than 80.
+      { label: "Peptide", width: 140 },
       { label: "Dose", width: 90 },
-      { label: "Site", width: 90 },
+      { label: "Site", width: 80 },
       { label: "Timing", width: 65 },
     ],
     rows,
   );
+  if (anyDerived) {
+    mutedText(
+      doc,
+      "* Indented rows are blend components — masses derived from the product's stated composition (label, CoA or assumed, as recorded), not separately measured doses.",
+    );
+  }
 }
 
 function writeSideEffects(doc: Doc, data: ReportData): void {

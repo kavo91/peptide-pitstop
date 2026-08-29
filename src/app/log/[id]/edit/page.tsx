@@ -129,6 +129,7 @@ export default async function EditDosePage({ params }: { params: Promise<{ id: s
         id: log.syringe.id,
         name: log.syringe.name,
         graduationType: log.syringe.graduationType as "units" | "ml",
+        deviceType: (log.syringe.deviceType === "pen" ? "pen" : "syringe") as "syringe" | "pen",
         unitsPerMl: log.syringe.unitsPerMl,
         capacityMl: log.syringe.capacityMl.toString(),
         capacityUnits: log.syringe.capacityUnits,

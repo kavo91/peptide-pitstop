@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+
+import { parseStepDuration, validateStepDurations } from "@/lib/titration/step-duration";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/owner";
 import { assertPeptideUsable, assertPrescriptionCompatible, assertPrescriptionOwned, assertSyringeUsable } from "@/lib/auth/ownership";
@@ -12,6 +14,8 @@ import { dosesPerWeek } from "@/lib/schedule/frequency";
 import { dayKey } from "@/lib/today-overrides";
 import { hasActiveProtocolConflict } from "@/lib/protocol-uniqueness";
 import { assertNoScheduleRewrite, endDateOnClose, type ProtocolSnapshot } from "@/lib/protocol-revision";
+import { courseTips, supersededIds } from "@/lib/stacks/lineage";
+import { validateCyclePlan } from "@/lib/validation/cycle-plan";
 
 function optDecimal(v?: string | null): string | null {
   const s = (v ?? "").toString().trim();
@@ -25,6 +29,7 @@ function optInt(v?: string | null): number | null {
   const n = parseInt(s, 10);
   return Number.isFinite(n) ? n : null;
 }
+
 
 /** Date-only "YYYY-MM-DD" for snapshot comparison; null stays null. */
 function dayOf(d: Date | null | undefined): string | null {
@@ -57,8 +62,19 @@ export interface ProtocolInput {
   steps?: { dose: string; doseInputUnit: string; durationDays?: string; notes?: string }[];
 }
 
-/** Weeks outside this band are a typo, not a cycle — reject rather than persist. */
-const MAX_CYCLE_WEEKS = 104;
+/**
+ * Superseded (revised-out) protocol ids within a stack — frozen history that no
+ * sibling cascade may touch. reviseProtocol keeps the completed predecessor in
+ * the stack next to its successor; cascading status/dates onto it would
+ * retro-edit a closed course or resurrect it as a duplicate active protocol.
+ */
+async function stackSupersededIds(userId: string, stackId: string): Promise<string[]> {
+  const rows = await prisma.protocol.findMany({
+    where: { stackId, userId },
+    select: { id: true, courseId: true, status: true, startDate: true },
+  });
+  return [...supersededIds(rows)];
+}
 
 export async function saveProtocol(input: ProtocolInput) {
   const user = await getCurrentUser();
@@ -118,20 +134,10 @@ export async function saveProtocol(input: ProtocolInput) {
     if (!order.ok) return { ok: false as const, error: order.error };
   }
 
-  // Cycle plan. Both lengths are optional; when present they must be whole
-  // positive weeks inside a plausible band. A break with no on-cycle is
-  // meaningless (nothing to break FROM), so it's rejected rather than silently
-  // stored — otherwise the state machine would read it as "continuous".
-  const cycleOnWeeks = optInt(input.cycleOnWeeks);
-  const cycleOffWeeks = optInt(input.cycleOffWeeks);
-  for (const [label, weeks] of [["on-cycle", cycleOnWeeks], ["break", cycleOffWeeks]] as const) {
-    if (weeks !== null && (weeks < 1 || weeks > MAX_CYCLE_WEEKS)) {
-      return { ok: false as const, error: `Cycle ${label} must be between 1 and ${MAX_CYCLE_WEEKS} weeks.` };
-    }
-  }
-  if (cycleOffWeeks !== null && cycleOnWeeks === null) {
-    return { ok: false as const, error: "Set an on-cycle length before a break length." };
-  }
+  // Cycle plan — validation shared with updateProtocol (lib/validation/cycle-plan).
+  const cyclePlan = validateCyclePlan(optInt(input.cycleOnWeeks), optInt(input.cycleOffWeeks));
+  if (!cyclePlan.ok) return { ok: false as const, error: cyclePlan.error };
+  const { onWeeks: cycleOnWeeks, offWeeks: cycleOffWeeks } = cyclePlan;
 
   const data = {
     peptideId: input.peptideId,
@@ -211,13 +217,15 @@ export async function saveProtocol(input: ProtocolInput) {
   }
 
   const initialSteps = !input.id && data.scheduleType === "titration" ? (input.steps ?? []) : [];
-  const stepRows = initialSteps.map((s) => {
+  const durations = validateStepDurations(initialSteps);
+  if (!durations.ok) return { ok: false as const, error: durations.error };
+  const stepRows = initialSteps.map((s, i) => {
     const dose = optDecimal(s.dose);
     if (!dose) return null;
     return {
       dose,
       doseInputUnit: ["mcg", "mg", "ml", "units"].includes(s.doseInputUnit) ? s.doseInputUnit : "mcg",
-      durationDays: optInt(s.durationDays),
+      durationDays: durations.values[i],
       notes: s.notes?.trim() || null,
     };
   });
@@ -263,7 +271,10 @@ export async function saveProtocol(input: ProtocolInput) {
         if (before.status !== data.status) changed.status = data.status;
         if (Object.keys(changed).length > 0) {
           await prisma.protocol.updateMany({
-            where: { stackId: before.stackId, userId: user.id, id: { not: input.id } },
+            // Never onto revised-out predecessors — resurrecting a closed course
+            // yields two active protocols for one peptide (double /today cards,
+            // double logStack doses).
+            where: { stackId: before.stackId, userId: user.id, id: { notIn: [input.id, ...(await stackSupersededIds(user.id, before.stackId))] } },
             data: changed,
           });
         }
@@ -310,6 +321,8 @@ export async function addProtocolStep(input: { protocolId: string; dose: string;
   if (!user) return { ok: false as const, error: "Not signed in." };
   const dose = optDecimal(input.dose);
   if (!dose) return { ok: false as const, error: "Enter a dose for the step." };
+  const duration = parseStepDuration(input.durationDays);
+  if (!duration.ok) return { ok: false as const, error: duration.error };
   // Verify the protocol belongs to the caller before adding a child step.
   const owns = await prisma.protocol.count({ where: { id: input.protocolId, userId: user.id } });
   if (!owns) return { ok: false as const, error: "Protocol not found." };
@@ -321,7 +334,7 @@ export async function addProtocolStep(input: { protocolId: string; dose: string;
         stepIndex: count,
         dose,
         doseInputUnit: ["mcg", "mg", "ml", "units"].includes(input.doseInputUnit) ? input.doseInputUnit : "mcg",
-        durationDays: optInt(input.durationDays),
+        durationDays: duration.value,
         notes: input.notes?.trim() || null,
       },
     });
@@ -345,6 +358,12 @@ export async function addProtocolSteps(input: {
   const user = await getCurrentUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
   if (!input.steps.length) return { ok: false as const, error: "No steps to add." };
+  // Validate the caller's OWN input before the ownership round-trip: it leaks
+  // nothing about the resource, saves a query on a malformed payload, and keeps
+  // the refusal order identical across all four step-writing actions.
+  const rampDurations = validateStepDurations(input.steps);
+  if (!rampDurations.ok) return { ok: false as const, error: rampDurations.error };
+
   const owns = await prisma.protocol.count({ where: { id: input.protocolId, userId: user.id } });
   if (!owns) return { ok: false as const, error: "Protocol not found." };
 
@@ -354,7 +373,7 @@ export async function addProtocolSteps(input: {
     return {
       dose,
       doseInputUnit: ["mcg", "mg", "ml", "units"].includes(s.doseInputUnit) ? s.doseInputUnit : "mcg",
-      durationDays: optInt(s.durationDays),
+      durationDays: rampDurations.values[i],
       notes: s.notes?.trim() || null,
       _i: i,
     };
@@ -468,8 +487,15 @@ export async function advanceTitrationPhase(input: { protocolId: string; doseLog
 export interface UpdateProtocolInput {
   id: string;
   startDateISO?: string | null;
+  /** Course end. `undefined` untouched, `null` clears (open-ended). */
+  endDateISO?: string | null;
   status?: "active" | "paused" | "completed";
   scheduleRule?: string;
+  /** Cycle plan in WEEKS — same contract: `undefined` untouched, `null` clears. */
+  cycleOnWeeks?: number | null;
+  cycleOffWeeks?: number | null;
+  /** Start of the CURRENT on-cycle; `null` falls back to startDate at read time. */
+  cycleAnchorISO?: string | null;
 }
 
 export async function updateProtocol(input: UpdateProtocolInput) {
@@ -477,22 +503,100 @@ export async function updateProtocol(input: UpdateProtocolInput) {
   if (!user) return { ok: false as const, error: "Not signed in." };
 
   // One ownership-scoped read serves the schedule-anchor resolution, the
-  // start-vs-end validation, and the stack lookup for the date alignment below.
+  // start-vs-end validation, the cycle-plan merge, and the stack lookup for
+  // the date alignment below.
   const target = await prisma.protocol.findFirst({
     where: { id: input.id, userId: user.id },
-    select: { startDate: true, endDate: true, stackId: true },
+    select: { startDate: true, endDate: true, stackId: true, courseId: true, cycleOnWeeks: true, cycleOffWeeks: true },
   });
   if (!target) return { ok: false as const, error: "Protocol not found." };
 
-  // The quick editor shows only the start date, so validate against the STORED
-  // end date — an inverted window (start after end) would silently generate
-  // nothing and must be rejected, not persisted.
-  if (input.startDateISO && target.endDate && new Date(input.startDateISO) > target.endDate) {
+  // Frozen history. reviseProtocol keeps the completed predecessor beside its
+  // live successor (courseId chains them), and courseTips() deliberately drops
+  // the predecessor — so EVERY guard and cascade below would evaluate the live
+  // successor instead of the row actually being edited. Two consequences, both
+  // silent: the titration guard passed on a closed, already-dosed, titrating
+  // predecessor (its steps/doses were never inspected), and the sibling cascade
+  // — `notIn: [input.id, ...superseded]`, which collapses to exactly the
+  // superseded set when input.id is itself superseded — then matched the TIPS
+  // and pushed the predecessor's new date onto the running stack.
+  // Lineage is per COURSE, not per stack: reviseProtocol sets
+  // `courseId: old.courseId ?? old.id` for standalone protocols too.
+  const courseKeyOf = target.courseId ?? input.id;
+  const courseGroup = await prisma.protocol.findMany({
+    where: { userId: user.id, OR: [{ id: courseKeyOf }, { courseId: courseKeyOf }] },
+    select: { id: true, courseId: true, status: true, startDate: true },
+  });
+  // Only conclude "superseded" from a group we actually found the target in —
+  // never block the edit on an unexpectedly empty read.
+  if (
+    courseGroup.some((p) => p.id === input.id) &&
+    !courseTips(courseGroup).some((t) => t.id === input.id)
+  ) {
     return {
       ok: false as const,
-      error: `Start date is after this protocol's end date (${target.endDate.toISOString().slice(0, 10)}) — move or clear the end date first.`,
+      error:
+        "This protocol was revised and replaced — its dates and status are frozen history. Edit the current course instead.",
     };
   }
+
+  // Titration guard (same principle as assertNoScheduleRewrite and the
+  // updateStackSchedule guard): a startDate change re-times every phase
+  // boundary (durationDays count from startDate) — refuse it on any titrating
+  // protocol with delivered doses, including stack siblings the cascade below
+  // would reach. The Gantt quick edit must not be the open door the form and
+  // the stack editor both close. End-date edits stay allowed (closing a course
+  // does not rewrite past phases).
+  if (input.startDateISO !== undefined) {
+    const guardStart = input.startDateISO ? new Date(input.startDateISO) : null;
+    if ((guardStart?.getTime() ?? null) !== (target.startDate?.getTime() ?? null)) {
+      const scope = await prisma.protocol.findMany({
+        where: target.stackId ? { stackId: target.stackId, userId: user.id } : { id: input.id, userId: user.id },
+        select: { id: true, courseId: true, status: true, startDate: true, _count: { select: { steps: true, doseLogs: true } } },
+      });
+      const affected = target.stackId ? courseTips(scope) : scope;
+      if (affected.some((c) => c._count.steps > 0 && c._count.doseLogs > 0)) {
+        return {
+          ok: false as const,
+          error:
+            "This protocol (or its stack) is titrating with logged doses — a start-date change would rewrite its phase targets. Revise instead (close + start new).",
+        };
+      }
+    }
+  }
+
+  // Validate the EFFECTIVE window (sent value where supplied, stored value
+  // otherwise) — an inverted window (start after end) would silently generate
+  // nothing and must be rejected, not persisted.
+  const effStart =
+    input.startDateISO === undefined ? target.startDate : input.startDateISO ? new Date(input.startDateISO) : null;
+  const effEnd =
+    input.endDateISO === undefined ? target.endDate : input.endDateISO ? new Date(input.endDateISO) : null;
+  if (effStart && effEnd && effStart > effEnd) {
+    return input.startDateISO !== undefined
+      ? {
+          ok: false as const,
+          error: `Start date is after this protocol's end date (${effEnd.toISOString().slice(0, 10)}) — move or clear the end date first.`,
+        }
+      : {
+          ok: false as const,
+          error: `End date is before this protocol's start date (${effStart.toISOString().slice(0, 10)}) — move the start date first.`,
+        };
+  }
+
+  // Cycle plan: merge sent fields over stored ones, then apply the SAME rules
+  // the protocol form enforces (lib/validation/cycle-plan). Only written when
+  // the caller touched a cycle field — an untouched plan stays byte-identical.
+  const cycleTouched = input.cycleOnWeeks !== undefined || input.cycleOffWeeks !== undefined;
+  const cyclePlan = validateCyclePlan(
+    input.cycleOnWeeks === undefined ? target.cycleOnWeeks : input.cycleOnWeeks,
+    // Clearing the on-cycle takes the stored break with it — the stored value
+    // must not veto the clear the validator would otherwise reject.
+    input.cycleOffWeeks !== undefined ? input.cycleOffWeeks
+      : input.cycleOnWeeks === null ? null
+      : target.cycleOffWeeks,
+  );
+  if (cycleTouched && !cyclePlan.ok) return { ok: false as const, error: cyclePlan.error };
 
   // Normalise the schedule rule only when one is supplied. `undefined` leaves the
   // column untouched (Prisma skips undefined); an empty string clears it as before.
@@ -513,8 +617,14 @@ export async function updateProtocol(input: UpdateProtocolInput) {
       where: { id: input.id, userId: user.id },
       data: {
         startDate: input.startDateISO === undefined ? undefined : input.startDateISO ? new Date(input.startDateISO) : null,
+        endDate: input.endDateISO === undefined ? undefined : input.endDateISO ? new Date(input.endDateISO) : null,
         status: input.status,
         scheduleRule,
+        ...(cycleTouched && cyclePlan.ok
+          ? { cycleOnWeeks: cyclePlan.onWeeks, cycleOffWeeks: cyclePlan.offWeeks }
+          : {}),
+        cycleAnchor:
+          input.cycleAnchorISO === undefined ? undefined : input.cycleAnchorISO ? new Date(input.cycleAnchorISO) : null,
       },
     });
     if (count === 0) return { ok: false as const, error: "Protocol not found." };
@@ -530,14 +640,29 @@ export async function updateProtocol(input: UpdateProtocolInput) {
       const changed = (newStart?.getTime() ?? null) !== (target.startDate?.getTime() ?? null);
       if (changed) {
         await prisma.protocol.updateMany({
-          where: { stackId: target.stackId, userId: user.id, id: { not: input.id } },
+          // Tips only — a revised-out predecessor's frozen window must not move.
+          where: { stackId: target.stackId, userId: user.id, id: { notIn: [input.id, ...(await stackSupersededIds(user.id, target.stackId))] } },
           data: { startDate: newStart },
+        });
+      }
+    }
+    // End dates align across a stack the same way — the components run as one
+    // combined protocol, so one course's stop is the stack's stop.
+    if (input.endDateISO !== undefined && target.stackId) {
+      const newEnd = input.endDateISO ? new Date(input.endDateISO) : null;
+      const changed = (newEnd?.getTime() ?? null) !== (target.endDate?.getTime() ?? null);
+      if (changed) {
+        await prisma.protocol.updateMany({
+          // Tips only — a revised-out predecessor's frozen window must not move.
+          where: { stackId: target.stackId, userId: user.id, id: { notIn: [input.id, ...(await stackSupersededIds(user.id, target.stackId))] } },
+          data: { endDate: newEnd },
         });
       }
     }
     if (input.status !== undefined && target.stackId) {
       await prisma.protocol.updateMany({
-        where: { stackId: target.stackId, userId: user.id, id: { not: input.id } },
+        // Tips only — never resurrect a completed revised-out predecessor.
+        where: { stackId: target.stackId, userId: user.id, id: { notIn: [input.id, ...(await stackSupersededIds(user.id, target.stackId))] } },
         data: { status: input.status },
       });
     }
@@ -559,6 +684,7 @@ export async function updateProtocol(input: UpdateProtocolInput) {
 
   revalidatePath("/");
   revalidatePath("/protocols");
+  revalidatePath("/protocols/gantt");
   return { ok: true as const };
 }
 
@@ -631,6 +757,8 @@ export async function updateProtocolStep(input: {
   if (!user) return { ok: false as const, error: "Not signed in." };
   const dose = optDecimal(input.dose);
   if (!dose) return { ok: false as const, error: "Enter a dose for the step." };
+  const duration = parseStepDuration(input.durationDays);
+  if (!duration.ok) return { ok: false as const, error: duration.error };
   try {
     const step = await prisma.protocolStep.findFirst({
       where: { id: input.stepId, protocol: { userId: user.id } },
@@ -643,7 +771,7 @@ export async function updateProtocolStep(input: {
         doseInputUnit: ["mcg", "mg", "ml", "units"].includes(input.doseInputUnit)
           ? input.doseInputUnit
           : "mcg",
-        durationDays: optInt(input.durationDays),
+        durationDays: duration.value,
         // Only touch notes when the caller actually provided the field —
         // omitting it preserves existing notes instead of silently clearing.
         ...(input.notes !== undefined ? { notes: input.notes.trim() || null } : {}),
@@ -778,7 +906,7 @@ export async function reviseProtocol(input: ReviseProtocolInput) {
 
   const old = await prisma.protocol.findFirst({
     where: { id: input.id, userId: user.id },
-    select: { id: true, peptideId: true, courseId: true, status: true },
+    select: { id: true, peptideId: true, courseId: true, status: true, stackId: true, vialId: true },
   });
   if (!old) return { ok: false as const, error: "Protocol not found." };
   if (old.status !== "active") return { ok: false as const, error: "Only a live protocol can be revised." };
@@ -828,6 +956,11 @@ export async function reviseProtocol(input: ReviseProtocolInput) {
           userId: user.id,
           peptideId: old.peptideId,
           courseId: old.courseId ?? old.id,
+          // A stack component's successor stays IN the stack with its pinned
+          // vial — sibling cascades, grouped views and prep resolution all key
+          // on these; dropping them silently ejects the component.
+          stackId: old.stackId,
+          vialId: old.vialId,
           name: input.next.name.trim(),
           // Same enum coercion saveProtocol applies — an unrecognised value must
           // fall back to a schema-legal one, never be persisted verbatim.

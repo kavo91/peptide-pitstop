@@ -14,6 +14,7 @@ interface SyringeDTO {
   id: string;
   name: string;
   graduationType: "units" | "ml";
+  deviceType: "syringe" | "pen";
   unitsPerMl: number;
   capacityMl: string;
   capacityUnits: number;

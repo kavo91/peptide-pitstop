@@ -9,6 +9,7 @@ import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import type { LibraryPeptide } from "@/lib/peptide-library";
 import type { NeutralReferenceEntry } from "@/lib/compliance";
 import { PeptideLibraryDetail } from "./PeptideLibraryDetail";
+import { BlendComponentsEditor, type BlendComponentRow } from "./BlendComponentsEditor";
 
 interface Peptide extends Required<Omit<PeptideInput, "id">> {
   id: string;
@@ -39,7 +40,9 @@ const BLANK: PeptideInput = {
 
 const input = "w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-sm text-ink";
 
-export function PeptideManager({ peptides, library = [] }: { peptides: Peptide[]; library?: LibraryEntry[] }) {
+export function PeptideManager({ peptides, library = [], blendComponents = {} }: { peptides: Peptide[]; library?: LibraryEntry[]; blendComponents?: Record<string, BlendComponentRow[]> }) {
+  const [openBlend, setOpenBlend] = useState<Set<string>>(new Set());
+  const componentCandidates = peptides.map((x) => ({ id: x.id, name: x.name }));
   const router = useRouter();
   const [form, setForm] = useState<PeptideInput | null>(null);
   const [showLibrary, setShowLibrary] = useState(false);
@@ -126,7 +129,8 @@ export function PeptideManager({ peptides, library = [] }: { peptides: Peptide[]
                 {p.owned ? (
                   <>
                     <button type="button" onClick={() => setForm({ id: p.id, name: p.name, aliases: p.aliases, category: p.category, substanceClass: p.substanceClass, defaultStrengthMg: p.defaultStrengthMg, halfLifeHours: p.halfLifeHours, minIntervalHours: p.minIntervalHours, missedDosePolicy: p.missedDosePolicy, storageNotes: p.storageNotes, route: p.route })} className="inline-flex items-center gap-1 text-xs font-medium text-accentStrong"><Pencil className="h-3.5 w-3.5" aria-hidden /> Edit</button>
-                    <ConfirmDeleteButton action={deletePeptide} id={p.id} confirmMessage={`Delete ${p.name}? It must have no vials, protocols, or prescriptions.`} compact ariaLabel={`Delete ${p.name}`} />
+                    <button type="button" onClick={() => toggle(setOpenBlend, p.id)} className="inline-flex items-center gap-1 text-xs font-medium text-accentStrong" aria-expanded={openBlend.has(p.id)}>Blend{(blendComponents[p.id]?.length ?? 0) > 0 ? ` (${blendComponents[p.id].length})` : ""}</button>
+                    <ConfirmDeleteButton action={deletePeptide} id={p.id} confirmMessage={`Delete ${p.name}? It must have no vials, protocols, or prescriptions, and not be a component of any blend.`} compact ariaLabel={`Delete ${p.name}`} />
                   </>
                 ) : (
                   <span className="text-xs text-muted">Library</span>
@@ -135,6 +139,15 @@ export function PeptideManager({ peptides, library = [] }: { peptides: Peptide[]
             </div>
             {p.enrichment && openOwned.has(p.id) && (
               <PeptideLibraryDetail entry={p.enrichment} />
+            )}
+            {p.owned && openBlend.has(p.id) && (
+              <BlendComponentsEditor
+                peptideId={p.id}
+                peptideName={p.name}
+                defaultStrengthMg={p.defaultStrengthMg ? Number(p.defaultStrengthMg) : null}
+                initial={blendComponents[p.id] ?? []}
+                candidates={componentCandidates}
+              />
             )}
           </li>
           );

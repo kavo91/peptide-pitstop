@@ -74,7 +74,10 @@ export default async function ProtocolsPage() {
           <PitstopHeading title="Protocols" index={8} className="text-3xl font-semibold tracking-tight" split={["PROTO", "COLS"]} />
           <p className="text-muted">Set start dates, schedules, and pause or resume.</p>
         </div>
-        <Link href="/protocols/new" className="shrink-0 rounded-control bg-accent px-3 py-2 text-sm font-medium text-onAccent">+ Add protocol</Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link href="/protocols/gantt" className="rounded-control bg-bg px-3 py-2 text-sm ring-1 ring-line/15">Gantt view</Link>
+          <Link href="/protocols/new" className="rounded-control bg-accent px-3 py-2 text-sm font-medium text-onAccent">+ Add protocol</Link>
+        </div>
       </div>
       {SECTIONS.map(({ key, title, blurb }) => {
         const group = sortedProtocols.filter((p) => bucketOf(p, today) === key);

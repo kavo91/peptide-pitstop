@@ -51,7 +51,15 @@ export function MultiPlasmaChart({
   defaultWindowDays = 30,
 }: Props) {
   const [colorNotice, setColorNotice] = useState<string | null>(null);
-  const [windowDays, setWindowDays] = useState<7 | 14 | 30>(defaultWindowDays);
+  const [windowDays, setWindowDaysRaw] = useState<7 | 14 | 30>(defaultWindowDays);
+  // Hover/touch readout: the cursor's time, or null when the pointer is away.
+  const [hoverT, setHoverT] = useState<number | null>(null);
+  // Changing the window rescales the domain — a kept cursor would point at the
+  // wrong date (pointerleave never fires on a button click below the chart).
+  const setWindowDays = (d: 7 | 14 | 30) => {
+    setHoverT(null);
+    setWindowDaysRaw(d);
+  };
 
   const nowMs = now.getTime();
   const minT = nowMs - windowDays * DAY_MS;
@@ -205,7 +213,25 @@ export function MultiPlasmaChart({
         .join(" ");
     const bottomY = HEIGHT - PAD.bottom;
     return (
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} aria-label="Combined plasma curves for all active peptides" className="w-full" style={{ height: "auto" }}>
+      <svg
+        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        aria-label="Combined plasma curves for all active peptides"
+        className="w-full touch-pan-y"
+        style={{ height: "auto" }}
+        onPointerMove={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          if (rect.width <= 0) return;
+          const frac = (e.clientX - rect.left) / rect.width;
+          const xView = frac * WIDTH;
+          const plot = WIDTH - PAD.left - PAD.right;
+          const t = minT + ((xView - PAD.left) / plot) * (maxT - minT);
+          // Quantise to 30-min buckets: most pointer moves become state no-ops,
+          // so the chart doesn't re-render every mousemove pixel.
+          const q = Math.round(Math.max(minT, Math.min(maxT, t)) / 1_800_000) * 1_800_000;
+          setHoverT((prev) => (prev === q ? prev : q));
+        }}
+        onPointerLeave={() => setHoverT(null)}
+      >
         {axisTicks.map((tk, i) => (
           <line key={`grid-${i}`} x1={tk.x} y1={PAD.top} x2={tk.x} y2={bottomY} stroke="rgb(var(--muted))" strokeWidth="0.5" strokeOpacity="0.18" />
         ))}
@@ -226,6 +252,17 @@ export function MultiPlasmaChart({
             <line x1={nowX} y1={PAD.top} x2={nowX} y2={bottomY} stroke="rgb(var(--muted))" strokeWidth="1" strokeDasharray="3 3" />
             <text x={nowX + 3} y={PAD.top + 8} fontSize="9" fill="rgb(var(--muted))">now</text>
           </>
+        )}
+        {hoverT != null && (
+          <line
+            x1={toViewX(hoverT, minT, maxT)}
+            y1={PAD.top}
+            x2={toViewX(hoverT, minT, maxT)}
+            y2={bottomY}
+            stroke="rgb(var(--accentStrong))"
+            strokeWidth="1"
+            strokeOpacity="0.7"
+          />
         )}
         <line x1={PAD.left} y1={bottomY} x2={WIDTH - PAD.right} y2={bottomY} stroke="rgb(var(--muted))" strokeWidth="0.5" strokeOpacity="0.4" />
         {!compactOnPhone && <text x={PAD.left} y={HEIGHT - 6} fontSize="9" fill="rgb(var(--muted))">{labelStart}</text>}
@@ -259,6 +296,35 @@ export function MultiPlasmaChart({
       ) : (
         renderSvg(HEIGHT_FULL)
       )}
+      {/* Reserved-height readout: mounting/unmounting shifted the layout on
+          every hover, walking the range-toggle buttons under the pointer. */}
+      <div className="mt-1 min-h-[1.1rem] text-[11px] text-muted tabular-nums" aria-live="off">
+        {hoverT != null && (
+          // Nearest sample's RELATIVE level per series (each curve is
+          // normalised to its own peak — % of peak, not a concentration). A
+          // series with NO sample within a day of the cursor is omitted —
+          // "nearest anywhere" invented values for dates a curve doesn't cover.
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+            <span className="font-medium text-ink">{fmt(new Date(hoverT))}</span>
+            {lines.map((ln) => {
+              const pts = ln.forecastSeg ? [...ln.historicalSeg, ...ln.forecastSeg] : ln.historicalSeg;
+              let best: { d: number; level: number } | null = null;
+              for (const pt of pts) {
+                const d = Math.abs(pt.t.getTime() - hoverT);
+                if (!best || d < best.d) best = { d, level: pt.level };
+              }
+              if (!best || best.d > DAY_MS) return null;
+              return (
+                <span key={ln.peptideId} className="inline-flex items-center gap-1">
+                  <svg width="8" height="8" aria-hidden="true"><circle cx="4" cy="4" r="3" fill={ln.color} /></svg>
+                  {ln.peptideName} {Math.round(best.level * 100)}%
+                </span>
+              );
+            })}
+            <span className="opacity-70">of own peak</span>
+          </span>
+        )}
+      </div>
       {enableRangeToggle && (
         <div className="mt-2 inline-flex rounded-control bg-bg p-1 ring-1 ring-line/15">
           {([14, 30] as const).map((days) => {

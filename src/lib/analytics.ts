@@ -11,6 +11,7 @@ import { buildResolveInput } from "@/lib/titration/from-protocol";
 import { forwardDosePoints } from "@/lib/plasma-projection";
 import { decryptField } from "@/lib/crypto/fieldEncryption";
 import { libraryHalfLifeHours, libraryComponents } from "@/lib/peptide-library";
+import { expandBlendDose, rollUpExposure, type ExposureRow } from "@/lib/blends-core";
 import { deserializeSideEffects } from "@/lib/side-effects";
 import { dayAnchor } from "@/lib/tz-day";
 import { dayKey } from "@/lib/today-overrides";
@@ -104,6 +105,12 @@ export interface AnalyticsData {
   missedDoseTimes: Date[];
   /** Start of the heatmap window (for display labels). */
   heatmapFrom: Date;
+  /**
+   * Cumulative exposure per COMPOUND, all time: standalone logged mass plus
+   * blend-delivered mass derived from BlendComponent ratios. Rows with
+   * hasDerived=true carry label-ratio-derived mass and render as derived.
+   */
+  exposureRollup: ExposureRow[];
   /** Peptides with no halfLifeHours set (no curve available). */
   peptidesWithoutHalfLife: { peptideId: string; peptideName: string }[];
 }
@@ -394,13 +401,36 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
     }
   }
 
+  // Blend composition: BlendComponent is authoritative when populated, so the
+  // chart and the exports cannot drift apart. Falls back to the static library
+  // table for blends that have no rows yet, keeping existing behaviour intact.
+  const blendRows = await prisma.blendComponent.findMany({
+    where: { peptide: { userId } },
+    include: { componentPeptide: { select: { name: true, aliases: true, halfLifeHours: true } } },
+    orderBy: { sortIndex: "asc" },
+  });
+  type ChartComponent = { name: string; mg: number; halfLifeHours?: number | null; aliases?: string | null };
+  const dbComponentsByPeptide = new Map<string, ChartComponent[]>();
+  for (const r of blendRows) {
+    const list = dbComponentsByPeptide.get(r.peptideId) ?? [];
+    list.push({
+      name: r.componentPeptide.name,
+      mg: Number(r.massMg.toString()),
+      halfLifeHours: r.componentPeptide.halfLifeHours ? Number(r.componentPeptide.halfLifeHours.toString()) : null,
+      aliases: r.componentPeptide.aliases ?? null,
+    });
+    dbComponentsByPeptide.set(r.peptideId, list);
+  }
+
   for (const proto of plasmaProtocols) {
     const peptideId = proto.peptide.id;
     const peptideName = proto.peptide.name;
     const halfLifeHours = peptideHalfLifes.get(peptideId) ?? null;
     // A known blend is charted per component, so it needs no composite half-life
     // of its own — the components carry their own.
-    const components = libraryComponents(peptideName, proto.peptide.aliases ?? null);
+    const components =
+      dbComponentsByPeptide.get(peptideId) ??
+      libraryComponents(peptideName, proto.peptide.aliases ?? null);
 
     if (halfLifeHours === null && !components) {
       // Only add to the no-halflife list once per peptide
@@ -461,7 +491,15 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
       for (const comp of components) {
         const compId = `${peptideId}::${comp.name}`;
         const compName = `${peptideName} · ${comp.name}`;
-        const compHalfLife = Number(libraryHalfLifeHours(comp.name) ?? NaN);
+        // The component's OWN peptide row is authoritative for half-life; the
+        // static library is the fallback (and gets the row's aliases, so a
+        // DB name form the library spells differently still resolves).
+        const dbHalfLife = "halfLifeHours" in comp ? (comp as { halfLifeHours?: number | null }).halfLifeHours : null;
+        const compAliases = "aliases" in comp ? ((comp as { aliases?: string | null }).aliases ?? null) : null;
+        const compHalfLife =
+          dbHalfLife && dbHalfLife > 0
+            ? dbHalfLife
+            : Number(libraryHalfLifeHours(comp.name, compAliases) ?? NaN);
 
         if (!Number.isFinite(compHalfLife) || compHalfLife <= 0) {
           // e.g. KPV — in the library but PK not well characterised. Name it
@@ -511,6 +549,66 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
   // Stable, ascending order for deterministic marker rendering.
   missedDoseTimes.sort((a, b) => a.getTime() - b.getTime());
 
+  // ── Cumulative exposure roll-up (all time) ────────────────────────────────
+  // The one surface where blend-delivered component mass is aggregated with the
+  // same compound's standalone history. Grouped queries — no per-dose rows.
+  //
+  // ALL doses count, including ad-hoc ones with no protocol: the table is
+  // headed "all time", and filtering to protocol-linked doses made it disagree
+  // with the CSV and PDF exports, which have always included them. A dose
+  // resolves its peptide preparation-first and protocol-second — the exact
+  // precedence the exports use — so the surfaces cannot drift apart again.
+  const blendIds = new Set(dbComponentsByPeptide.keys());
+  const doseSums = await prisma.doseLog.groupBy({
+    by: ["preparationId", "protocolId"],
+    where: { userId },
+    _sum: { doseMcg: true },
+  });
+  const protoPeptide = new Map(
+    (await prisma.protocol.findMany({ where: { userId }, select: { id: true, peptideId: true, peptide: { select: { name: true } } } }))
+      .map((p) => [p.id, { peptideId: p.peptideId, name: p.peptide.name }]),
+  );
+  const prepPeptide = new Map(
+    (await prisma.preparation.findMany({
+      where: { vial: { userId } },
+      select: { id: true, vial: { select: { peptideId: true, peptide: { select: { name: true } } } } },
+    })).map((p) => [p.id, { peptideId: p.vial.peptideId, name: p.vial.peptide.name }]),
+  );
+  const standaloneByPeptide = new Map<string, { peptideName: string; totalMcg: number }>();
+  const blendTotals = new Map<string, number>();
+  for (const row of doseSums) {
+    const pep =
+      (row.preparationId ? prepPeptide.get(row.preparationId) : undefined) ??
+      (row.protocolId ? protoPeptide.get(row.protocolId) : undefined);
+    if (!pep) continue;
+    const mcg = Number(row._sum.doseMcg?.toString() ?? "0");
+    if (blendIds.has(pep.peptideId)) {
+      blendTotals.set(pep.peptideId, (blendTotals.get(pep.peptideId) ?? 0) + mcg);
+    } else {
+      const cur = standaloneByPeptide.get(pep.peptideId);
+      if (cur) cur.totalMcg += mcg;
+      else standaloneByPeptide.set(pep.peptideId, { peptideName: pep.name, totalMcg: mcg });
+    }
+  }
+  const derivedAll = [...blendTotals.entries()].flatMap(([bid, totalMcg]) => {
+    const comps = dbComponentsByPeptide.get(bid) ?? [];
+    return expandBlendDose(totalMcg, comps.map((c, i) => ({
+      componentPeptideId: c.name, // roll-up key: name (stable across QA/prod ids)
+      componentName: c.name,
+      massMg: c.mg,
+      source: "label" as const,
+      sortIndex: i,
+    })));
+  });
+  const exposureRollup = rollUpExposure({
+    standalone: [...standaloneByPeptide.entries()].map(([pid, v]) => ({
+      peptideId: v.peptideName, // keyed by name so derived rows merge correctly
+      peptideName: v.peptideName,
+      totalMcg: v.totalMcg,
+    })),
+    derived: derivedAll,
+  });
+
   return {
     adherenceByPeptide,
     overallAdherence,
@@ -518,6 +616,7 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
     plasmaByPeptide,
     now,
     heatmapFrom: heatmapStart,
+    exposureRollup,
     peptidesWithoutHalfLife,
     missedDoseTimes,
   };

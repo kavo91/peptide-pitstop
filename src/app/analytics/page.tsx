@@ -138,6 +138,50 @@ export default async function AnalyticsPage() {
         </section>
       </div>
 
+      {/* ── Cumulative exposure (all time) ───────────────────────────────
+          The one surface aggregating blend-delivered component mass with the
+          same compound's standalone history. Derived mass comes from the
+          blend's stated composition ratio, never from a logged measurement,
+          and is always badged. */}
+      {data.exposureRollup.length > 0 && (
+        <section className="mb-6">
+          <h2 className="mb-2 text-sm font-semibold">Cumulative exposure (all time)</h2>
+          <div className="overflow-x-auto rounded-card bg-surface p-4 shadow-sm ring-1 ring-line/10">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-muted">
+                  <th className="pb-2 font-medium">Compound</th>
+                  <th className="pb-2 text-right font-medium">Logged</th>
+                  <th className="pb-2 text-right font-medium">Via blends</th>
+                  <th className="pb-2 text-right font-medium">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.exposureRollup.map((r) => (
+                  <tr key={r.peptideId} className="border-t border-line/10">
+                    <td className="py-1.5">{r.peptideName}</td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      {r.standaloneMcg > 0 ? `${(r.standaloneMcg / 1000).toFixed(2)} mg` : "—"}
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      {r.blendMcg > 0 ? `${(r.blendMcg / 1000).toFixed(2)} mg` : "—"}
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      {(r.totalMcg / 1000).toFixed(2)} mg
+                      {r.hasDerived && <span className="ml-1 text-xs text-muted">derived</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-2 text-[10px] text-muted">
+              “Via blends” is derived from each blend’s stated composition ratio — not separately
+              measured doses. Blends with no composition recorded appear under their own name.
+            </p>
+          </div>
+        </section>
+      )}
+
       {/* ── No-half-life hints ───────────────────────────────────────────── */}
       {data.peptidesWithoutHalfLife.length > 0 && (
         <section className="mb-6">

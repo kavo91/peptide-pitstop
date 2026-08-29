@@ -28,6 +28,24 @@ export default async function LogPage() {
   // Collect unique peptideIds from preps.
   const peptideIds = [...new Set(preps.map((p) => p.vial.peptideId))];
 
+  // Blend composition per peptide — one batched fetch; powers the live
+  // per-component preview under the draw panel.
+  const blendRows = await prisma.blendComponent.findMany({
+    where: { peptideId: { in: peptideIds }, peptide: { userId: user.id } },
+    include: { componentPeptide: { select: { name: true } } },
+    orderBy: { sortIndex: "asc" },
+  });
+  const blendComponentsByPeptide: Record<string, { componentPeptideId: string; componentName: string; massMg: number; source: "label" | "coa" | "assumed"; sortIndex: number }[]> = {};
+  for (const r of blendRows) {
+    (blendComponentsByPeptide[r.peptideId] ??= []).push({
+      componentPeptideId: r.componentPeptideId,
+      componentName: r.componentPeptide.name,
+      massMg: Number(r.massMg),
+      source: r.source as "label" | "coa" | "assumed",
+      sortIndex: r.sortIndex,
+    });
+  }
+
   // Most recent DoseLog for each peptide (any protocol) — for half-life warnings.
   const lastLogs = await prisma.doseLog.findMany({
     where: { userId: user.id, preparation: { vial: { peptideId: { in: peptideIds } } } },
@@ -129,10 +147,14 @@ export default async function LogPage() {
   }));
   const protocolOptions = buildProtocolDoseOptions(protocolForOptions, now);
 
+  const defaultSyringeId =
+    (await prisma.user.findUnique({ where: { id: user.id }, select: { defaultSyringeId: true } }))?.defaultSyringeId ?? undefined;
+
   const syringes = (await prisma.syringe.findMany({ where: { OR: [{ userId: user.id }, { userId: null }] } })).map((s) => ({
     id: s.id,
     name: s.name,
     graduationType: s.graduationType as "units" | "ml",
+    deviceType: (s.deviceType === "pen" ? "pen" : "syringe") as "syringe" | "pen",
     unitsPerMl: s.unitsPerMl,
     capacityMl: s.capacityMl.toString(),
     capacityUnits: s.capacityUnits,
@@ -208,7 +230,7 @@ export default async function LogPage() {
           `sm` breakpoint, where the form's sticky mobile CTA is already static,
           so two-up never affects the sticky CTA. */}
       <div className={oralOptions.length > 0 ? "min-[1440px]:grid min-[1440px]:grid-cols-2 min-[1440px]:items-start min-[1440px]:gap-8" : undefined}>
-        <AdHocLogForm options={options} syringes={syringes} suggestedSiteByPeptide={suggestedSiteByPeptide} recentSitesByPeptide={recentSitesByPeptide} protocolOptions={protocolOptions} design={design} />
+        <AdHocLogForm options={options} syringes={syringes} suggestedSiteByPeptide={suggestedSiteByPeptide} recentSitesByPeptide={recentSitesByPeptide} protocolOptions={protocolOptions} design={design} blendComponentsByPeptide={blendComponentsByPeptide} defaultSyringeId={defaultSyringeId} />
 
       {oralOptions.length > 0 && (
         <section className="mt-8 min-[1440px]:mt-0">

@@ -17,6 +17,7 @@
 import Link from "next/link";
 import { addDays } from "@/lib/schedule/schedule";
 import { LogDoseForm } from "@/components/LogDoseForm";
+import { splitProspectiveDose, weakestBlendSource, roundSplitForDisplay } from "@/lib/blends-core";
 import { OralLogForm } from "@/components/OralLogForm";
 import { ReconWizard } from "@/components/ReconWizard";
 import { DeleteLogButton } from "@/components/DeleteLogButton";
@@ -28,6 +29,7 @@ interface Syringe {
   id: string;
   name: string;
   graduationType: "units" | "ml";
+  deviceType: "syringe" | "pen";
   unitsPerMl: number;
   capacityMl: string;
   capacityUnits: number;
@@ -148,6 +150,28 @@ export function TodaysDosesCard({
                           : " · maintenance"}
                       </p>
                     )}
+                    {(() => {
+                      // Prospective per-component split for vendor blends — the
+                      // CURRENT dose (titration-aware via doseValue) divided by
+                      // the stored label/CoA ratio. Unsplittable (units, blank,
+                      // no prep conc for an ml dose) → no line, never a guess.
+                      // Suppressed once logged: the logged views decompose the
+                      // REAL recorded dose; re-splitting the scheduled one here
+                      // could disagree with it.
+                      if (!d.blendComponents || d.alreadyLoggedToday) return null;
+                      const comps = d.blendComponents.map((c) => ({ ...c, source: c.source as "label" | "coa" | "assumed" }));
+                      const split = splitProspectiveDose(d.doseValue, d.doseUnit, comps, d.preparation?.concentrationMcgPerMl ?? null);
+                      if (!split) return null;
+                      // Largest-remainder rounding: components sum to the
+                      // rounded parent; the line claims the WEAKEST provenance.
+                      const shown = roundSplitForDisplay(split.map((c) => c.doseMcg));
+                      return (
+                        <p className="text-xs text-muted tabular-nums">
+                          ↳ {split.map((c, i) => `${c.componentName} ${shown[i]} mcg`).join(" · ")}
+                          {" "}<span className="opacity-70">(derived, {weakestBlendSource(comps)})</span>
+                        </p>
+                      );
+                    })()}
                   </div>
                   <span
                     className={`rounded-full px-2 py-1 text-xs font-medium ${
@@ -182,6 +206,7 @@ export function TodaysDosesCard({
                       useLiveTakenAt={isToday}
                       initialDoseValue={d.doseValue}
                       initialDoseUnit={d.doseUnit}
+                      blendComponents={d.blendComponents?.map((c) => ({ ...c, source: c.source as "label" | "coa" | "assumed" })) ?? null}
                       hoursSinceLast={d.hoursSinceLast}
                       halfLifeHours={d.halfLifeHours}
                       minIntervalHours={d.minIntervalHours}
