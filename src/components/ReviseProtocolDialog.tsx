@@ -15,6 +15,7 @@ export function ReviseProtocolDialog({
   resumedDose,
   steps,
   startDate,
+  minStartDate,
   busy,
   error,
   onStartDateChange,
@@ -26,6 +27,13 @@ export function ReviseProtocolDialog({
   resumedDose: string | null;
   steps: CarryStep[];
   startDate: string;
+  /**
+   * Earliest date the revision may start — the day after the protocol it
+   * replaces. reviseProtocol refuses anything on or before that (a backdated
+   * revision gives the predecessor an endDate before its own startDate and
+   * inverts the course lineage); this stops the user reaching that error.
+   */
+  minStartDate?: string;
   busy: boolean;
   error: string | null;
   onStartDateChange: (v: string) => void;
@@ -51,7 +59,7 @@ export function ReviseProtocolDialog({
         )}
 
         <label className="mt-4 block text-sm text-muted">New protocol starts
-          <input type="date" className={input + " mt-1"} value={startDate}
+          <input type="date" className={input + " mt-1"} value={startDate} min={minStartDate}
                  onChange={(e) => onStartDateChange(e.target.value)} />
         </label>
 

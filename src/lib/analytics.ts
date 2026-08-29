@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { startOfDay, addDays } from "@/lib/schedule/schedule";
-import { adherenceOverWindow, heatmapBuckets } from "@/lib/analytics-core";
+import { adherenceOverWindow, heatmapBuckets, buildExposureRollup } from "@/lib/analytics-core";
 import { supersededFrom } from "@/lib/doses-timeline-core";
 import type { AdherenceResult, HeatmapBucket } from "@/lib/analytics-core";
 import type { PlasmaPoint, DosePoint } from "@/lib/plasma";
@@ -11,7 +11,7 @@ import { buildResolveInput } from "@/lib/titration/from-protocol";
 import { forwardDosePoints } from "@/lib/plasma-projection";
 import { decryptField } from "@/lib/crypto/fieldEncryption";
 import { libraryHalfLifeHours, libraryComponents } from "@/lib/peptide-library";
-import { expandBlendDose, rollUpExposure, type ExposureRow } from "@/lib/blends-core";
+import { type ExposureRow } from "@/lib/blends-core";
 import { deserializeSideEffects } from "@/lib/side-effects";
 import { dayAnchor } from "@/lib/tz-day";
 import { dayKey } from "@/lib/today-overrides";
@@ -558,7 +558,6 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
   // with the CSV and PDF exports, which have always included them. A dose
   // resolves its peptide preparation-first and protocol-second — the exact
   // precedence the exports use — so the surfaces cannot drift apart again.
-  const blendIds = new Set(dbComponentsByPeptide.keys());
   const doseSums = await prisma.doseLog.groupBy({
     by: ["preparationId", "protocolId"],
     where: { userId },
@@ -574,39 +573,18 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
       select: { id: true, vial: { select: { peptideId: true, peptide: { select: { name: true } } } } },
     })).map((p) => [p.id, { peptideId: p.vial.peptideId, name: p.vial.peptide.name }]),
   );
-  const standaloneByPeptide = new Map<string, { peptideName: string; totalMcg: number }>();
-  const blendTotals = new Map<string, number>();
-  for (const row of doseSums) {
-    const pep =
-      (row.preparationId ? prepPeptide.get(row.preparationId) : undefined) ??
-      (row.protocolId ? protoPeptide.get(row.protocolId) : undefined);
-    if (!pep) continue;
-    const mcg = Number(row._sum.doseMcg?.toString() ?? "0");
-    if (blendIds.has(pep.peptideId)) {
-      blendTotals.set(pep.peptideId, (blendTotals.get(pep.peptideId) ?? 0) + mcg);
-    } else {
-      const cur = standaloneByPeptide.get(pep.peptideId);
-      if (cur) cur.totalMcg += mcg;
-      else standaloneByPeptide.set(pep.peptideId, { peptideName: pep.name, totalMcg: mcg });
-    }
-  }
-  const derivedAll = [...blendTotals.entries()].flatMap(([bid, totalMcg]) => {
-    const comps = dbComponentsByPeptide.get(bid) ?? [];
-    return expandBlendDose(totalMcg, comps.map((c, i) => ({
-      componentPeptideId: c.name, // roll-up key: name (stable across QA/prod ids)
-      componentName: c.name,
-      massMg: c.mg,
-      source: "label" as const,
-      sortIndex: i,
-    })));
-  });
-  const exposureRollup = rollUpExposure({
-    standalone: [...standaloneByPeptide.entries()].map(([pid, v]) => ({
-      peptideId: v.peptideName, // keyed by name so derived rows merge correctly
-      peptideName: v.peptideName,
-      totalMcg: v.totalMcg,
+  // The roll-up itself is pure and unit-tested in analytics-core; this function
+  // only supplies the rows. Keep it that way — the rules it encodes (ad-hoc doses
+  // count; preparation-first resolution) are the ones that previously drifted.
+  const exposureRollup = buildExposureRollup({
+    doseSums: doseSums.map((r) => ({
+      preparationId: r.preparationId,
+      protocolId: r.protocolId,
+      totalMcg: Number(r._sum.doseMcg?.toString() ?? "0"),
     })),
-    derived: derivedAll,
+    prepPeptide,
+    protoPeptide,
+    componentsByBlendId: dbComponentsByPeptide,
   });
 
   return {

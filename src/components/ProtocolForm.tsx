@@ -31,6 +31,19 @@ const todayKey = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
+/**
+ * The day after a YYYY-MM-DD date, or undefined when there is no date. Used as
+ * the revision dialog's `min`: a revision must start strictly after the protocol
+ * it replaces, and reviseProtocol refuses anything earlier. UTC arithmetic on a
+ * date-only string — no DST edge.
+ */
+const dayAfter = (date?: string | null): string | undefined => {
+  if (!date) return undefined;
+  const t = Date.parse(`${date.slice(0, 10)}T00:00:00.000Z`);
+  if (Number.isNaN(t)) return undefined;
+  return new Date(t + 86_400_000).toISOString().slice(0, 10);
+};
+
 export function ProtocolForm({
   peptides,
   prescriptions,
@@ -602,6 +615,7 @@ export function ProtocolForm({
           resumedDose={carryForward?.resumedDose ?? null}
           steps={revise.steps}
           startDate={revise.startDate}
+          minStartDate={dayAfter(initial?.startDate)}
           busy={busy}
           error={error}
           onStartDateChange={(v) => setRevise((r) => (r ? { ...r, startDate: v } : r))}

@@ -169,7 +169,7 @@ npm test          # vitest — dosing engine, schedule, analytics, auth, …
 npm run typecheck
 ```
 
-1437 tests across 127 files, plus a TypeScript typecheck, run against every release.
+1452 tests across 127 files, plus a TypeScript typecheck, run against every release.
 
 ---
 
