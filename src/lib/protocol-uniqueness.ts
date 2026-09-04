@@ -12,7 +12,7 @@
  * `completed` row behind forever. That stale row then read as a conflict, and
  * the peptide's live protocol could never be saved again ("That peptide already
  * has a protocol — edit it instead", on the very page you were told to use).
- * Reported on MOTS-c 2026-08-14; Tesamorelin and 5-Amino-1MQ had the same shape.
+ * Every peptide with a finished course had the same shape.
  *
  * Finished and paused courses are history, not competition. PURE — no I/O.
  */

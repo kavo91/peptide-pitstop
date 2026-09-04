@@ -120,7 +120,7 @@ describe("computeNextDose", () => {
 });
 
 // ── formatNextDoseLabel — day words for cross-day, countdown only same-day ────
-// Dashboard ask (2026-07-04): "GHK-Cu in 1d 11h" reads badly when nothing is
+// Product decision: "GHK-Cu in 1d 11h" reads badly when nothing is
 // due today — a future-day dose should name the DAY ("tomorrow" / "Tuesday"),
 // not tick a countdown. Same-day doses keep the live countdown.
 describe("formatNextDoseLabel", () => {

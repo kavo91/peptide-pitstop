@@ -1,9 +1,9 @@
 /**
  * Regression: a traveller's dose must not delete the slot it belongs to.
  *
- * Reproduces a real production incident. The user logged Tesamorelin at
- * 22:54 in America/Santiago on Friday 24 July. That instant is SATURDAY 12:54 in
- * the container zone (Australia/Brisbane, +14 h). The protocol is Mon–Fri, so
+ * A dose was logged at 22:54 in America/Santiago on Friday 24 July 2026. That
+ * instant is SATURDAY 12:54 in the container zone (Australia/Brisbane, +14 h).
+ * The protocol is Mon–Fri, so
  * judging the dose off-grid by its raw instant made `reconstructRebasedSlots`
  * fire a fixed_anchor rebase that dropped the Friday slot and minted a phantom
  * rebased Saturday one — then the localDay matcher (which correctly reads
@@ -19,12 +19,12 @@ import type { ResolveInput } from "./types";
 
 const d = (s: string) => new Date(s + "T00:00:00");
 
-// Tesamorelin on prod: weekly MO–FR, fixed_anchor.
+// Weekly MO–FR protocol, fixed_anchor.
 const MON_FRI = JSON.stringify([
   { dayPattern: { kind: "weekly", byDays: ["MO", "TU", "WE", "TH", "FR"] }, times: ["21:00"] },
 ]);
 
-// Real prod rows (DoseLog.takenAt is an absolute instant; localDay is frozen on the device).
+// Dose rows (DoseLog.takenAt is an absolute instant; localDay is frozen on the device).
 const DOSE_A = { id: "DOSE_A", takenAt: new Date("2026-07-24T05:03:46Z"), localDay: "2026-07-23" }; // Bne Fri 15:03 / SCL Thu tracking day
 const DOSE_B = { id: "DOSE_B", takenAt: new Date("2026-07-25T02:54:48Z"), localDay: "2026-07-24" }; // Bne SAT 12:54 / SCL Fri 22:54
 
