@@ -57,8 +57,8 @@ export function reconstructRebasedSlots(args: ReconstructArgs): DatedSlot[] {
 
   // A grid day that ALREADY has its own delivered dose is satisfied and cannot be
   // re-anchored: taking it as the anchor drops it (and every later grid day), so the
-  // dose sitting on it loses its slot. Real case — GHK-Cu MO/TU/TH/FR/SU dosed on all
-  // five grid days plus an extra Wednesday: the Wednesday anchored on Tuesday, and the
+  // dose sitting on it loses its slot. Regression: a MO/TU/TH/FR/SU grid dosed on all
+  // five grid days plus an extra Wednesday — the Wednesday anchored on Tuesday, and the
   // Tuesday and Thursday doses vanished behind a phantom Saturday.
   const satisfied = new Set(delivered.map((dz) => doseDay(dz).getTime()));
   const anchorable = grid.filter((g) => !satisfied.has(g.getTime()));

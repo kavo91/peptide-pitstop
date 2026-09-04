@@ -2,8 +2,8 @@
  * Regression: a fixed_anchor rebase must not steal a grid day that already has
  * its own delivered dose.
  *
- * Real prod case (GHK-Cu, week of 19–25 Jul 2026). Grid is MO/TU/TH/FR/SU and
- * The user dosed on all five grid days PLUS an extra off-grid Wednesday. The
+ * Regression case (week of 19–25 Jul 2026). Grid is MO/TU/TH/FR/SU and the
+ * user dosed on all five grid days PLUS an extra off-grid Wednesday. The
  * Wednesday dose picked Tuesday as its "satisfied" anchor — nearest grid day —
  * even though Tuesday had already been dosed. `droppedKeys` then removed Tuesday
  * and every grid day after it, so the Tuesday and Thursday doses lost their slots
@@ -24,7 +24,7 @@ const MO_TU_TH_FR_SU = JSON.stringify([
   { dayPattern: { kind: "weekly", byDays: ["MO", "TU", "TH", "FR", "SU"] }, times: ["20:00"] },
 ]);
 
-// Representative rows from a real GHK-Cu protocol.
+// Dose rows for the regression week (absolute instants; localDay frozen on the device).
 const DOSES = [
   { id: "sun19", takenAt: new Date(1784453783658), localDay: "2026-07-19" },
   { id: "mon20", takenAt: new Date(1784543909575), localDay: "2026-07-20" },

@@ -218,7 +218,7 @@ describe("rebase-override classifier — TZ hardening (WS6)", () => {
     expect(sundaySlots).toHaveLength(1); // the symptom: "due" a day early
   });
 
-  // BPC+TB4 prod bug (2026-07-02): moving a stack's start date FORWARD leaves
+  // Start-date regression: moving a stack's start date FORWARD leaves
   // already-materialised "planned" rows behind (daily rows for Jul 2–5 written
   // while the stack started immediately). Those rows now sit outside the
   // window-gated grid, so the classifier misread them as fixed_anchor rebase
@@ -313,7 +313,7 @@ describe("rebase-override classifier — TZ hardening (WS6)", () => {
     expect(dueSlotsForDay(moTh, overrideDays.get("p-live"), tue, started.startDate, started.endDate)).toHaveLength(1);
   });
 
-  // GHK-Cu prod bug (2026-06-26): a stray OFF-grid planned row sitting alongside
+  // Regression: a stray OFF-grid planned row sitting alongside
   // a valid ON-grid row in the same week must NOT be treated as a rebase. A real
   // confirmRebase deletes the on-grid rows, so a genuine rebase week is purely
   // off-grid. Previously a single off-grid row made the override set REPLACE the
@@ -339,7 +339,7 @@ describe("rebase-override classifier — TZ hardening (WS6)", () => {
   });
 });
 
-// Tesamorelin prod bug (2026-07-13): an off-grid SUNDAY dose on a weekly M–F
+// Regression: an off-grid SUNDAY dose on a weekly M–F
 // fixed_anchor protocol rebases the DISPLAY week to Sun–Thu, so
 // resolveTitration returns the WHOLE rebased week — many slots, ALL at "21:00",
 // on different calendar days. today.ts asked for a single day (Monday) but
@@ -347,7 +347,7 @@ describe("rebase-override classifier — TZ hardening (WS6)", () => {
 // TAKEN Sunday 21:00 slot → Monday's card read "logged". The fix restricts the
 // index to slots whose local calendar day IS today. These guards pin that
 // contract against the real resolver (getTodayDoses itself is DB-bound).
-describe("shifted week must not mark a later day 'logged' (tesamorelin prod bug)", () => {
+describe("shifted week must not mark a later day 'logged' (shifted-week regression)", () => {
   const tesaRule = JSON.stringify([
     { dayPattern: { kind: "weekly", byDays: ["MO", "TU", "WE", "TH", "FR"] }, times: ["21:00"] },
   ]);

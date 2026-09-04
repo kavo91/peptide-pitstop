@@ -18,7 +18,7 @@ describe("hasActiveProtocolConflict", () => {
   // one" (changing a titration scheduleRule re-times every step and orphans
   // logged doses). That leaves a COMPLETED row behind forever — which the old
   // status-blind count treated as a conflict, so the peptide's live protocol
-  // could never be edited again. Reported on MOTS-c, which has exactly this
+  // could never be edited again. Seen with a peptide that has exactly this
   // shape: one completed course plus one active one.
   it("ignores COMPLETED history when editing the live protocol", () => {
     const existing = [

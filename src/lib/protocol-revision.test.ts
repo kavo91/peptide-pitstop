@@ -250,8 +250,8 @@ describe("endDateOnClose", () => {
   });
 
   it("CLAMPS a planned end date that is still in the future", () => {
-    // The real case: a 12-week course planned to 2026-09-28, closed early on
-    // 08-15. Left alone, slot generation keeps emitting until September and
+    // A 12-week course planned to 2026-09-28 and closed early on 08-15. Left
+    // alone, slot generation keeps emitting until September and
     // every ghost ages into a false miss.
     expect(endDateOnClose({ wasStatus: "active", nowStatus: "completed", currentEndDate: "2026-09-28", todayKey: "2026-08-15" }))
       .toBe("2026-08-15");

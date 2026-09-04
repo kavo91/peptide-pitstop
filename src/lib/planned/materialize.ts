@@ -125,9 +125,9 @@ export function materializePlannedDoses(args: {
    * rebase override)? Two — and only two — shapes qualify:
    *   - BEFORE startDate: categorically stale. A genuine confirmRebase row
    *     derives from a real logged dose inside the started window, so nothing
-   *     legitimate lives before the start (BPC+TB4 prod bug, 2026-07-02).
+   *     legitimate lives before the start (start-date regression).
    *   - AFTER endDate: categorically stale, ON-grid or OFF-grid (rebase-
-   *     shifted) alike — a hard cutoff (Tα1 prod bug, 2026-07-05: a shortened
+   *     shifted) alike — a hard cutoff (regression: a shortened
    *     endDate left two rebase-shifted rows, off the schedule grid, sitting
    *     as "due" past the new end date). The end date always wins; a rebase
    *     is never allowed to shift the final dose past it.
@@ -148,7 +148,7 @@ export function materializePlannedDoses(args: {
    * Generation is gated on "active", so a completed/paused protocol emits no NEW
    * rows; but the rows materialised while it WAS active keep sitting in the
    * horizon, and the end-date cutoff above cannot see them when the protocol was
-   * closed EARLY (Tesamorelin prod bug, 2026-08-14: a course completed on 08-11
+   * closed EARLY (regression: a course completed on 08-11
    * with an endDate of 09-28 left five future rows, rendering a second due slot
    * a day beside its replacement protocol, each ageing into "missed" and
    * deflating every adherence figure in the app).

@@ -258,7 +258,7 @@ describe("rebase-override week suppression", () => {
     expect(keys).toEqual(["2026-06-22", "2026-06-24", "2026-06-26"]);
   });
 
-  // GHK-Cu prod bug (2026-06-26): a week with BOTH an on-grid row and a stray
+  // Regression: a week with BOTH an on-grid row and a stray
   // off-grid one is NOT a genuine rebase (confirmRebase deletes the on-grid rows)
   // — the stray off-grid row must not suppress and lose the live grid for the week.
   it("does NOT suppress a week that has BOTH on-grid and off-grid planned rows (stale artefact)", () => {
@@ -512,7 +512,7 @@ describe("JSON scheduleRule (custom-schedules engine)", () => {
 });
 
 // ─── suite 6: stale out-of-window rows (start date moved forward) ─────────
-// BPC+TB4 prod bug (2026-07-02): pushing a protocol's start date into the
+// Start-date regression: pushing a protocol's start date into the
 // future strands the already-materialised daily rows before it. They must be
 // DELETED — not marked missed (adherence pollution), not treated as rebase
 // overrides (Today showed the doses due), not left to fire midnight reminders.
@@ -609,7 +609,7 @@ describe("stale out-of-window rows (start date moved forward)", () => {
     expect(deletions).toEqual(["shifted-final"]);
   });
 
-  it("Tα1 prod bug repro (2026-07-05): both off-grid rebase rows past a shortened endDate are deleted", () => {
+  it("Regression: both off-grid rebase rows past a shortened endDate are deleted", () => {
     // Real incident: Tα1 is M/W/F. A dose logged off-grid on Sunday rebase-
     // shifted the week to Sun(actual)/Tue/Thu. The protocol's endDate was then
     // shortened from 7/7 to 7/6 (Monday) — but the off-grid Tue 7/7 and Thu 7/9
@@ -704,12 +704,12 @@ describe("protocol with no scheduleRule", () => {
 // ─── suite 8: retired protocols (status left "active") ────────────────────
 
 describe("retired protocols — future rows must not survive completion", () => {
-  // Prod bug, 2026-08-14. A Tesamorelin course was closed early (status
+  // Regression. A course was closed early (status
   // "completed" early) while its endDate still read weeks out, and a
   // replacement protocol was started the same day. Generation was already gated
   // on "active", so no NEW rows appeared — but the rows materialised while it
   // was still running kept sitting in the horizon, inside the end-date window
-  // the stale-row cutoff checks. The user saw two Tesamorelin slots a day for
+  // the stale-row cutoff checks. The user saw two slots a day for
   // five days, and each ghost aged into "missed" and deflated adherence.
 
   it("deletes a completed protocol's future rows even inside its end-date window", () => {
