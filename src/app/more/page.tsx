@@ -5,7 +5,7 @@
  */
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { logout } from "@/app/actions/auth";
+import { SignOutButton } from "@/components/SignOutButton";
 import { getCurrentUser } from "@/lib/auth/owner";
 import { getReorderStatus } from "@/lib/reorder";
 import { brandName, activeDesign } from "@/lib/design";
@@ -30,6 +30,7 @@ const ITEMS: Item[] = [
   { href: "/protocols",     label: "Protocols",     sub: "Active and past treatment protocols" },
   { href: "/journal",       label: "Wellness",      sub: "Weight, mood, sleep, side effects" },
   { href: "/bloodwork",     label: "Bloodwork",     sub: "Biomarker trends with reference & optimal bands" },
+  { href: "/body",          label: "Body composition", sub: "DEXA and RMR scans, noise bands, exposure between scans" },
   { href: "/settings",      label: "Settings",      sub: "Peptides, syringes, reminders, backup" },
 ];
 
@@ -67,9 +68,7 @@ export default async function MorePage() {
         })}
       </ul>
 
-      <form action={logout} className="mt-6 max-[640px]:mt-3">
-        <button type="submit" className="w-full rounded-control bg-surface px-4 py-3 text-sm font-medium text-danger ring-1 ring-line/10">Sign out</button>
-      </form>
+      <SignOutButton className="mt-6 max-[640px]:mt-3" />
 
       <p className="mt-8 text-center text-xs text-muted max-[640px]:mt-3 lg:hidden">{brandName()} · not medical advice · v{APP_VERSION}</p>
     </main>

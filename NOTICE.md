@@ -25,3 +25,10 @@ The SIL Open Font License 1.1 permits use, study, modification, and
 redistribution of these fonts, including bundling with software, provided the
 fonts are not sold by themselves and the copyright and licence notices above are
 retained. The full licence text is available at the URL listed above.
+
+## Body-figure artwork
+
+The regional body-figure layers under `public/body/figure/` (base, fat, lean,
+bone and the region map) were generated with Higgsfield and hand-split into
+tissue masks for this project. They are released with the application under
+the same AGPL-3.0-only terms as the code (see `LICENSE`).

@@ -12,6 +12,10 @@
  */
 import PDFDocument from "pdfkit";
 import { dayKeyInTz, timeInTz } from "@/lib/tz-day";
+import { BODY_COPY } from "@/lib/bodycomp-copy";
+// The three-tier flag words come from the same helper the /body page renders,
+// so the report can never word a flag differently from the screen.
+import { flagLabel } from "@/components/body/format";
 
 // ── Public data shape ───────────────────────────────────────────────────────
 
@@ -78,6 +82,71 @@ export interface ReportLabPanel {
   rows: ReportLabRow[];
 }
 
+// ── Body composition (DEXA + RMR) ───────────────────────────────────────────
+// Every number below was decrypted by the data layer (`getReportBodyComp`);
+// nothing here is derived from ciphertext. Scanner serials never arrive.
+
+export interface ReportBodyCompScan {
+  date: Date;
+  /** Make + model as printed (never the serial), or null. */
+  device: string | null;
+  software: string | null;
+  fatKg: number;
+  leanKg: number;
+  bmcKg: number;
+  pctFat: number;
+  almKg: number | null;
+  ffmi: number;
+  almi: number | null;
+  vatG: number | null;
+  bmdGcm2: number | null;
+  bmdZ: number | null;
+  /** The prep sentence exactly as the /body page prints it. */
+  prepSummary: string;
+  /** True when the clinic's PDF is attached to this scan. */
+  reportLinked: boolean;
+}
+
+export interface ReportBodyCompDelta {
+  metric: string;
+  unit: string;
+  previous: number;
+  latest: number;
+  delta: number;
+  tier: "within_noise" | "indeterminate" | "exceeds_lsc";
+  /** Technical LSC of the earlier scan (same unit as the metric). */
+  technical: number;
+  practical: number | null;
+  comparability: "comparable" | "reduced" | "not_comparable";
+  /** Flag demoted one tier for reduced comparability; `rawTier` is what the numbers alone give. */
+  demoted?: boolean;
+  rawTier?: "within_noise" | "indeterminate" | "exceeds_lsc";
+}
+
+export interface ReportRmr {
+  date: Date;
+  method: string;
+  measuredKcal: number;
+  perKgFfm: number | null;
+  /** Equation ladder rows that could be computed (FFM rows absent without a DEXA within 14 days). */
+  ladder: { label: string; predictedKcal: number; ratio: number }[];
+  /** The conditions sentence exactly as the /body page prints it. */
+  conditions: string;
+}
+
+export interface ReportBodyComp {
+  /** Oldest first; the first row is the nearest earlier scan when it serves as the comparator. */
+  scans: ReportBodyCompScan[];
+  /** Latest vs previous of `scans`; empty when there is no pair or the pair is not comparable. */
+  deltas: ReportBodyCompDelta[];
+  /** Why the pair's comparability is reduced (empty when comparable); printed because the PDF has no tooltip. */
+  comparabilityReasons?: string[];
+  rmr: ReportRmr[];
+  /** Where the noise bands come from, in the page's words. */
+  lscSource: string;
+  lifeEventDays: { illness: number; travel: number };
+}
+
 export interface ReportData {
   /** User-facing brand name for the active design pack (threaded from the route). */
   brand: string;
@@ -90,6 +159,8 @@ export interface ReportData {
   sideEffects: ReportSideEffect[];
   wellness: ReportWellness;
   labs: ReportLabPanel[];
+  /** null when neither a DEXA scan nor an RMR test falls in the range. */
+  bodyComp: ReportBodyComp | null;
 }
 
 // ── Formatting helpers ──────────────────────────────────────────────────────
@@ -529,6 +600,165 @@ function writeWellness(doc: Doc, data: ReportData): void {
   if (!any) mutedText(doc, "No wellness data in this range.");
 }
 
+/** "—" for null, else fixed decimals. */
+function fmtNum(n: number | null | undefined, digits: number): string {
+  return n == null || !Number.isFinite(n) ? "—" : n.toFixed(digits);
+}
+
+/** Signed fixed-decimal change; "0.00" prints unsigned. */
+function fmtSigned(n: number, digits: number): string {
+  const s = n.toFixed(digits);
+  return n > 0 ? `+${s}` : s;
+}
+
+/** Decimal places per delta unit — the DeltaTable's digits, by unit. */
+function digitsForUnit(unit: string): number {
+  switch (unit) {
+    case "kg": return 2;
+    case "%": return 1;
+    case "g/cm²": return 3;
+    default: return 0; // g, kcal/d
+  }
+}
+
+function comparabilityWord(c: ReportBodyCompDelta["comparability"]): string {
+  return c === "comparable" ? "comparable" : c === "reduced" ? BODY_COPY.reducedComparability : BODY_COPY.notComparable;
+}
+
+/** Ratio for one equation of the ladder, matched by label prefix. */
+function ladderRatio(ladder: ReportRmr["ladder"], labelPrefix: string): string {
+  const row = ladder.find((l) => l.label.startsWith(labelPrefix));
+  return row ? row.ratio.toFixed(2) : "—";
+}
+
+function writeBodyComp(doc: Doc, data: ReportData): void {
+  sectionHeading(doc, BODY_COPY.reportHeading);
+  const bc = data.bodyComp;
+  if (!bc || (bc.scans.length === 0 && bc.rmr.length === 0)) {
+    mutedText(doc, BODY_COPY.reportEmpty);
+    return;
+  }
+  mutedText(doc, `${BODY_COPY.reportProvenance} Noise bands: ${bc.lscSource}.`);
+
+  if (bc.scans.length) {
+    doc.moveDown(0.4);
+    bodyText(doc, "DEXA scans");
+    table(
+      doc,
+      [
+        { label: "Date", width: 60 },
+        { label: "Scanner", width: 90 },
+        { label: "Fat kg", width: 45 },
+        { label: "Lean kg", width: 45 },
+        { label: "% fat", width: 40 },
+        { label: "ALM kg", width: 45 },
+        { label: "VAT g", width: 40 },
+        { label: "BMD Z", width: 40 },
+        { label: "Prep", width: 90 },
+      ],
+      bc.scans.map((s) => [
+        fmtDate(s.date),
+        s.device ?? "—",
+        fmtNum(s.fatKg, 2),
+        fmtNum(s.leanKg, 2),
+        fmtNum(s.pctFat, 1),
+        fmtNum(s.almKg, 2),
+        fmtNum(s.vatG, 0),
+        fmtNum(s.bmdZ, 1),
+        s.prepSummary,
+      ]),
+    );
+    // The prep cell truncates; the full sentence, software and attachment go under the table.
+    for (const s of bc.scans) {
+      ensureSpace(doc, 24);
+      mutedText(
+        doc,
+        `${fmtDate(s.date)} — software ${s.software ?? "not recorded"}; FFMI ${fmtNum(s.ffmi, 2)}, ALMI ${fmtNum(s.almi, 2)} kg/m²; prep: ${s.prepSummary}${s.reportLinked ? "; clinic report PDF attached" : ""}.`,
+      );
+    }
+  }
+
+  if (bc.scans.length >= 2) {
+    const prev = bc.scans[bc.scans.length - 2];
+    const latest = bc.scans[bc.scans.length - 1];
+    const days = Math.max(0, Math.round((latest.date.getTime() - prev.date.getTime()) / (24 * 60 * 60 * 1000)));
+    doc.moveDown(0.4);
+    bodyText(doc, `Latest vs previous: ${fmtDate(prev.date)} to ${fmtDate(latest.date)} (${days} days)`);
+    if (bc.deltas.length === 0) {
+      // Fat and lean always carry a band, so an empty list means the pair was hidden as not comparable.
+      mutedText(doc, BODY_COPY.notComparable);
+    } else {
+      const reasons = bc.comparabilityReasons ?? [];
+      mutedText(doc, `Comparability: ${comparabilityWord(bc.deltas[0].comparability)}${reasons.length ? ` — ${reasons.join("; ")}` : ""}`);
+      table(
+        doc,
+        [
+          { label: "Metric", width: 80 },
+          { label: "Previous", width: 55 },
+          { label: "Latest", width: 55 },
+          { label: "Change", width: 55 },
+          { label: "x LSC", width: 40 },
+          { label: "Flag", width: 105 },
+          { label: "Comparability", width: 105 },
+        ],
+        bc.deltas.map((d) => {
+          const digits = digitsForUnit(d.unit);
+          const multiple = d.technical > 0 ? Math.abs(d.delta) / d.technical : 0;
+          return [
+            `${d.metric} (${d.unit})`,
+            fmtNum(d.previous, digits),
+            fmtNum(d.latest, digits),
+            fmtSigned(d.delta, digits),
+            `${multiple.toFixed(1)}x`,
+            flagLabel({ delta: d.delta, multipleOfTechnical: multiple, tier: d.tier, technical: d.technical, practical: d.practical, demoted: d.demoted, rawTier: d.rawTier }),
+            d.comparability === "comparable" ? "comparable" : BODY_COPY.reducedComparability,
+          ];
+        }),
+      );
+      mutedText(doc, BODY_COPY.lscFootnote);
+    }
+  }
+
+  if (bc.rmr.length) {
+    doc.moveDown(0.4);
+    bodyText(doc, "Resting metabolic rate");
+    table(
+      doc,
+      // Short header labels — the 9 pt bold header truncates at these widths;
+      // the footnote below expands the equation names.
+      [
+        { label: "Date", width: 60 },
+        { label: "Method", width: 125 },
+        { label: "kcal/d", width: 45 },
+        { label: "per kg FFM", width: 55 },
+        { label: "Tinsley", width: 45 },
+        { label: "Cunningham", width: 60 },
+        { label: "Mifflin", width: 45 },
+        { label: "Conditions", width: 60 },
+      ],
+      bc.rmr.map((r) => [
+        fmtDate(r.date),
+        r.method,
+        fmtNum(r.measuredKcal, 0),
+        fmtNum(r.perKgFfm, 1),
+        ladderRatio(r.ladder, "Tinsley 2019 (FFM)"),
+        ladderRatio(r.ladder, "Cunningham 1980"),
+        ladderRatio(r.ladder, "Mifflin"),
+        r.conditions,
+      ]),
+    );
+    for (const r of bc.rmr) {
+      ensureSpace(doc, 24);
+      mutedText(doc, `${fmtDate(r.date)} — conditions: ${r.conditions}.`);
+    }
+    mutedText(doc, BODY_COPY.rmrLadderFootnote);
+  }
+
+  doc.moveDown(0.3);
+  mutedText(doc, `${BODY_COPY.lifeEventDaysInRange}: illness ${bc.lifeEventDays.illness}, travel ${bc.lifeEventDays.travel}.`);
+  mutedText(doc, BODY_COPY.disclaimer);
+}
+
 function writeLabs(doc: Doc, data: ReportData): void {
   sectionHeading(doc, "Bloodwork — last 3 panels");
   const cmp = buildLabComparison(data.labs, 3);
@@ -603,6 +833,7 @@ export function buildReportPdf(data: ReportData): Promise<Buffer> {
       writeDoses(doc, data);
       writeSideEffects(doc, data);
       writeWellness(doc, data);
+      writeBodyComp(doc, data);
       writeLabs(doc, data);
       writeFooter(doc, data);
 

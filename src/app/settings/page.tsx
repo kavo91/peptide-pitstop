@@ -33,6 +33,8 @@ const EXPORTS = [
   { type: "labs", label: "Bloodwork", sub: "Lab results with biomarker, value, references" },
   { type: "journal", label: "Wellness journal", sub: "Weight, mood, energy, sleep, side effects" },
   { type: "wearable", label: "Wearable", sub: "Daily Garmin metrics (sleep, HRV, steps…)" },
+  { type: "bodycomp", label: "Body composition", sub: "DEXA scans: totals, regions, prep" },
+  { type: "rmr", label: "RMR tests", sub: "Resting metabolic rate measurements" },
 ] as const;
 
 export const dynamic = "force-dynamic";

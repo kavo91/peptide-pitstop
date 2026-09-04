@@ -1,0 +1,165 @@
+{
+  "date": "2026-06-20",
+  "summary": {
+    "totalSteps": 8200,
+    "restingHeartRate": 52
+  },
+  "trainingReadiness": [
+    {
+      "calendarDate": "2026-06-20",
+      "deviceId": 1,
+      "level": "LOW",
+      "score": 38,
+      "primaryActivityTracker": false
+    },
+    {
+      "calendarDate": "2026-06-20",
+      "deviceId": 2,
+      "level": "MODERATE",
+      "score": 61,
+      "primaryActivityTracker": true,
+      "acuteLoad": 420
+    }
+  ],
+  "trainingStatus": {
+    "mostRecentVO2Max": {
+      "generic": {
+        "calendarDate": "2026-06-20",
+        "fitnessAge": 36.0,
+        "vo2MaxValue": 47
+      }
+    },
+    "mostRecentTrainingStatus": {
+      "latestTrainingStatusData": {
+        "1": {
+          "deviceId": 1,
+          "primaryTrainingDevice": false,
+          "trainingStatus": 2,
+          "trainingStatusFeedbackPhrase": "RECOVERY_1",
+          "acuteTrainingLoadDTO": {
+            "dailyTrainingLoadAcute": 100,
+            "dailyTrainingLoadChronic": 200,
+            "dailyAcuteChronicWorkloadRatio": 0.5,
+            "acwrStatus": "LOW"
+          }
+        },
+        "2": {
+          "deviceId": 2,
+          "primaryTrainingDevice": true,
+          "trainingStatus": 5,
+          "trainingStatusFeedbackPhrase": "PRODUCTIVE_2",
+          "acuteTrainingLoadDTO": {
+            "dailyTrainingLoadAcute": 420,
+            "dailyTrainingLoadChronic": 300,
+            "dailyAcuteChronicWorkloadRatio": 1.4,
+            "acwrStatus": "HIGH",
+            "acwrPercent": 140
+          }
+        }
+      }
+    }
+  },
+  "enduranceScore": {
+    "calendarDate": "2026-06-20",
+    "overallScore": 5400,
+    "classification": 3
+  },
+  "hillScore": {
+    "calendarDate": "2026-06-20",
+    "overallScore": 35,
+    "strengthScore": 28,
+    "enduranceScore": 37
+  },
+  "fitnessAge": {
+    "chronologicalAge": 42,
+    "fitnessAge": 34.5,
+    "achievableFitnessAge": 32.0
+  },
+  "lactateThreshold": {
+    "speed_and_heart_rate": {
+      "calendarDate": "2026-06-18",
+      "speed": 0.35,
+      "heartRate": 162,
+      "heartRateCycling": 0
+    },
+    "power": {}
+  },
+  "floors": {
+    "floorsValueDescriptorDTOList": [
+      {
+        "key": "startTimeGMT",
+        "index": 0
+      },
+      {
+        "key": "endTimeGMT",
+        "index": 1
+      },
+      {
+        "key": "floorsAscended",
+        "index": 2
+      },
+      {
+        "key": "floorsDescended",
+        "index": 3
+      }
+    ],
+    "floorValuesArray": [
+      [
+        "2026-06-20T00:00",
+        "2026-06-20T00:15",
+        3,
+        1
+      ],
+      [
+        "2026-06-20T00:15",
+        "2026-06-20T00:30",
+        4.2,
+        0
+      ],
+      [
+        "2026-06-20T00:30",
+        "2026-06-20T00:45",
+        5,
+        2
+      ]
+    ]
+  },
+  "rhr": {
+    "statisticsStartDate": "2026-06-14",
+    "statisticsEndDate": "2026-06-20",
+    "allMetrics": {
+      "metricsMap": {
+        "WELLNESS_RESTING_HEART_RATE": [
+          {
+            "calendarDate": "2026-06-14",
+            "value": 55
+          },
+          {
+            "calendarDate": "2026-06-15",
+            "value": 56
+          },
+          {
+            "calendarDate": "2026-06-16",
+            "value": 58
+          },
+          {
+            "calendarDate": "2026-06-17",
+            "value": 57
+          },
+          {
+            "calendarDate": "2026-06-18",
+            "value": 59
+          },
+          {
+            "calendarDate": "2026-06-19",
+            "value": 56
+          },
+          {
+            "calendarDate": "2026-06-20",
+            "value": 58
+          }
+        ]
+      }
+    }
+  }
+}

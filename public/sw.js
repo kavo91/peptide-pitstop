@@ -9,6 +9,12 @@
  *     online and fall back to the cached shell only when the network is down.
  *   • Static shell assets (manifest, icons) → cache-first (safe, rarely change).
  *   • API / server-action / _next routes → network-only (never cached).
+ *   • RSC / flight requests (router.refresh(), soft navigations, prefetches —
+ *     identified by the `RSC` / `Next-Router-*` headers, an `Accept` of
+ *     `text/x-component`, or a `_rsc` query param) → network-only, never
+ *     stored. They hit page paths (e.g. `/doses?_rsc=…`) with mode "cors", so
+ *     without this rule they fell into the static cache-first branch and every
+ *     post-mutation refresh rendered the stale cached tree until a hard reload.
  *
  * The offline outbox (outbox.ts) handles dose-log replay on reconnect;
  * this SW only provides offline navigation (shows cached shell pages).
@@ -20,7 +26,9 @@
 // Bumped v1 → v2: the v1 cache-first strategy poisoned the cache with stale
 // page HTML. The activate handler below purges any cache != CACHE_NAME, so
 // bumping this name evicts the bad v1 entries on next activation.
-const CACHE_NAME = "peptide-shell-v4";
+// Bumped v4 → v5: v4 cache-first'd RSC flight payloads (see isNeverCached
+// below); the bump evicts any stored `?_rsc=` entries on next activation.
+const CACHE_NAME = "peptide-shell-v5";
 
 // App shell routes — pages that should load offline (no data, just the shell).
 // IMPORTANT: cache.addAll() is atomic — one 404 aborts the entire install.
@@ -64,18 +72,50 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// ── Fetch: navigations = network-first; static = cache-first; API = network ──
+// ── Request classification ───────────────────────────────────────────────────
+/**
+ * True for requests that must NEVER be answered from, or written to, the cache:
+ *   • non-GET (server actions are POSTs),
+ *   • Next internals (`/_next/*`) and API routes (`/api/*`),
+ *   • RSC / flight requests — `RSC: 1`, `Next-Router-State-Tree`,
+ *     `Next-Router-Prefetch`, an `Accept` containing `text/x-component`, or a
+ *     `_rsc` query param. These carry the fresh server tree after a mutation
+ *     (router.refresh()); serving a cached one shows stale data.
+ */
+function isNeverCached(request, url) {
+  if (request.method !== "GET") return true;
+  if (url.pathname.startsWith("/_next/") || url.pathname.startsWith("/api/")) {
+    return true;
+  }
+  if (url.searchParams.has("_rsc")) return true;
+  const headers = request.headers;
+  if (
+    headers.has("RSC") ||
+    headers.has("Next-Router-State-Tree") ||
+    headers.has("Next-Router-Prefetch")
+  ) {
+    return true;
+  }
+  const accept = headers.get("Accept") || "";
+  return accept.includes("text/x-component");
+}
+
+/** Defensive: never store a flight payload even if the request slipped through. */
+function isCacheableResponse(response) {
+  if (!response || !response.ok) return false;
+  const type = response.headers.get("Content-Type") || "";
+  return !type.includes("text/x-component");
+}
+
+// ── Fetch: navigations = network-first; static = cache-first; RSC/API = network
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Never intercept POST / server actions / _next internals / API routes.
-  if (
-    request.method !== "GET" ||
-    url.pathname.startsWith("/_next/") ||
-    url.pathname.startsWith("/api/")
-  ) {
-    return; // fall through to network
+  // RSC / flight, API, _next internals, POST / server actions → NETWORK-ONLY.
+  // No respondWith() = the browser fetches normally; nothing is ever stored.
+  if (isNeverCached(request, url)) {
+    return;
   }
 
   // Navigation requests (HTML documents) → NETWORK-FIRST.
@@ -86,7 +126,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok) {
+          if (isCacheableResponse(response)) {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
           }
@@ -104,7 +144,7 @@ self.addEventListener("fetch", (event) => {
     caches.match(request).then((cached) => {
       if (cached) return cached;
       return fetch(request).then((response) => {
-        if (response.ok) {
+        if (isCacheableResponse(response)) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         }
@@ -112,6 +152,17 @@ self.addEventListener("fetch", (event) => {
       });
     })
   );
+});
+
+// ── Sign-out: purge the shell cache ───────────────────────────────────────────
+// Every cached navigation is server-rendered HTML for the signed-in account
+// (/body carries DEXA and RMR figures). The sign-out button posts this message
+// (and clears Cache Storage itself, belt and braces) so an offline navigation
+// after sign-out cannot show that account's pages.
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "PEPTIDE_SIGN_OUT") {
+    event.waitUntil(caches.delete(CACHE_NAME));
+  }
 });
 
 // ── Background Sync (Chrome/Android only — optional enhancement) ──────────────

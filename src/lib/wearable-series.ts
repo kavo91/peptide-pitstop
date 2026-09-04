@@ -31,6 +31,21 @@ export interface WearableDailyLike {
   caloriesActive?: number | null;
   vo2max?: Decimalish;
   intensityMinutes?: number | null;
+  // training (Garmin only; HealthKit never fills these)
+  trainingReadiness?: number | null;
+  trainingReadinessLevel?: string | null;
+  acuteLoad?: number | null;
+  chronicLoad?: number | null;
+  acwr?: Decimalish;
+  acwrStatus?: string | null;
+  trainingStatus?: string | null;
+  enduranceScore?: number | null;
+  hillScore?: number | null;
+  fitnessAge?: Decimalish;
+  ltHr?: number | null;
+  ltSpeedMs?: Decimalish;
+  floorsClimbed?: number | null;
+  restingHr7d?: number | null;
   // logged activities (plaintext) — JSON string of GarminActivity[] + a count
   activitiesJson?: string | null;
   activityCount?: number | null;
@@ -74,6 +89,25 @@ export interface ActivityPoint {
   activities: GarminActivity[];
   source?: WearableSource;
 }
+export interface TrainingPoint {
+  date: string;
+  readiness: number | null;
+  readinessLevel: string | null;
+  acwr: number | null;
+  acwrStatus: string | null;
+  acuteLoad: number | null;
+  chronicLoad: number | null;
+  trainingStatus: string | null;
+  enduranceScore: number | null;
+  hillScore: number | null;
+  fitnessAge: number | null;
+  ltHr: number | null;
+  ltSpeedMs: number | null;
+  floorsClimbed: number | null;
+  restingHr7d: number | null;
+  source?: WearableSource;
+}
+
 export interface WearableSnapshot {
   asOf: string;
   restingHr: number | null;
@@ -94,6 +128,8 @@ export interface WearableSeries {
   recovery: RecoveryPoint[];
   weight: WeightPoint[];
   activity: ActivityPoint[];
+  /** One point per day in the window (values null where the watch printed nothing). */
+  training: TrainingPoint[];
   latestSnapshot: WearableSnapshot | null;
 }
 
@@ -177,5 +213,24 @@ export function buildWearableSeries(rows: WearableDailyLike[]): WearableSeries {
     latestSnapshot = snap;
   }
 
-  return { sleep, recovery, weight, activity, latestSnapshot };
+  const training: TrainingPoint[] = sorted.map((r) => ({
+    date: dayKey(r.date),
+    readiness: r.trainingReadiness ?? null,
+    readinessLevel: r.trainingReadinessLevel ?? null,
+    acwr: toNum(r.acwr),
+    acwrStatus: r.acwrStatus ?? null,
+    acuteLoad: r.acuteLoad ?? null,
+    chronicLoad: r.chronicLoad ?? null,
+    trainingStatus: r.trainingStatus ?? null,
+    enduranceScore: r.enduranceScore ?? null,
+    hillScore: r.hillScore ?? null,
+    fitnessAge: toNum(r.fitnessAge),
+    ltHr: r.ltHr ?? null,
+    ltSpeedMs: toNum(r.ltSpeedMs),
+    floorsClimbed: r.floorsClimbed ?? null,
+    restingHr7d: r.restingHr7d ?? null,
+    source: r.mergedSource,
+  }));
+
+  return { sleep, recovery, weight, activity, training, latestSnapshot };
 }

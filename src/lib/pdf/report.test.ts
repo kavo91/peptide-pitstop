@@ -1,15 +1,69 @@
 import { describe, it, expect } from "vitest";
+import { extractPdfText } from "@/lib/pdf-text";
 import {
   buildReportPdf,
   formatDoseDateTime,
   summariseSideEffects,
   safe,
   buildLabComparison,
+  type ReportBodyComp,
   type ReportData,
   type ReportLabPanel,
 } from "./report";
 
 const PDF_MAGIC = "%PDF";
+
+/**
+ * A defensive second attempt on a fresh buffer copy. The action itself no
+ * longer retries (the pdf.js legacy extractor does not need it); this is only
+ * here so a flaky first read cannot fail an unrelated PDF-content assertion.
+ */
+async function pdfText(buf: Buffer): Promise<string> {
+  try {
+    return await extractPdfText(buf);
+  } catch {
+    return extractPdfText(Buffer.from(buf));
+  }
+}
+
+/**
+ * SYNTHETIC body-composition section: two scans (the first is the comparator
+ * from before the range), one RMR test. No real serial, facility or health
+ * numbers — round figures only.
+ */
+function sampleBodyComp(): ReportBodyComp {
+  const d = (s: string) => new Date(s);
+  const prep = "fasted yes (12 h), no caffeine yes, no training prior day yes, active travel no, hydrated and voided unknown, illness-free 14 d unknown";
+  return {
+    scans: [
+      { date: d("2026-03-10T09:00:00"), device: "SynthCo Model X", software: "1.0.0", fatKg: 17.0, leanKg: 61.5, bmcKg: 3.0, pctFat: 20.9, almKg: 28.5, ffmi: 20.36, almi: 8.99, vatG: 450, bmdGcm2: 1.145, bmdZ: -0.4, prepSummary: prep, reportLinked: false },
+      { date: d("2026-06-10T09:00:00"), device: "SynthCo Model X", software: "1.0.0", fatKg: 16.8, leanKg: 62.0, bmcKg: 3.0, pctFat: 20.5, almKg: 28.6, ffmi: 20.51, almi: 9.03, vatG: 430, bmdGcm2: 1.150, bmdZ: -0.3, prepSummary: prep, reportLinked: true },
+    ],
+    deltas: [
+      { metric: "Fat mass", unit: "kg", previous: 17.0, latest: 16.8, delta: -0.2, tier: "within_noise", technical: 0.37, practical: 0.7, comparability: "comparable" },
+      { metric: "Lean mass", unit: "kg", previous: 61.5, latest: 62.0, delta: 0.5, tier: "within_noise", technical: 0.89, practical: 3.01, comparability: "comparable" },
+      { metric: "Body fat", unit: "%", previous: 20.9, latest: 20.5, delta: -0.4, tier: "within_noise", technical: 0.5, practical: 1.7, comparability: "comparable" },
+      { metric: "VAT", unit: "g", previous: 450, latest: 430, delta: -20, tier: "within_noise", technical: 32.8, practical: 65.6, comparability: "comparable" },
+      { metric: "RMR", unit: "kcal/d", previous: 1750, latest: 1900, delta: 150, tier: "indeterminate", technical: 387.8, practical: null, comparability: "comparable" },
+    ],
+    rmr: [
+      {
+        date: d("2026-06-10T09:03:00"),
+        method: "indirect calorimetry, VO2 only",
+        measuredKcal: 1900,
+        perKgFfm: 29.2,
+        ladder: [
+          { label: "Mifflin-St Jeor (1990)", predictedKcal: 1755, ratio: 1.08 },
+          { label: "Cunningham 1980", predictedKcal: 1930, ratio: 0.98 },
+          { label: "Tinsley 2019 (FFM)", predictedKcal: 1968, ratio: 0.97 },
+        ],
+        conditions: "fasted yes, no caffeine yes, no training prior day yes, active travel no, rested 20 min, awake and still yes, illness-free 14 d yes",
+      },
+    ],
+    lscSource: "default LSC (device class, not this clinic's precision)",
+    lifeEventDays: { illness: 3, travel: 0 },
+  };
+}
 
 /** A representative, fully-populated report (no DB needed — plain literal). */
 function sampleData(): ReportData {
@@ -68,6 +122,7 @@ function sampleData(): ReportData {
         ],
       },
     ],
+    bodyComp: sampleBodyComp(),
   };
 }
 
@@ -83,6 +138,7 @@ function emptyData(): ReportData {
     sideEffects: [],
     wellness: { weight: [], avgCalories: null, avgProteinG: null, avgWaterMl: null, hydrationTargetMl: null },
     labs: [],
+    bodyComp: null,
   };
 }
 
@@ -98,6 +154,40 @@ describe("buildReportPdf", () => {
     const buf = await buildReportPdf(emptyData());
     expect(buf.length).toBeGreaterThan(0);
     expect(buf.subarray(0, 4).toString("ascii")).toBe(PDF_MAGIC);
+  });
+});
+
+describe("body-composition section", () => {
+  it("prints the heading, the scan dates, the flag words as the page prints them, and the RMR row", async () => {
+    const buf = await buildReportPdf(sampleData());
+    const text = await pdfText(buf);
+    expect(text).toContain("Body composition (DEXA)");
+    expect(text).toContain("resting metabolic rate");
+    expect(text).toContain("2026-03-10");
+    expect(text).toContain("2026-06-10");
+    expect(text).toContain("within noise");
+    expect(text).toContain("indeterminate");
+    expect(text).toContain("comparable");
+    expect(text).toContain("SynthCo Model X");
+    expect(text).toContain("1900");
+    expect(text).toContain("illness 3, travel 0");
+    // Provenance + the standing disclaimer sentence.
+    expect(text).toContain("Values as printed by the scanner");
+    expect(text).toContain("Differences smaller than the noise band are not changes");
+  });
+
+  it("prints the not-comparable line when a pair exists but every delta was hidden", async () => {
+    const data = sampleData();
+    data.bodyComp = { ...sampleBodyComp(), deltas: [] };
+    const text = await pdfText(await buildReportPdf(data));
+    expect(text).toContain("not comparable");
+    expect(text).not.toContain("within noise");
+  });
+
+  it("degrades to the empty line when the section is null", async () => {
+    const text = await pdfText(await buildReportPdf(emptyData()));
+    expect(text).toContain("Body composition (DEXA)");
+    expect(text).toContain("No DEXA or RMR recorded in this range.");
   });
 });
 

@@ -101,10 +101,17 @@ def build_day(
     weight: Any = None,
     vo2max: Any = None,
     activities: Any = None,
+    training: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble one raw day dict from already-fetched pieces. Only includes keys
-    whose fetch produced a value, so a missing metric never injects null noise."""
+    whose fetch produced a value, so a missing metric never injects null noise.
+    `training` is a mapping of raw-day key → raw Connect response; empty or None
+    values are dropped the same way."""
     day: dict[str, Any] = {"date": date}
+    for key, value in (training or {}).items():
+        if value is None or value == [] or value == {}:
+            continue
+        day[key] = value
     if sleep is not None:
         day["sleep"] = sleep
     if summary is not None:
@@ -241,6 +248,19 @@ def fetch_day(display_name: str, cdate: str) -> dict[str, Any]:
         ),
     )
     activities = pick_activities(activities_raw, cdate)
+    # Training metrics (Fenix 9 Pro era, 2026-09-03). Library helpers encode the right
+    # Connect paths; each is isolated by _try and passed through RAW — the app-side
+    # normaliser (normaliseTraining) does every bit of shaping, per the sidecar contract.
+    training = {
+        "trainingReadiness": _try("trainingReadiness", lambda: _client.get_training_readiness(cdate)),
+        "trainingStatus": _try("trainingStatus", lambda: _client.get_training_status(cdate)),
+        "enduranceScore": _try("enduranceScore", lambda: _client.get_endurance_score(cdate)),
+        "hillScore": _try("hillScore", lambda: _client.get_hill_score(cdate)),
+        "fitnessAge": _try("fitnessAge", lambda: _client.get_fitnessage_data(cdate)),
+        "lactateThreshold": _try("lactateThreshold", lambda: _client.get_lactate_threshold()),
+        "floors": _try("floors", lambda: _client.get_floors(cdate)),
+        "rhr": _try("rhr", lambda: _client.get_rhr_day(cdate)),
+    }
     return build_day(
         cdate,
         sleep=sleep,
@@ -249,6 +269,7 @@ def fetch_day(display_name: str, cdate: str) -> dict[str, Any]:
         weight=weight,
         vo2max=vo2max,
         activities=activities,
+        training=training,
     )
 
 

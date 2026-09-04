@@ -139,3 +139,58 @@ describe("normaliseGarminDay", () => {
     expect(d.respirationAvg).toBeCloseTo(15.1, 5);
   });
 });
+
+// ── Training metrics (Fenix 9 Pro era endpoints; shapes verified 2026-09-03) ──
+import trainingSample from "./__fixtures__/garmin-training-sample.json";
+import { normaliseTraining, LT_SPEED_TO_MS } from "./wearable-normalise";
+import { paceFromSpeed } from "./wearable-chart";
+
+describe("normaliseTraining", () => {
+  const t = normaliseTraining(trainingSample);
+
+  it("prefers the primary tracker's readiness entry and the primary device's training status", () => {
+    expect(t.trainingReadiness).toBe(61);
+    expect(t.trainingReadinessLevel).toBe("MODERATE");
+    expect(t.acuteLoad).toBe(420);
+    expect(t.chronicLoad).toBe(300);
+    expect(t.acwr).toBeCloseTo(1.4, 9);
+    expect(t.acwrStatus).toBe("HIGH");
+    expect(t.trainingStatus).toBe("PRODUCTIVE");
+  });
+
+  it("converts Garmin's tenth-of-m/s threshold speed to the pace Garmin Connect displays", () => {
+    // Garmin Connect → Performance Stats → Lactate Threshold displays the pace
+    // for a raw speed value that is tenths of m/s (0.35 → 3.5 m/s → 4:46 /km).
+    expect(LT_SPEED_TO_MS).toBe(10);
+    const ms = t.ltSpeedMs!;
+    expect(ms).toBeCloseTo(3.5, 9);
+    expect(paceFromSpeed(ms)).toBe("4:46 /km");
+  });
+
+  it("reads the scores, fitness age and lactate threshold as printed", () => {
+    expect(t.enduranceScore).toBe(5400);
+    expect(t.hillScore).toBe(35);
+    expect(t.fitnessAge).toBeCloseTo(34.5, 9);
+    expect(t.ltHr).toBe(162);
+    expect(t.ltSpeedMs).toBeCloseTo(3.5, 9); // raw 0.35 x10 = m/s (4:46 /km)
+  });
+
+  it("sums floors ascended by the descriptor index and averages the 7-day resting HR", () => {
+    expect(t.floorsClimbed).toBe(12); // 3 + 4.2 + 5 → 12.2 → 12
+    expect(t.restingHr7d).toBe(57); // mean of 55,56,58,57,59,56,58 = 57
+  });
+
+  it("falls back to the VO2max block's fitness age and leaves everything undefined on an old-style day", () => {
+    const noAge = normaliseTraining({ ...trainingSample, fitnessAge: undefined });
+    expect(noAge.fitnessAge).toBe(36);
+    const bare = normaliseTraining(sample);
+    for (const v of Object.values(bare)) expect(v).toBeUndefined();
+  });
+
+  it("flows into normaliseGarminDay", () => {
+    const d = normaliseGarminDay(trainingSample);
+    expect(d.trainingReadiness).toBe(61);
+    expect(d.restingHr7d).toBe(57);
+    expect(d.steps).toBe(8200);
+  });
+});

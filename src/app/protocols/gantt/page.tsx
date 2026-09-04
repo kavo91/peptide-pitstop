@@ -5,6 +5,7 @@ import { BackButton } from "@/components/BackButton";
 import { PitstopHeading } from "@/components/PitstopHeading";
 import { SignedOutNotice } from "@/components/SignedOutNotice";
 import { GanttRowEditor } from "@/components/GanttRowEditor";
+import { GanttScanMarkers, SCAN_MARKER_COPY, type GanttScanMarker } from "@/components/GanttScanMarkers";
 import { PAGE_MAIN } from "@/lib/layout";
 import { startOfDay } from "@/lib/schedule/schedule";
 import { fmtCycleDay } from "@/lib/cycle/format";
@@ -111,6 +112,19 @@ export default async function ProtocolGanttPage() {
   const ticks = weekTicks(window);
   const todayPct = dayCentrePercent(window, today);
 
+  // DEXA scans inside the window, by local calendar day (BodyCompScan.localDay is
+  // the home-TZ day, the same convention localDay() above uses for lib dates).
+  // Dates only — no values leave the row.
+  const scans = await prisma.bodyCompScan.findMany({
+    where: { userId: user.id, localDay: { gte: localDay(window.start), lte: localDay(window.end) } },
+    select: { id: true, localDay: true },
+    orderBy: { localDay: "asc" },
+  });
+  const scanMarkers: GanttScanMarker[] = scans.map((s) => {
+    const day = new Date(`${s.localDay}T00:00:00`);
+    return { id: s.id, day: s.localDay, pct: dayCentrePercent(window, day), label: fmtCycleDay(day) };
+  });
+
   return (
     <main className={PAGE_MAIN}>
       <BackButton fallback="/protocols" />
@@ -132,6 +146,7 @@ export default async function ProtocolGanttPage() {
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm bg-line/20" aria-hidden /> break</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm bg-accent/25 ring-1 ring-inset ring-accent/50" aria-hidden /> projected restart</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-3 w-px bg-danger" aria-hidden /> today</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-px bg-accent2Strong/70" aria-hidden /> {SCAN_MARKER_COPY.legend}</span>
         <span className="ml-auto font-medium text-ink">{runningToday} running today</span>
       </div>
 
@@ -163,6 +178,8 @@ export default async function ProtocolGanttPage() {
                 >
                   ▾
                 </span>
+                {/* DEXA tags — same overlay layer as the today marker */}
+                <GanttScanMarkers markers={scanMarkers} tag />
               </div>
             </div>
 
@@ -239,6 +256,8 @@ export default async function ProtocolGanttPage() {
                       style={{ left: `${todayPct}%` }}
                       aria-hidden
                     />
+                    {/* DEXA scan lines */}
+                    <GanttScanMarkers markers={scanMarkers} />
                   </div>
                 </div>
                 <GanttRowEditor

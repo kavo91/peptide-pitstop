@@ -17,8 +17,18 @@ const nextConfig = {
     // node_modules (traced into the standalone output).
     // (Next 14 still uses the experimental key; renamed to top-level
     // `serverExternalPackages` in Next 15.)
-    serverComponentsExternalPackages: ["pdfkit", "web-push"],
-    serverActions: { allowedOrigins: ["peptides.example.com", "peptides.example.com", "peptides-dev.example.com"] },
+    // pdfjs-dist (legacy build) must also stay external: in Node it runs its parser
+    // in-process by dynamically importing "./pdf.worker.mjs" relative to its own
+    // module URL, which only resolves when Node loads the package natively from
+    // node_modules (webpack would inline pdf.mjs and lose that sibling path).
+    serverComponentsExternalPackages: ["pdfkit", "web-push", "pdfjs-dist"],
+    serverActions: {
+      allowedOrigins: ["peptides.example.com", "peptides-dev.example.com"],
+      // Report uploads (`uploadDexaReport`) send a PDF through a server action; the
+      // default 1 MB cap would reject most scanner reports. The action itself refuses
+      // anything over 10 MB with a readable message; this only needs to be above that.
+      bodySizeLimit: "11mb",
+    },
     instrumentationHook: true,
   },
 };

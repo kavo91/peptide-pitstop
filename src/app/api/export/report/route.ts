@@ -5,6 +5,7 @@ import { decryptField } from "@/lib/crypto/fieldEncryption";
 import { deserializeSideEffects } from "@/lib/side-effects";
 import { brandName } from "@/lib/design";
 import { expandBlendDose, type BlendComponent } from "@/lib/blends-core";
+import { getReportBodyComp } from "@/lib/bodycomp-data";
 import {
   buildReportPdf,
   type ReportData,
@@ -22,9 +23,9 @@ import {
  * not logged in -> 401. Default range = last 90 days; bad/missing params are
  * ignored and the default applies.
  *
- * All encrypted columns (notes, sideEffects, lab value, panel notes) are decrypted
- * server-side here -- ciphertext NEVER reaches the PDF builder, which is a pure
- * renderer. pdfkit is Node-only -> the route runs on the Node runtime.
+ * All encrypted columns (notes, sideEffects, lab value, panel notes, every
+ * body-composition number) are decrypted server-side here or in the data layer
+ * -- ciphertext NEVER reaches the PDF builder, which is a pure renderer. pdfkit is Node-only -> the route runs on the Node runtime.
  *
  * Responds `application/pdf` with a `peptide-report-YYYY-MM-DD.pdf` attachment.
  */
@@ -202,6 +203,11 @@ async function buildReportData(
   }
   const labs = [...panelMap.values()].sort((a, b) => a.collectedDate.getTime() - b.collectedDate.getTime());
 
+  // -- Body composition: DEXA scans in range (+ the nearest earlier scan as the
+  //    comparator) and RMR tests in range, decrypted in the data layer. Deltas
+  //    come from the same function the /body page calls.
+  const bodyComp = await getReportBodyComp(userId, from, to);
+
   return {
     brand: brandName(),
     ownerEmail,
@@ -218,6 +224,7 @@ async function buildReportData(
       hydrationTargetMl,
     },
     labs,
+    bodyComp,
   };
 }
 

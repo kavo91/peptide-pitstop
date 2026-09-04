@@ -38,7 +38,7 @@ const TABS: Tab[] = [
  * user is on one of these, the More tab lights up (no other tab would match).
  * NB: "/doses" is deliberately absent — it owns the Doses tab.
  */
-const MORE_ROUTES = ["/prescriptions", "/analytics", "/protocols", "/journal", "/bloodwork", "/settings"];
+const MORE_ROUTES = ["/prescriptions", "/analytics", "/protocols", "/journal", "/bloodwork", "/body", "/costs", "/settings"];
 
 function isActive(pathname: string, match: string): boolean {
   return match === "/" ? pathname === "/" : pathname.startsWith(match);

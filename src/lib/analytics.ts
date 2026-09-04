@@ -11,6 +11,7 @@ import { buildResolveInput } from "@/lib/titration/from-protocol";
 import { forwardDosePoints } from "@/lib/plasma-projection";
 import { decryptField } from "@/lib/crypto/fieldEncryption";
 import { libraryHalfLifeHours, libraryComponents } from "@/lib/peptide-library";
+import { loadExposureMaps } from "@/lib/exposure-maps";
 import { type ExposureRow } from "@/lib/blends-core";
 import { deserializeSideEffects } from "@/lib/side-effects";
 import { dayAnchor } from "@/lib/tz-day";
@@ -308,8 +309,8 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
     // A retired course stops where its replacement began: an early-closed
     // protocol still carries an endDate weeks out, and every slot it emits past
     // the handover is unloggable (the doses went to the successor) — counted
-    // here they are pure fabricated misses that deflate adherence (prod
-    // Tesamorelin, 2026-08-14). Same stop line the doses timeline uses.
+    // here they are pure fabricated misses that deflate adherence. Same stop
+    // line the doses timeline uses.
     const supersededKey = supersededAt.get(proto.id);
     for (const s of resolved.slots) {
       if (s.date < adherenceWindow.from || s.date > adherenceWindow.to) continue; // clip the buffer
@@ -404,23 +405,9 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
   // Blend composition: BlendComponent is authoritative when populated, so the
   // chart and the exports cannot drift apart. Falls back to the static library
   // table for blends that have no rows yet, keeping existing behaviour intact.
-  const blendRows = await prisma.blendComponent.findMany({
-    where: { peptide: { userId } },
-    include: { componentPeptide: { select: { name: true, aliases: true, halfLifeHours: true } } },
-    orderBy: { sortIndex: "asc" },
-  });
-  type ChartComponent = { name: string; mg: number; halfLifeHours?: number | null; aliases?: string | null };
-  const dbComponentsByPeptide = new Map<string, ChartComponent[]>();
-  for (const r of blendRows) {
-    const list = dbComponentsByPeptide.get(r.peptideId) ?? [];
-    list.push({
-      name: r.componentPeptide.name,
-      mg: Number(r.massMg.toString()),
-      halfLifeHours: r.componentPeptide.halfLifeHours ? Number(r.componentPeptide.halfLifeHours.toString()) : null,
-      aliases: r.componentPeptide.aliases ?? null,
-    });
-    dbComponentsByPeptide.set(r.peptideId, list);
-  }
+  // Lookup maps are shared with the body-composition exposure ledger
+  // (lib/exposure-maps) so the two surfaces resolve doses identically.
+  const { prepPeptide, protoPeptide, componentsByBlendId: dbComponentsByPeptide } = await loadExposureMaps(userId);
 
   for (const proto of plasmaProtocols) {
     const peptideId = proto.peptide.id;
@@ -563,16 +550,6 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
     where: { userId },
     _sum: { doseMcg: true },
   });
-  const protoPeptide = new Map(
-    (await prisma.protocol.findMany({ where: { userId }, select: { id: true, peptideId: true, peptide: { select: { name: true } } } }))
-      .map((p) => [p.id, { peptideId: p.peptideId, name: p.peptide.name }]),
-  );
-  const prepPeptide = new Map(
-    (await prisma.preparation.findMany({
-      where: { vial: { userId } },
-      select: { id: true, vial: { select: { peptideId: true, peptide: { select: { name: true } } } } },
-    })).map((p) => [p.id, { peptideId: p.vial.peptideId, name: p.vial.peptide.name }]),
-  );
   // The roll-up itself is pure and unit-tested in analytics-core; this function
   // only supplies the rows. Keep it that way — the rules it encodes (ad-hoc doses
   // count; preparation-first resolution) are the ones that previously drifted.

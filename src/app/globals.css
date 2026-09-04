@@ -30,6 +30,13 @@
   --ok:            10 122 90;     /* #0A7A5E — >=4.5:1 on white */
   --warn:          154 90 6;
   --danger:        200 40 40;
+  /* DEXA tissue layers (body figure, 2026-09-03) — categorical trio, CVD-checked with the dataviz validator */
+  --tissue-fat:    10 122 110;  /* #0A7A6E teal (= accent-strong) */
+  --tissue-lean:   194 65 12;  /* #C2410C burnt orange */
+  --tissue-bone:   76 91 199;  /* #4C5BC7 indigo */
+  /* Body-figure art plate: the rendered anatomy sits on this dark plate in EVERY theme, lit with the dark-theme trio */
+  --fig-plate:     11 15 20;
+  --fig-fat:       45 226 200;  --fig-fat-hi: 255 180 84;  --fig-lean: 240 114 155;  --fig-bone: 139 156 255;
   --env:           217 119 6;     /* #D97706 amber — DEV/env badge (distinct from --warn) */
   --font-mono:     ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
 }
@@ -49,6 +56,13 @@
   --ok:            62 232 168;
   --warn:          251 169 76;
   --danger:        255 99 99;
+  /* DEXA tissue layers (body figure, 2026-09-03) — categorical trio, CVD-checked with the dataviz validator */
+  --tissue-fat:    45 226 200;  /* #2DE2C8 neon teal (= accent) */
+  --tissue-lean:   240 114 155;  /* #F0729B rose */
+  --tissue-bone:   139 156 255;  /* #8B9CFF periwinkle */
+  /* Body-figure art plate: the rendered anatomy sits on this dark plate in EVERY theme, lit with the dark-theme trio */
+  --fig-plate:     11 15 20;
+  --fig-fat:       45 226 200;  --fig-fat-hi: 255 180 84;  --fig-lean: 240 114 155;  --fig-bone: 139 156 255;
   --env:           251 169 76;    /* orange — DEV/env badge */
 }
 
@@ -68,6 +82,13 @@
     --ok:            62 232 168;
     --warn:          251 169 76;
     --danger:        255 99 99;
+    /* DEXA tissue layers (body figure, 2026-09-03) — categorical trio, CVD-checked with the dataviz validator */
+    --tissue-fat:    45 226 200;  /* #2DE2C8 neon teal (= accent) */
+    --tissue-lean:   240 114 155;  /* #F0729B rose */
+    --tissue-bone:   139 156 255;  /* #8B9CFF periwinkle */
+    /* Body-figure art plate: the rendered anatomy sits on this dark plate in EVERY theme, lit with the dark-theme trio */
+    --fig-plate:     11 15 20;
+    --fig-fat:       45 226 200;  --fig-fat-hi: 255 180 84;  --fig-lean: 240 114 155;  --fig-bone: 139 156 255;
     --env:           251 169 76;    /* orange — DEV/env badge */
   }
 }
@@ -151,6 +172,13 @@ body {
   --ok:              46 209 106;  /* #2ED16A in-range / improving */
   --warn:           232 255 58;   /* #E8FF3A hi-viz */
   --danger:         255 77 77;    /* #FF4D4D redline */
+  /* DEXA tissue layers (body figure, 2026-09-03) — categorical trio, CVD-checked with the dataviz validator */
+  --tissue-fat:    255 91 20;  /* #FF5B14 race orange (= accent) */
+  --tissue-lean:   0 229 255;  /* #00E5FF cyan (= accent-2) */
+  --tissue-bone:   177 78 255;  /* #B14EFF sector purple */
+  /* Body-figure art plate: the rendered anatomy sits on this dark plate in EVERY theme, lit with the dark-theme trio */
+  --fig-plate:     14 15 18;
+  --fig-fat:       255 91 20;  --fig-fat-hi: 232 255 58;  --fig-lean: 0 229 255;  --fig-bone: 177 78 255;
   --gauge-slip:     255 91 20;    /* #FF5B14 race-orange — gauge "slipping" mid grade; dark keeps the original (vs hi-viz --warn) */
   --env:            232 255 58;   /* #E8FF3A hi-viz yellow — DEV/env badge */
   --radius-card:    10px;
@@ -182,8 +210,15 @@ body {
   --on-accent:       255 255 255;  /* white text ON blue fills */
   --line:             20 39 51;    /* hairline (used at low alpha) */
   --ok:               18 124 58;   /* #127C3A in-range / improving */
-  --warn:            180 83 9;     /* #B45309 */
+  --warn:            160 74 8;     /* #A04A08 — AA for 10 px pill text on its warn/10 tint over white (5.2:1) and page (4.9:1); #B45309 was 4.4:1 */
   --danger:          200 50 63;    /* #C8323F redline */
+  /* DEXA tissue layers (body figure, 2026-09-03) — categorical trio, CVD-checked with the dataviz validator */
+  --tissue-fat:    27 94 122;  /* #1B5E7A Gulf ink-blue (= accent-strong) */
+  --tissue-lean:   217 115 26;  /* #D9731A Gulf orange, darkened for 3:1 */
+  --tissue-bone:   107 63 160;  /* #6B3FA0 violet */
+  /* Body-figure art plate: the rendered anatomy sits on this dark plate in EVERY theme, lit with the dark-theme trio */
+  --fig-plate:     14 15 18;
+  --fig-fat:       255 91 20;  --fig-fat-hi: 232 255 58;  --fig-lean: 0 229 255;  --fig-bone: 177 78 255;
   --gauge-slip:      176 83 26;    /* #B0531A — AA amber on white (5.12:1); LIGHT counterpart of the dark race-orange */
   --env:             245 130 32;   /* #F58220 Gulf orange — DEV/env badge */
   --radius-card:    10px;
@@ -207,8 +242,15 @@ body {
     --on-accent:       255 255 255;
     --line:             20 39 51;
     --ok:               18 124 58;
-    --warn:            180 83 9;
+    --warn:            160 74 8;     /* #A04A08 — see the pitstop light block above */
     --danger:          200 50 63;
+    /* DEXA tissue layers (body figure, 2026-09-03) — categorical trio, CVD-checked with the dataviz validator */
+    --tissue-fat:    27 94 122;  /* #1B5E7A Gulf ink-blue (= accent-strong) */
+    --tissue-lean:   217 115 26;  /* #D9731A Gulf orange, darkened for 3:1 */
+    --tissue-bone:   107 63 160;  /* #6B3FA0 violet */
+    /* Body-figure art plate: the rendered anatomy sits on this dark plate in EVERY theme, lit with the dark-theme trio */
+    --fig-plate:     14 15 18;
+    --fig-fat:       255 91 20;  --fig-fat-hi: 232 255 58;  --fig-lean: 0 229 255;  --fig-bone: 177 78 255;
     --gauge-slip:      176 83 26;    /* #B0531A — AA amber on white */
     --env:             245 130 32;   /* #F58220 Gulf orange — DEV/env badge */
     --radius-card:    10px;

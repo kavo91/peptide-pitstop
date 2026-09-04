@@ -9,6 +9,7 @@ function series(parts: Partial<WearableSeries>): WearableSeries {
     recovery: parts.recovery ?? [],
     weight: parts.weight ?? [],
     activity: parts.activity ?? [],
+    training: parts.training ?? [],
     latestSnapshot: parts.latestSnapshot ?? null,
   };
 }

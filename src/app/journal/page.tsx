@@ -9,10 +9,12 @@ import { decryptField } from "@/lib/crypto/fieldEncryption";
 import { formatSideEffects, deserializeSideEffects, resolveSymptomList } from "@/lib/side-effects";
 import { mergeWellnessLog, type ManualDay } from "@/lib/wellness-log";
 import { getWearableWindow } from "@/lib/wearable";
+import { getEcgOverview } from "@/lib/ecg";
 import { startOfDay } from "@/lib/schedule/schedule";
 import { viewerToday } from "@/lib/viewer-tz";
 import { BackButton } from "@/components/BackButton";
 import { WearableSection } from "@/components/wellness/WearableSection";
+import { EcgSection } from "@/components/wellness/EcgSection";
 import { TodayCard } from "@/components/wellness/TodayCard";
 import { PitstopHeading } from "@/components/PitstopHeading";
 import { activeDesign } from "@/lib/design";
@@ -52,13 +54,16 @@ export default async function JournalPage() {
   const wearFrom = startOfDay(viewer.date);
   wearFrom.setDate(wearFrom.getDate() - 7);
 
-  const [entries, wearable] = await Promise.all([
+  const [entries, wearable, ecg] = await Promise.all([
     prisma.journalEntry.findMany({
       where: { userId: user.id },
       orderBy: { date: "desc" },
       take: 30,
     }),
     getWearableWindow(user.id, wearFrom, wearTo),
+    // ECG is not on the 7-day window: recordings are occasional, so the section
+    // always shows the latest one rather than "nothing this week".
+    getEcgOverview(user.id),
   ]);
 
   // Decrypt free-text here (the merge helper stays pure), then merge the manual
@@ -128,6 +133,7 @@ export default async function JournalPage() {
             block and WearableSection keeps its mt-10 gap below the text column. */}
         <div className="min-[1900px]:min-w-0 min-[1900px]:flex-1 min-[1900px]:-mt-10">
           <WearableSection series={wearable} />
+          <EcgSection latest={ecg.latest} history={ecg.history} total={ecg.total} />
         </div>
       </div>
     </main>

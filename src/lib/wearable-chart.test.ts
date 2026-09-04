@@ -6,6 +6,7 @@ import {
   latestNonNull,
   secondsToHours,
   formatDayKeyShort,
+  paceFromSpeed,
 } from "./wearable-chart";
 
 describe("extent", () => {
@@ -88,5 +89,18 @@ describe("formatDayKeyShort", () => {
   it("formats a YYYY-MM-DD key as 'D Mon'", () => {
     expect(formatDayKeyShort("2026-06-20")).toBe("20 Jun");
     expect(formatDayKeyShort("2026-01-05")).toBe("5 Jan");
+  });
+});
+
+describe("paceFromSpeed", () => {
+  it("converts a real m/s running speed to min:sec per km", () => {
+    expect(paceFromSpeed(3.6)).toBe("4:38 /km");
+    expect(paceFromSpeed(5)).toBe("3:20 /km");
+  });
+  it("returns null for absent, zero or negative speed", () => {
+    expect(paceFromSpeed(null)).toBeNull();
+    expect(paceFromSpeed(undefined)).toBeNull();
+    expect(paceFromSpeed(0)).toBeNull();
+    expect(paceFromSpeed(-1)).toBeNull();
   });
 });

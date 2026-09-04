@@ -6,6 +6,7 @@ import {
   dayAnchor,
   sanitizeLocalDayTz,
   resolveTrackingDayStamp,
+  zonedWallClockToInstant,
   trackingDayKeyInTz,
   previousDayKey,
   localeTimeLabel,
@@ -166,5 +167,42 @@ describe("localeTimeLabel", () => {
   it("falls back to the runtime zone when a stored tz is rejected by ICU", () => {
     const d = new Date("2026-07-18T02:09:00Z");
     expect(localeTimeLabel(d, "Not/AZone")).toBe(localeTimeLabel(d, null));
+  });
+});
+
+describe("zonedWallClockToInstant", () => {
+  const at = (parts: { year: number; month: number; day: number; hour: number; minute: number }, tz: string) =>
+    zonedWallClockToInstant(parts, tz).toISOString();
+
+  it("reads a printed local time as the instant the clock there showed it", () => {
+    expect(at({ year: 2024, month: 6, day: 12, hour: 9, minute: 17 }, "Australia/Brisbane")).toBe("2024-06-11T23:17:00.000Z");
+    expect(at({ year: 2024, month: 6, day: 12, hour: 9, minute: 17 }, "Europe/London")).toBe("2024-06-12T08:17:00.000Z");
+    expect(at({ year: 2024, month: 6, day: 12, hour: 9, minute: 17 }, "UTC")).toBe("2024-06-12T09:17:00.000Z");
+  });
+
+  it("uses the offset in force on the day, not today's", () => {
+    // London: BST in July (UTC+1), GMT in January (UTC+0).
+    expect(at({ year: 2026, month: 7, day: 1, hour: 12, minute: 0 }, "Europe/London")).toBe("2026-07-01T11:00:00.000Z");
+    expect(at({ year: 2026, month: 1, day: 1, hour: 12, minute: 0 }, "Europe/London")).toBe("2026-01-01T12:00:00.000Z");
+  });
+
+  it("lands either side of a daylight-saving change correctly", () => {
+    // New York springs forward at 02:00 on 8 March 2026.
+    expect(at({ year: 2026, month: 3, day: 8, hour: 1, minute: 30 }, "America/New_York")).toBe("2026-03-08T06:30:00.000Z");
+    expect(at({ year: 2026, month: 3, day: 8, hour: 3, minute: 30 }, "America/New_York")).toBe("2026-03-08T07:30:00.000Z");
+  });
+
+  it("still returns an instant for a wall-clock time the clock skipped", () => {
+    // 02:30 never happens on that date in New York — the clock jumps 02:00 → 03:00.
+    // It resolves to the moment before the gap (01:30 EST) rather than throwing.
+    const skipped = at({ year: 2026, month: 3, day: 8, hour: 2, minute: 30 }, "America/New_York");
+    expect(skipped).toBe("2026-03-08T06:30:00.000Z");
+  });
+
+  it("round-trips through the day key it will be stored under", () => {
+    const d = zonedWallClockToInstant({ year: 2024, month: 6, day: 12, hour: 23, minute: 45 }, "Australia/Brisbane");
+    expect(dayKeyInTz(d, "Australia/Brisbane")).toBe("2024-06-12");
+    // The same instant is still the 12th in UTC (13:45) and in New York (09:45).
+    expect(dayKeyInTz(d, "America/New_York")).toBe("2024-06-12");
   });
 });
