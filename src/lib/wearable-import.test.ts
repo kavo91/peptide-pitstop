@@ -109,3 +109,35 @@ describe("importWellnessDays", () => {
   });
 });
 
+
+// ── Training columns ride the same upsert ──
+import trainingSample from "./__fixtures__/garmin-training-sample.json";
+
+describe("buildWearableUpsertArgs — training metrics", () => {
+  it("maps every training field into create and update", () => {
+    const day = normaliseGarminDay(trainingSample);
+    const args = buildWearableUpsertArgs("u1", day, id);
+    for (const part of [args.create, args.update] as Array<Record<string, unknown>>) {
+      expect(part.trainingReadiness).toBe(61);
+      expect(part.trainingReadinessLevel).toBe("MODERATE");
+      expect(part.acuteLoad).toBe(420);
+      expect(part.chronicLoad).toBe(300);
+      expect(part.acwr).toBeCloseTo(1.4, 9);
+      expect(part.acwrStatus).toBe("HIGH");
+      expect(part.trainingStatus).toBe("PRODUCTIVE");
+      expect(part.enduranceScore).toBe(5400);
+      expect(part.hillScore).toBe(35);
+      expect(part.fitnessAge).toBeCloseTo(34.5, 9);
+      expect(part.ltHr).toBe(162);
+      expect(part.ltSpeedMs).toBeCloseTo(3.5, 9);
+      expect(part.floorsClimbed).toBe(12);
+      expect(part.restingHr7d).toBe(57);
+    }
+  });
+
+  it("leaves the training columns undefined for a day without training keys (update never nulls them)", () => {
+    const args = buildWearableUpsertArgs("u1", normaliseGarminDay(sample), id);
+    expect((args.update as Record<string, unknown>).trainingReadiness).toBeUndefined();
+    expect((args.update as Record<string, unknown>).acwr).toBeUndefined();
+  });
+});

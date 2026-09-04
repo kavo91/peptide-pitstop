@@ -112,5 +112,22 @@ class RecentDatesTests(unittest.TestCase):
         self.assertEqual(len(sync.recent_dates(0)), 1)
 
 
+
+class BuildDayTrainingTests(unittest.TestCase):
+    """The training mapping rides build_day untouched; empty/None responses are dropped."""
+
+    def test_training_keys_ride_through_raw(self):
+        day = sync.build_day(
+            "2026-06-04",
+            training={"trainingReadiness": [{"score": 61}], "floors": None, "rhr": [], "hillScore": {}, "enduranceScore": {"overallScore": 6800}},
+        )
+        self.assertEqual(day["trainingReadiness"], [{"score": 61}])
+        self.assertEqual(day["enduranceScore"], {"overallScore": 6800})
+        for absent in ("floors", "rhr", "hillScore"):
+            self.assertNotIn(absent, day)
+
+    def test_no_training_mapping_changes_nothing(self):
+        self.assertEqual(sync.build_day("2026-06-05"), {"date": "2026-06-05"})
+
 if __name__ == "__main__":
     unittest.main()

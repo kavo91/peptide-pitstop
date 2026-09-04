@@ -29,6 +29,12 @@ const config: Config = {
         ok: "rgb(var(--ok) / <alpha-value>)",
         warn: "rgb(var(--warn) / <alpha-value>)",
         danger: "rgb(var(--danger) / <alpha-value>)",
+        // DEXA tissue layers on the body figure (categorical trio per design pack; see globals.css).
+        tissueFat: "rgb(var(--tissue-fat) / <alpha-value>)",
+        tissueLean: "rgb(var(--tissue-lean) / <alpha-value>)",
+        tissueBone: "rgb(var(--tissue-bone) / <alpha-value>)",
+        // The dark plate the body-figure art sits on (same in light themes — the art is lit for dark).
+        figPlate: "rgb(var(--fig-plate) / <alpha-value>)",
       },
       // Driven by CSS vars so a design pack can retune corner radii without a
       // rebuild. Fallbacks keep the default design byte-identical (16/10) when

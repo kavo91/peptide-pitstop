@@ -55,6 +55,11 @@ model User {
   pushSubscriptions PushSubscription[]
   reminderSends     ReminderSend[]
   purchases         Purchase[]
+  bodyCompScans     BodyCompScan[]
+  metabolicTests    MetabolicTest[]
+  bodyCompPrecision BodyCompPrecision[]
+  lifeEvents        LifeEvent[]
+  ecgRecordings     EcgRecording[]
 }
 
 // Web Push subscription for an installed PWA — one row per device/browser.
@@ -197,23 +202,23 @@ model Vial {
 // and allocated across its lines at read time by `allocationMethod`. Nothing
 // derived is stored: change the method and every landed cost recomputes.
 model Purchase {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  vendor    String? // supplier/pharmacy name — plaintext, like Prescription.source (grouped on)
-  reference String? // ENCRYPTED — invoice/order number
-  orderedAt DateTime // Date-only (UTC midnight), per MIGRATIONS.md rule 3
-  receivedAt DateTime? // Date-only (UTC midnight)
-  currency  String   @default("AUD")
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id])
+  vendor           String? // supplier/pharmacy name — plaintext, like Prescription.source (grouped on)
+  reference        String? // ENCRYPTED — invoice/order number
+  orderedAt        DateTime // Date-only (UTC midnight), per MIGRATIONS.md rule 3
+  receivedAt       DateTime? // Date-only (UTC midnight)
+  currency         String    @default("AUD")
   // Invoice-level overhead. Allocatable overhead = shipping + tax + fees − discount.
-  shippingCost Decimal @default(0)
-  taxCost      Decimal @default(0)
-  otherFees    Decimal @default(0)
-  discount     Decimal @default(0)
+  shippingCost     Decimal   @default(0)
+  taxCost          Decimal   @default(0)
+  otherFees        Decimal   @default(0)
+  discount         Decimal   @default(0)
   /// value = pro-rata on line subtotal | quantity = equal per unit | none = leave unallocated
-  allocationMethod String @default("value")
-  notes     String? // ENCRYPTED
-  createdAt DateTime @default(now())
+  allocationMethod String    @default("value")
+  notes            String? // ENCRYPTED
+  createdAt        DateTime  @default(now())
 
   items PurchaseItem[]
 
@@ -324,7 +329,7 @@ model Protocol {
   /// Groups every revision of one course. Null = standalone and resolves to the
   /// protocol's own id (lib/protocol-revision.courseKey), so existing rows need
   /// no backfill. Analytics groups on this rather than walking a self-link.
-  courseId      String?
+  courseId String?
 
   steps        ProtocolStep[]
   plannedDoses PlannedDose[]
@@ -435,15 +440,18 @@ model Document {
   id                 String   @id @default(cuid())
   userId             String
   user               User     @relation(fields: [userId], references: [id])
-  kind               String   // prescription | lab_report | other
+  kind               String   // prescription | lab_report | dexa_report | rmr_report | ecg_report | other
   filePath           String
   mime               String?
   uploadedAt         DateTime @default(now())
-  extractionStatus   String   @default("pending") // pending | extracted | confirmed | failed
+  extractionStatus   String   @default("pending") // pending | extracted | confirmed | failed | manual (manual = keyed by hand, no parser run)
   extractionConfidence Decimal?
 
-  prescriptions Prescription[]
-  labPanels     LabPanel[]
+  prescriptions  Prescription[]
+  labPanels      LabPanel[]
+  bodyCompScans  BodyCompScan[]
+  metabolicTests MetabolicTest[]
+  ecgRecordings  EcgRecording[]
 }
 
 model Biomarker {
@@ -550,6 +558,23 @@ model WearableDaily {
   spo2Avg        Int?
   respirationAvg Decimal?
 
+  // Training metrics (Fenix 9 Pro era, added 2026-09-03 via ALTER TABLE ADD COLUMN — never a table rebuild).
+  // Plaintext like every other daily number here; the full Garmin responses stay under encrypted `raw`.
+  trainingReadiness      Int? // 0–100
+  trainingReadinessLevel String? // as Garmin prints: NONE | LOW | MODERATE | HIGH | PRIME
+  acuteLoad              Int? // 7-day acute training load
+  chronicLoad            Int? // 28-day chronic training load
+  acwr                   Decimal? // acute : chronic workload ratio
+  acwrStatus             String? // as Garmin prints (e.g. LOW | OPTIMAL | HIGH)
+  trainingStatus         String? // leading word of Garmin's feedback phrase (e.g. PRODUCTIVE)
+  enduranceScore         Int?
+  hillScore              Int?
+  fitnessAge             Decimal?
+  ltHr                   Int? // lactate-threshold heart rate, bpm
+  ltSpeedMs              Decimal? // lactate-threshold running speed, m/s (pace derived at read time)
+  floorsClimbed          Int?
+  restingHr7d            Int? // Garmin's 7-day resting-HR average ending this day
+
   // logged activities (deliberate workouts; distinct from passive steps/intensity) — plaintext (read on month/wellness paths)
   activityCount  Int?
   activitiesJson String?
@@ -559,4 +584,259 @@ model WearableDaily {
   syncedAt DateTime @default(now())
 
   @@unique([userId, date, source])
+}
+
+// ── Body composition (DEXA + RMR) ──
+
+/// Whole-body DXA header: one row per scan. Totals INCLUDE the head (Hologic's basis for FMI/LMI/ALMI).
+/// Every report-derived number is an ENCRYPTED string; decrypt in server code, never SQL.
+/// Subtotal (head-excluded) is derived (total − head), never stored.
+model BodyCompScan {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id])
+  scannedAt           DateTime // scan instant (epoch ms at rest)
+  localDay            String // "YYYY-MM-DD" — joins WearableDaily.date (local midnight) and DoseLog.localDay
+  tz                  String // e.g. "Australia/Brisbane"
+  modality            String   @default("dxa") // dxa only; BIA never lands here (stays in WearableDaily)
+  deviceMake          String? // "Hologic"
+  deviceModel         String? // "Horizon A"
+  deviceSerial        String? // comparability + LSC key; private column, excluded from exports
+  softwareVersion     String? // parser layout key; a change breaks comparability
+  scanMode            String? // "Auto Whole Body Fan Beam"
+  facility            String? // short label, no address
+  referencePopulation String? // e.g. "NHANES/BMDCS 2012 White Male" — percentiles are meaningless without it
+  sex                 String // male | female (reference-population basis; User has no sex column)
+  ageYears            Decimal // age at scan as printed
+  heightCm            Decimal
+  clinicWeightKg      String? // ENCRYPTED  clinic scale; DXA total mass is a separate number
+
+  // Whole-body totals (grams, as printed)
+  totalFatG  String // ENCRYPTED
+  totalLeanG String // ENCRYPTED  lean soft tissue, EXCLUDING BMC
+  totalBmcG  String // ENCRYPTED
+  totalMassG String // ENCRYPTED
+  pctFat     String // ENCRYPTED  as printed; lib recomputes and checksums
+  pctFatYn   String? // ENCRYPTED  young-normal percentile
+  pctFatAm   String? // ENCRYPTED  age-matched percentile
+
+  // Hologic visceral-adipose estimate (device-derived, not recomputable). Store all three; they are one measurement.
+  vatMassG     String? // ENCRYPTED
+  vatVolumeCm3 String? // ENCRYPTED
+  vatAreaCm2   String? // ENCRYPTED
+
+  // Whole-body bone summary (not a diagnostic site; site-specific scans are a clinician call)
+  totalBmdGcm2 String? // ENCRYPTED
+  bmdTScore    String? // ENCRYPTED  stored, hidden in UI under age 50
+  bmdZScore    String? // ENCRYPTED
+  bmdCvPct     Decimal? // "Total BMD CV" as printed; probably vendor, not site precision
+
+  // Report-printed percentiles for indices the lib recomputes (NHANES tables are not reproducible in-app)
+  fmiYn  String? // ENCRYPTED
+  fmiAm  String? // ENCRYPTED
+  lmiYn  String? // ENCRYPTED
+  lmiAm  String? // ENCRYPTED
+  almiYn String? // ENCRYPTED
+  almiAm String? // ENCRYPTED
+
+  // Pre-scan standardisation — tri-state (null = not recorded). NEVER default to true.
+  prepFasted             Boolean?
+  prepFastingHours       Decimal?
+  prepNoCaffeine         Boolean?
+  prepNoTrainingPriorDay Boolean? // no moderate/vigorous session in the prior 24 h
+  prepActiveTravel       Boolean? // cycled/ran to the clinic (true = confound, recorded not judged)
+  prepEuhydratedVoided   Boolean? // normal fluids, nothing in the last 30 min, bladder voided
+  prepIllnessFree14d     Boolean?
+  prepSameDeviceAsPrior  Boolean? // derived from deviceSerial+softwareVersion when both known; manual otherwise
+  creatineStatus         String? // stable | started | stopped | none — creatine/glycogen move DXA lean ~1 kg
+  carbPattern48h         String? // normal | loaded | depleted
+
+  // Versioned JSON tail for the clutter that is kept-but-not-columned: regional BMD for ribs/spine/pelvis,
+  // total area, analysis timestamp, operator-free header fields. Never queried; never exported.
+  reportJson String?
+
+  documentId String?
+  document   Document? @relation(fields: [documentId], references: [id])
+  notes      String? // ENCRYPTED
+  createdAt  DateTime  @default(now())
+
+  regions        BodyCompRegion[]
+  metabolicTests MetabolicTest[]
+
+  @@index([userId, scannedAt])
+}
+
+/// Regional rows exactly as APEX prints them. Subtotal/total are derived. Numeric fields are ENCRYPTED strings.
+model BodyCompRegion {
+  id       String       @id @default(cuid())
+  scanId   String
+  scan     BodyCompScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  region   String // l_arm | r_arm | trunk | l_leg | r_leg | head | android | gynoid
+  bmcG     String? // ENCRYPTED  null for android/gynoid (not printed)
+  fatG     String // ENCRYPTED
+  leanG    String // ENCRYPTED  lean soft tissue; lean+BMC derived
+  totalG   String // ENCRYPTED
+  pctFat   String // ENCRYPTED
+  pctFatYn String? // ENCRYPTED
+  pctFatAm String? // ENCRYPTED
+  bmdGcm2  String? // ENCRYPTED  arms / legs / head only
+
+  @@unique([scanId, region])
+}
+
+/// Resting metabolic rate by indirect calorimetry. Manual entry (results page is an image).
+model MetabolicTest {
+  id                         String   @id @default(cuid())
+  userId                     String
+  user                       User     @relation(fields: [userId], references: [id])
+  testedAt                   DateTime
+  localDay                   String
+  tz                         String
+  method                     String // ic_vo2_only | ic_vo2_vco2 | other
+  deviceLabel                String? // e.g. "VO2-only analyser (model unconfirmed)"
+  facility                   String?
+  measuredRmrKcal            String // ENCRYPTED
+  kcalPerLitreO2             String? // ENCRYPTED  e.g. 4.81 (implied RQ ≈ 0.79)
+  vo2MlMin                   String? // ENCRYPTED  if the clinic prints it
+  vco2MlMin                  String? // ENCRYPTED
+  rq                         String? // ENCRYPTED
+  durationMin                Int?
+  steadyStateCvPct           String? // ENCRYPTED  Compher criterion: 5 min at CV < 10 %
+  sex                        String
+  ageYears                   Decimal
+  heightCm                   Decimal
+  weightKg                   String // ENCRYPTED  the weight the clinic fed its equation
+  reportedPredictedKcal      String? // ENCRYPTED  as printed; lib recomputes every equation
+  reportedPredictionEquation String? // label only ("Mifflin-St Jeor")
+  reportedActivityFactor     String? // ENCRYPTED  stored verbatim, NEVER used to compute a target
+  reportedActivityLabel      String? // e.g. "Heavy"
+
+  // Pre-test standardisation — tri-state. Shared list with the scan; when both exist on one visit the form asks once.
+  prepFasted             Boolean?
+  prepFastingHours       Decimal?
+  prepNoCaffeine         Boolean?
+  prepNoTrainingPriorDay Boolean?
+  prepActiveTravel       Boolean?
+  prepRestMinBeforeTest  Int?
+  prepRested             Boolean?
+  prepIllnessFree14d     Boolean?
+  prepAwakeQuiet         Boolean? // still, no talking, no reading during the test
+  roomTempC              Decimal?
+
+  bodyCompScanId String?
+  bodyCompScan   BodyCompScan? @relation(fields: [bodyCompScanId], references: [id]) // same-visit scan → FFM denominator
+  documentId     String?
+  document       Document?     @relation(fields: [documentId], references: [id])
+  notes          String? // ENCRYPTED
+  createdAt      DateTime      @default(now())
+
+  @@index([userId, testedAt])
+}
+
+/// Precision (LSC) configuration per device serial. Seeded with literature defaults; overwritten by the clinic's own
+/// in-vivo precision or by a same-day repositioned duplicate scan. Lives in its own table so User is never rebuilt.
+model BodyCompPrecision {
+  id                      String   @id @default(cuid())
+  userId                  String
+  user                    User     @relation(fields: [userId], references: [id])
+  deviceSerial            String? // null = default for any device
+  source                  String // device_class_default | clinic_supplied | measured_own | iscd_min
+  fatCvPct                Decimal? // technical same-day CV; LSC = 2.77 × CV
+  leanCvPct               Decimal?
+  pctFatLscAbs            Decimal? // %-points
+  almCvPct                Decimal?
+  vatCvPct                Decimal?
+  bmdCvPct                Decimal?
+  rmrCvPct                Decimal? // device+biological combined
+  practicalFatMultiplier  Decimal? // consecutive-day / same-day ratio (Zemski 2019: 1.9 fat, 3.4 lean)
+  practicalLeanMultiplier Decimal?
+  note                    String?
+  createdAt               DateTime @default(now())
+
+  @@unique([userId, deviceSerial, source])
+}
+
+/// Illness / travel / other windows that contaminate wearable and scan comparisons. Shaded on every
+/// chart; days inside a window are excluded from interval statistics and counted.
+model LifeEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  kind      String // illness | travel | other
+  startDay  String // YYYY-MM-DD (local)
+  endDay    String // YYYY-MM-DD (local), inclusive; >= startDay
+  label     String? // short, plaintext, e.g. "flu" — NEVER a diagnosis narrative; details go in notes
+  notes     String? // ENCRYPTED
+  createdAt DateTime @default(now())
+
+  @@index([userId, startDay])
+}
+
+/// One Garmin ECG recording, imported whole from the PDF the Connect phone app
+/// exports (Garmin has no ECG API — the PDF is the only route out).
+///
+/// Everything here is READ OFF THE REPORT. The app prints Garmin's own words
+/// and never adds a reading of its own: `result`, `interpretation` and
+/// `leadNote` are stored verbatim and rendered verbatim.
+///
+/// PII on the page — patient name, date of birth, age and sex — is deliberately
+/// NOT parsed and has no column here (same rule the DEXA importer follows).
+///
+/// Identity is `(userId, recordedLocalKey)` — the time the report PRINTS, not the
+/// instant that time resolves to. Re-importing the same recording (a second
+/// download of the same ECG is a different file with a different `sourceHash`)
+/// refreshes the row instead of duplicating it, and it stays one recording even
+/// if the second import happens from a device in a different timezone.
+model EcgRecording {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  recordedAt       DateTime // the IN-DOCUMENT recording instant, never the file's download time
+  /// The recording time EXACTLY AS PRINTED, "YYYY-MM-DDTHH:mm". This, not the
+  /// instant, is the recording's identity: the page carries no timezone, so the
+  /// instant depends on which device did the importing, and importing the same
+  /// report from a phone in another zone would otherwise store it twice.
+  recordedLocalKey String
+  localDay         String // "YYYY-MM-DD" — joins WearableDaily.date and DoseLog.localDay
+  tz               String // IANA zone the local day was resolved in
+
+  // Garmin's own findings, verbatim.
+  result          String // ENCRYPTED  e.g. "Sinus Rhythm"
+  avgHeartRateBpm String? // ENCRYPTED  integer as printed
+  symptoms        String? // ENCRYPTED  null when the report prints "--" (none reported)
+  interpretation  String? // ENCRYPTED  e.g. "This ECG recording does not show signs of AFib."
+  leadNote        String? // e.g. "This waveform is similar to a Lead I ECG." — device fact, not a finding
+
+  // Recording parameters as printed in the footer.
+  durationSec   Int? // 30 for the standard recording
+  paperSpeedMmS Decimal? // 25
+  gainMmMv      Decimal? // 10
+  sampleRateHz  Int? // 512 (the watch's rate; the PDF's own trace is decimated)
+
+  // Provenance. `pdfTemplateVersion` is the parser's layout key — a change there
+  // can silently break extraction, so it is stored on every row.
+  deviceModel        String? // "fenix 9 Pro - inReach, 43 mm"
+  deviceSoftware     String? // "6.38"
+  ecgAppVersion      String?
+  connectWebVersion  String?
+  pdfTemplateVersion String?
+  backendVersion     String?
+
+  // The printed trace, re-drawn in the app's own palette. Vector path endpoints
+  // lifted from the PDF and expressed as microvolts against the recording's own
+  // isoelectric median; `waveformPoints` lets a list query say "this one has a
+  // trace" without decrypting the samples.
+  waveformJson   String? // ENCRYPTED  { baselineMv, strips: [{ t0Ms, dtMs, uv: number[] }] }
+  waveformPoints Int?
+
+  sourceHash String // sha256 of the PDF bytes — an exact re-upload is recognised before parsing
+
+  documentId String?
+  document   Document? @relation(fields: [documentId], references: [id])
+  notes      String? // ENCRYPTED
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([userId, recordedLocalKey])
+  @@index([userId, recordedAt])
 }

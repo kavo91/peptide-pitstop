@@ -90,3 +90,16 @@ export function formatDayKeyShort(key: string): string {
   const month = MONTHS[(m ?? 1) - 1] ?? "";
   return `${d ?? ""} ${month}`.trim();
 }
+
+/**
+ * Running speed (m/s) → "m:ss /km". 1000 ÷ speed, rounded to the second.
+ *
+ * Safe for `WearableDaily.ltSpeedMs`: the normaliser has already converted
+ * Garmin's tenth-of-m/s lactate-threshold field to true m/s (see
+ * `LT_SPEED_TO_MS`), so this prints the pace Garmin Connect shows.
+ */
+export function paceFromSpeed(speedMs: number | null | undefined): string | null {
+  if (speedMs == null || !(speedMs > 0)) return null;
+  const secPerKm = Math.round(1000 / speedMs);
+  return `${Math.floor(secPerKm / 60)}:${String(secPerKm % 60).padStart(2, "0")} /km`;
+}

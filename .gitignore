@@ -29,3 +29,7 @@ __pycache__/
 prisma/prisma/
 prisma/scratch*.db
 .env.designdev
+
+# DOCUMENTS_DIR default (<dirname(DATABASE_URL)>/documents) — uploaded clinic PDFs
+prisma/documents/
+documents/

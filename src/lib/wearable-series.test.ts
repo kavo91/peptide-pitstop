@@ -129,3 +129,21 @@ describe("buildWearableSeries", () => {
     expect(s.latestSnapshot?.activitiesAsOf).toBeNull();
   });
 });
+
+// ── Training series (added 2026-09-03) ──
+describe("buildWearableSeries — training", () => {
+  it("emits one training point per day, in date order, with Decimal-ish numbers converted", () => {
+    const s = buildWearableSeries([
+      { date: new Date(2026, 5, 20), trainingReadiness: 61, trainingReadinessLevel: "MODERATE", acwr: dec("1.4"), acwrStatus: "HIGH", acuteLoad: 420, chronicLoad: 300, trainingStatus: "PRODUCTIVE", enduranceScore: 6800, hillScore: 40, fitnessAge: dec("31.5"), ltHr: 168, ltSpeedMs: dec("3.2"), floorsClimbed: 12, restingHr7d: 52 },
+      { date: new Date(2026, 5, 19) },
+    ]);
+    expect(s.training.map((t) => t.date)).toEqual(["2026-06-19", "2026-06-20"]);
+    const t = s.training[1];
+    expect(t.readiness).toBe(61); expect(t.readinessLevel).toBe("MODERATE");
+    expect(t.acwr).toBeCloseTo(1.4, 9); expect(t.acwrStatus).toBe("HIGH");
+    expect(t.fitnessAge).toBeCloseTo(31.5, 9); expect(t.ltSpeedMs).toBeCloseTo(3.2, 9);
+    expect(t.floorsClimbed).toBe(12); expect(t.restingHr7d).toBe(52);
+    const empty = s.training[0];
+    expect(empty.readiness).toBeNull(); expect(empty.acwr).toBeNull(); expect(empty.trainingStatus).toBeNull();
+  });
+});

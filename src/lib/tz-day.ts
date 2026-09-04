@@ -164,3 +164,43 @@ export function localeTimeLabel(d: Date, tz: string | null): string {
     return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   }
 }
+
+/** The wall-clock parts of instant `d` as read in zone `tz`, as a UTC epoch. */
+function wallClockEpoch(d: Date, tz: string): number {
+  const p = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(d);
+  const get = (type: string) => Number(p.find((x) => x.type === type)?.value ?? "0");
+  return Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+}
+
+/**
+ * The instant at which the clock in zone `tz` reads the given wall-clock time.
+ *
+ * A printed report states a local time and no offset — this is what turns
+ * "12 June 2024 @ 9:17 AM" plus a zone into a storable instant.
+ *
+ * Two passes: the first finds the zone's offset near the guess, the second
+ * re-reads it at the corrected instant, which is what makes the hour either
+ * side of a DST change land correctly.
+ *
+ * A wall-clock time that a spring-forward SKIPS has no instant at all. This
+ * settles such a value on the moment one offset-step before the gap — the
+ * instant the clock last showed before jumping over it. That case cannot arise
+ * from a report, which prints a time that was actually observed; it is defined
+ * here only so the function is total.
+ */
+export function zonedWallClockToInstant(
+  parts: { year: number; month: number; day: number; hour: number; minute: number },
+  tz: string,
+): Date {
+  const target = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+  let instant = target;
+  for (let pass = 0; pass < 2; pass++) {
+    instant = target - (wallClockEpoch(new Date(instant), tz) - instant);
+  }
+  return new Date(instant);
+}

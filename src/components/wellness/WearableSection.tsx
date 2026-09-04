@@ -10,6 +10,7 @@ import { SleepChart } from "./SleepChart";
 import { RecoveryChart } from "./RecoveryChart";
 import { BodyCompositionChart } from "./BodyCompositionChart";
 import { ActivityChart } from "./ActivityChart";
+import { TrainingChart } from "./TrainingChart";
 import { SyncNowButton } from "./SyncNowButton";
 
 export function WearableSection({ series }: { series: WearableSeries }) {
@@ -40,6 +41,7 @@ export function WearableSection({ series }: { series: WearableSeries }) {
           <RecoveryChart recovery={series.recovery} detailHref="/journal/chart/recovery" />
           <BodyCompositionChart weight={series.weight} detailHref="/journal/chart/body" />
           <ActivityChart activity={series.activity} detailHref="/journal/chart/activity" />
+          <TrainingChart training={series.training} />
         </div>
       )}
     </section>

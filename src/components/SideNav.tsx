@@ -11,12 +11,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogoLockup } from "@/components/Logo";
-import { logout } from "@/app/actions/auth";
+import { SignOutButton } from "@/components/SignOutButton";
 import { APP_VERSION } from "@/lib/version";
 import type { TodayDoseStatus } from "@/lib/today";
 import {
   LayoutDashboard, CalendarDays, FlaskConical, LineChart, HeartPulse,
   Droplet, ClipboardList, FileText, Receipt, Settings, Plus, type LucideIcon,
+  PersonStanding,
 } from "lucide-react";
 
 interface NavItem {
@@ -37,6 +38,7 @@ const SECONDARY: NavItem[] = [
   { href: "/costs", label: "Costs", match: "/costs", icon: Receipt },
   { href: "/journal", label: "Wellness", match: "/journal", icon: HeartPulse },
   { href: "/bloodwork", label: "Bloodwork", match: "/bloodwork", icon: Droplet },
+  { href: "/body", label: "Body", match: "/body", icon: PersonStanding },
   { href: "/protocols", label: "Protocols", match: "/protocols", icon: ClipboardList },
   { href: "/prescriptions", label: "Prescriptions", match: "/prescriptions", icon: FileText },
   { href: "/settings", label: "Settings", match: "/settings", icon: Settings },
@@ -124,9 +126,7 @@ export function SideNav({ envLabel, brand, doseStatus }: { envLabel?: string | n
       <nav className="flex flex-col gap-1">{SECONDARY.map(item)}</nav>
 
       <div className="mt-auto pt-4">
-        <form action={logout}>
-          <button type="submit" className="w-full rounded-control bg-surface px-4 py-3 text-sm font-medium text-danger ring-1 ring-line/10">Sign out</button>
-        </form>
+        <SignOutButton />
         <p className="px-3 pt-4 text-[10px] text-muted">{brand} · not medical advice · v{APP_VERSION}</p>
       </div>
     </aside>
