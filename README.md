@@ -12,7 +12,7 @@
 
 > **Your data never leaves your server.** Handing your weight, hormone, and dosing history to someone else's startup is a leap of faith — Peptide Pitstop removes the leap. No accounts in someone else's cloud. No telemetry. No third party between you and your health record. You host it, you back it up, you export it, you delete it — on your terms.
 
-Peptide Pitstop is a private, self-hosted web app for managing peptide and GLP-1 therapy — reconstitution math, dose logging, prescriptions, bloodwork, and plasma-level modelling — installable as an offline PWA on your phone and living entirely on infrastructure you own. The dosing engine, the highest-stakes part, is exhaustively tested — pure decimal math, no floating-point drift.
+Peptide Pitstop is a private, self-hosted web app for managing peptide and GLP-1 therapy — reconstitution math, dose logging, prescriptions, bloodwork, plasma-level modelling, DEXA body composition, Garmin training metrics and Garmin ECG import — installable as an offline PWA on your phone and living entirely on infrastructure you own. The dosing engine, the highest-stakes part, is exhaustively tested — pure decimal math, no floating-point drift.
 
 > ℹ️ Single-user today, with the data model already scoped for multi-user.
 
@@ -55,7 +55,7 @@ If you stop using Peptide Pitstop tomorrow, you walk away with a complete, reada
 
 ## 📸 Screenshots
 
-> All screenshots use demo seed data only (BPC-157, TB-500, Ipamorelin) — no real personal data.
+> Screenshots use demo seed data only (BPC-157, TB-500, Ipamorelin, plus made-up DEXA, RMR and Garmin training values). The one exception is the ECG: those strips are the maintainer's own recording, imported from the Garmin PDF. The app never reads the printed name or date of birth, so neither appears.
 
 **Today** — what's due and what's been logged, with one-tap actions
 ![Today](docs/screenshots/today.png)
@@ -69,6 +69,15 @@ If you stop using Peptide Pitstop tomorrow, you walk away with a complete, reada
 **Bloodwork** — biomarker panels, an in-range summary, and the comparison matrix
 ![Bloodwork](docs/screenshots/bloodwork.png)
 
+**Body composition.** The regional body figure from a DEXA scan, with the eight-region fat, lean and bone table beside it
+![Regional body figure and DEXA region table (demo data)](docs/screenshots/body-figure.png)
+
+**Training.** Garmin training readiness, load ratio, endurance and hill scores, fitness age and lactate threshold, charted beside the wellness series
+![Training card with Garmin training metrics (demo data)](docs/screenshots/training-card.png)
+
+**ECG.** Three strips redrawn from the PDF the Garmin ECG app exports, with the classification and average heart rate above them
+![Three ECG strips imported from a Garmin ECG PDF, the maintainer's own recording](docs/screenshots/ecg-strips.png)
+
 ### Light theme & mobile
 
 The motorsport "pit-wall" dark theme ships alongside a clean light theme, and the whole app is self-hosted on your hardware — and on your phone.
@@ -77,6 +86,7 @@ The motorsport "pit-wall" dark theme ships alongside a clean light theme, and th
 | --- | --- |
 | ![Today — light](docs/screenshots/today-light.png) | ![Today — mobile](docs/screenshots/today-mobile.png) |
 | ![Analytics — light](docs/screenshots/analytics-light.png) | ![Analytics — mobile](docs/screenshots/analytics-mobile.png) |
+| ![Regional body figure, light theme](docs/screenshots/body-figure-light.png) | ![Bloodwork — mobile](docs/screenshots/bloodwork-mobile.png) |
 
 ---
 
@@ -333,6 +343,7 @@ sqlite3 /path/to/peptides.db \
 
 - [Dose reminder notifications](docs/ha-reminder-automation.md) — Web Push setup (VAPID + device enrolment) and the optional Home Assistant fallback relay.
 - [Dose timestamps, tracking days, and timezones](docs/tracking-day-timezones.md) — authoritative instants, phone-local display, the 02:00 rollover, manual entries, and offline replay.
+- [Demo seed](prisma/seed.ts), what `npm run db:seed` loads: three example peptides, four weeks of doses, a lab panel, two made-up DEXA scans with an RMR test, an illness window, and four weeks of made-up Garmin wellness and training rows. The ECG import has no seed; drop your own Garmin PDF onto the journal page.
 
 > Apple Health is intentionally **not** a built-in integration: HealthKit is device-only and a self-hosted web app cannot write to it.
 

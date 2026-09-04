@@ -4,9 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Self-Hosted Peptide Tracker, Open Source · Peptide Pitstop</title>
-<meta name="description" content="Free, open-source, self-hosted peptide & GLP-1 tracker. Reconstitution math, dose logging, titration stacks, bloodwork, plasma modelling. One Docker container, no telemetry." />
+<meta name="description" content="Free, open-source, self-hosted peptide & GLP-1 tracker. Reconstitution math, titration stacks, bloodwork, plasma modelling, DEXA body composition, Garmin training and ECG import. One Docker container, no telemetry." />
 <meta property="og:title" content="Peptide Pitstop — Free, self-hosted peptide & GLP-1 tracker" />
-<meta property="og:description" content="Open-source, self-hosted tracker for peptide & GLP-1 therapy. Reconstitution math, titration stacks, bloodwork trends, plasma modelling. Docker, PWA, AES-256, no telemetry." />
+<meta property="og:description" content="Open-source, self-hosted tracker for peptide & GLP-1 therapy. Reconstitution math, titration stacks, bloodwork trends, plasma modelling, DEXA body composition, Garmin training and ECG import. Docker, PWA, AES-256, no telemetry." />
 <meta property="og:type" content="website" />
 <meta property="og:image" content="https://peptidepitstop.com/public/icons/icon-pitstop-512.png" />
 <link rel="icon" type="image/svg+xml" href="public/icons/icon-pitstop.svg" />
@@ -21,7 +21,7 @@
 <meta property="og:image:alt" content="Peptide Pitstop self-hosted dashboard showing the dose log and adherence heatmap" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="Peptide Pitstop — Free, self-hosted peptide & GLP-1 tracker" />
-<meta name="twitter:description" content="Open-source, self-hosted tracker for peptide & GLP-1 therapy. Reconstitution math, titration stacks, bloodwork trends, plasma modelling. Docker, PWA, AES-256, no telemetry." />
+<meta name="twitter:description" content="Open-source, self-hosted tracker for peptide & GLP-1 therapy. Reconstitution math, titration stacks, bloodwork trends, plasma modelling, DEXA body composition, Garmin training and ECG import. Docker, PWA, AES-256, no telemetry." />
 <meta name="twitter:image" content="https://peptidepitstop.com/public/icons/icon-pitstop-512.png" />
 <meta name="twitter:image:alt" content="Peptide Pitstop self-hosted dashboard showing the dose log and adherence heatmap" />
 <script type="application/ld+json">
@@ -30,13 +30,13 @@
   "@type": ["SoftwareApplication", "WebApplication"],
   "name": "Peptide Pitstop",
   "url": "https://peptidepitstop.com/",
-  "description": "Free, open-source, self-hosted web app for tracking peptide and GLP-1 therapy: reconstitution and draw-volume math, dose logging, titration stacks, bloodwork trends, single-compartment plasma-level modelling and an adherence heatmap. Deploys as one Docker container, installs as a PWA, encrypts data with AES-256-GCM, and sends no telemetry.",
+  "description": "Free, open-source, self-hosted web app for tracking peptide and GLP-1 therapy: reconstitution and draw-volume math, dose logging, titration stacks, bloodwork trends, single-compartment plasma-level modelling, an adherence heatmap, DEXA body composition with a regional body figure, Garmin training metrics and Garmin ECG import. Deploys as one Docker container, installs as a PWA, encrypts data with AES-256-GCM, and sends no telemetry.",
   "image": "https://peptidepitstop.com/public/icons/icon-pitstop-512.png",
   "applicationCategory": "HealthApplication",
   "applicationSubCategory": "Self-hosted peptide & GLP-1 therapy tracker",
   "operatingSystem": "Web browser (Chrome, Firefox, Safari, Edge); self-hosted via Docker on Linux, Windows, macOS",
   "browserRequirements": "Requires JavaScript. Modern browser. Installable as a PWA.",
-  "softwareVersion": "1.9.1",
+  "softwareVersion": "1.23.1",
   "isAccessibleForFree": true,
   "license": "https://github.com/kavo91/peptide-pitstop/blob/main/LICENSE",
   "downloadUrl": "https://github.com/kavo91/peptide-pitstop",
@@ -53,7 +53,10 @@
     "AES-256-GCM field encryption",
     "No telemetry",
     "Home Assistant dose reminders",
-    "Garmin wellness sync"
+    "Garmin wellness sync",
+    "DEXA body composition, RMR tests and a regional body figure",
+    "Garmin training metrics (readiness, load ratio, endurance, hill score)",
+    "Garmin ECG import from the exported PDF"
   ],
   "offers": { "@type": "Offer", "price": 0, "priceCurrency": "USD" },
   "author": {
@@ -70,7 +73,7 @@
   "name": "Peptide Pitstop",
   "url": "https://peptidepitstop.com/",
   "logo": "https://peptidepitstop.com/public/icons/icon-pitstop-512.png",
-  "description": "Free, open-source, self-hosted peptide & GLP-1 therapy tracker.",
+  "description": "Free, open-source, self-hosted peptide & GLP-1 therapy tracker with DEXA body composition, Garmin training metrics and Garmin ECG import.",
   "foundingDate": "2026-06-28",
   "sameAs": [
     "https://github.com/kavo91/peptide-pitstop",
@@ -89,7 +92,9 @@
     { "@type": "Question", "name": "Is my peptide and GLP-1 data private?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Your data never leaves your server. Identifying free-text and lab values are encrypted with AES-256-GCM before they touch disk, there is no telemetry or analytics SDK, and fonts are self-hosted — nothing is sent to a third party." } },
     { "@type": "Question", "name": "Can it do peptide reconstitution and draw-volume math?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. The built-in reconstitution engine computes concentration, draw volume, and syringe markings using exact decimal math (no floating-point drift), for both reconstituted and premixed vials." } },
     { "@type": "Question", "name": "Can it track how much my peptide protocol costs?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Each order is recorded as an invoice, and its shipping, tax, fees and discounts are shared across the lines it delivered, so every vial carries its honest share rather than its sticker price. Cost per dose is charged by delivered mass, so it stays correct through a part-used vial or a titration change, and consumables such as needles, syringes and swabs are included. Vials with no invoice are reported as uncosted, never as free." } },
-    { "@type": "Question", "name": "What can I track with Peptide Pitstop?", "acceptedAnswer": { "@type": "Answer", "text": "Reconstitution and draw-volume math, dose logs, titration and multi-peptide stacks, cycle plans, landed cost per vial and per dose including shipping and consumables, bloodwork and biomarker trends, single-compartment plasma-level modelling, and an adherence heatmap. Everything exports to CSV or PDF." } }
+    { "@type": "Question", "name": "Can it track DEXA scans and body composition?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Record whole-body DEXA scans and resting metabolic rate (RMR) tests, or upload the scanner's PDF report and confirm what it parsed. Changes between scans are judged against the scanner's least-significant-change bands, so a small move is reported as within noise rather than as a result. A regional body figure shows bone, lean and fat per region, illness and travel windows are shaded and left out of the intervals, and both tables export to CSV." } },
+    { "@type": "Question", "name": "Can it import a Garmin ECG?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Export the PDF from the Garmin ECG app and drop it onto the journal page. The app reads the classification, average heart rate and the traced waveform, then draws the strips in the app. It never reads the printed name or date of birth, and the clinical fields are encrypted before they reach disk." } },
+    { "@type": "Question", "name": "What can I track with Peptide Pitstop?", "acceptedAnswer": { "@type": "Answer", "text": "Reconstitution and draw-volume math, dose logs, titration and multi-peptide stacks, cycle plans, landed cost per vial and per dose including shipping and consumables, bloodwork and biomarker trends, single-compartment plasma-level modelling, an adherence heatmap, DEXA body composition with RMR tests, Garmin wellness and training metrics, and Garmin ECG recordings. Everything exports to CSV or PDF." } }
   ]
 }
 </script>
@@ -361,6 +366,8 @@
   .shot{border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--surface)}
   .shot img{display:block; width:100%; height:auto}
   .shot .cap{font-size:13px; color:var(--muted); padding:8px 12px; border-top:1px solid var(--line)}
+  .desk{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,2fr); gap:16px; margin-top:16px; align-items:start}
+  @media (max-width:720px){ .desk{grid-template-columns:1fr} }
   .mobiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-top:22px}
   .mobiles .shot img{max-height:560px; object-fit:cover; object-position:top}
   footer{border-top:1px solid var(--line); padding:36px 0; color:var(--muted); font-size:14px}
@@ -396,7 +403,7 @@
   /* ---- dark/light theme wipe ---- */
   .themewipe{margin-top:10px}
   .tw-stack{position:relative; border:1px solid var(--line); border-radius:12px; overflow:hidden;
-    background:var(--surface); aspect-ratio:2640/1840}
+    background:var(--surface); aspect-ratio:var(--ar,2640/1840)}
   .tw-stack .tw-base{width:100%; height:100%; object-fit:cover}
   .tw-stack img{display:block; width:100%; height:auto}
   .tw-stack .tw-over{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
@@ -604,7 +611,7 @@
                0 = outside range, 1 = partial, 2 = dosed, 3 = missed. The two
                3s are genuine missed days — that is what 83% adherence looks
                like, and faking a perfect grid would be a lie. -->
-          <div class="ppheat" id="ppheat" data-seq="00122222222223222222232222222220000" aria-label="Dose-history heatmap: 35 days, two missed"></div>
+          <div class="ppheat" id="ppheat" role="img" data-seq="00122222222223222222232222222220000" aria-label="Dose-history heatmap: 35 days, two missed"></div>
           <div class="cap">Plasma levels &amp; adherence &mdash; three peptides, forecast past &ldquo;now&rdquo;</div>
         </div>
       </div>
@@ -644,6 +651,10 @@
     <div class="card rise"><div class="tag">Bloodwork</div><h3>Biomarker trends</h3><p>Lab panels over time, in-range summaries, and a comparison matrix backed by a curated biomarker library.</p></div>
     <div class="card rise"><div class="tag">Analytics</div><h3>Plasma modelling</h3><p>Adherence, a dose-history heatmap, and single-compartment plasma-level estimates from your history and each peptide's half-life &mdash; with blends charted per component.</p></div>
     <div class="card rise"><div class="tag">Travel</div><h3>Timezone-proof days</h3><p>Each dose freezes its calendar day and zone at log time. Every date-driven screen anchors to your day, not the server's — abroad, the app stops highlighting tomorrow's column.</p></div>
+    <div class="card rise"><div class="tag">Body</div><h3>DEXA scans, judged against noise</h3><p>Record whole-body DEXA scans and resting metabolic rate (RMR) tests, or upload the scanner's PDF and confirm what it parsed. Changes between scans are checked against the scanner's least-significant-change bands, so a small lean-mass move is called within noise rather than a result. Illness and travel windows are shaded and left out of the intervals.</p></div>
+    <div class="card rise"><div class="tag">Body</div><h3>A regional body figure</h3><p>One body figure lights bone, lean and fat per region from the scan's own numbers, with the eight-region table beside it and a change view against the previous scan. Both the scan and RMR tables export to CSV and appear in the doctor report.</p></div>
+    <div class="card rise"><div class="tag">Garmin</div><h3>Training readiness beside your doses</h3><p>On watches that report them, the sync sidecar also pulls training readiness, the acute-to-chronic load ratio, endurance and hill scores, fitness age and lactate threshold. A Training card charts them next to sleep, HRV and body battery, so a rough week shows up beside the protocol that ran through it.</p></div>
+    <div class="card rise"><div class="tag">Garmin</div><h3>ECG import from the PDF</h3><p>Drop the PDF the Garmin ECG app exports onto the journal page. The app reads the classification, heart rate and the traced waveform, then redraws the three strips on a proper grid. It skips the printed name and date of birth, and the clinical fields are encrypted at rest.</p></div>
     <div class="card rise"><div class="tag">Integrations</div><h3>HA &amp; Garmin</h3><p>Optional Home Assistant dose reminders and Garmin wellness sync — your webhook, your credentials, your schedule. Reminders name your device's clock when you're travelling.</p></div>
     <div class="card rise"><div class="tag">Experience</div><h3>Installable PWA</h3><p>Add to your home screen and it works offline. A version heartbeat picks up new deploys on its own, so an installed app can't sit on a stale bundle for days.</p></div>
   </div>
@@ -652,7 +663,7 @@
 <section class="wrap" id="screens">
   <p class="eyebrow rise">A look inside</p>
   <h2 class="title teko rise">Dark &amp; light. Desk &amp;&nbsp;phone.</h2>
-  <p class="sub rise">A motorsport-inspired “pit-wall” design — carbon and race-orange — with a clean light theme. Dark desktop screens appear in the flythrough above. All screenshots use demo data only.</p>
+  <p class="sub rise">A motorsport-inspired “pit-wall” design — carbon and race-orange — with a clean light theme. Dark desktop screens appear in the flythrough above. Screenshots use demo data, except the ECG strips, which are the maintainer's own recording with no name or date of birth on them.</p>
   <!-- one frame, both themes: scrolling wipes dark -> light across the same
        screen, which demonstrates the theme rather than captioning it -->
   <div class="themewipe rise" id="themewipe">
@@ -662,6 +673,19 @@
       <span class="tw-edge" aria-hidden="true"></span>
     </div>
     <div class="tw-cap"><span>Analytics &amp; plasma</span><span class="tw-lbl" id="twlbl">Dark</span></div>
+  </div>
+  <p class="eyebrow rise" style="margin-top:34px">Body, training and heart</p>
+  <div class="themewipe rise">
+    <div class="tw-stack" style="--ar:1920/1088">
+      <img class="tw-base" src="docs/screenshots/body-figure-light.png" alt="Regional body figure from a DEXA scan in the light theme, with the eight-region fat, lean and bone table (demo data)" width="1920" height="1088" loading="lazy" />
+      <img class="tw-over" src="docs/screenshots/body-figure.png" alt="The same regional body figure and DEXA region table in the dark carbon theme (demo data)" width="1920" height="1088" loading="lazy" />
+      <span class="tw-edge" aria-hidden="true"></span>
+    </div>
+    <div class="tw-cap"><span>Body composition &amp; the regional body figure</span><span class="tw-lbl">Dark</span></div>
+  </div>
+  <div class="desk">
+    <div class="shot rise"><img src="docs/screenshots/training-card.png" alt="Training card with Garmin training readiness, load ratio, endurance and hill scores, fitness age and lactate threshold (demo data)" width="944" height="960" loading="lazy" /><div class="cap">Garmin training metrics (demo data)</div></div>
+    <div class="shot rise"><img src="docs/screenshots/ecg-strips.png" alt="Three ECG strips redrawn from an imported Garmin ECG PDF, with the classification and average heart rate above them" width="1920" height="1274" loading="lazy" /><div class="cap">Garmin ECG import, the maintainer's own recording</div></div>
   </div>
   <p class="eyebrow rise" style="margin-top:34px">On your phone</p>
   <div class="mobiles">
@@ -683,6 +707,8 @@
     <div class="rise"><h3>Is my peptide &amp; GLP-1 data private?</h3><p>Your data never leaves your server. Identifying free-text and lab values are encrypted with AES-256-GCM before they touch disk, there is no telemetry, and fonts are self-hosted — nothing reaches a third party.</p></div>
     <div class="rise"><h3>Can it do reconstitution math?</h3><p>Yes — the reconstitution engine computes concentration, draw volume, and syringe markings with exact decimal math (no floating-point drift), for both reconstituted and premixed vials.</p></div>
     <div class="rise"><h3>Can it track what my protocol costs?</h3><p>Yes. Record each order as an invoice and shipping is shared across every line it delivered, so a vial's cost includes its honest share of the courier fee. Cost per dose is charged by delivered mass — correct through a half-used vial or a titration change — and needles, syringes and swabs are counted too. A vial with no invoice is reported as uncosted rather than assumed free.</p></div>
+    <div class="rise"><h3>Can it track DEXA scans and body composition?</h3><p>Yes. Record whole-body DEXA scans and resting metabolic rate (RMR) tests, or upload the scanner's PDF and confirm what it parsed. Changes between scans are judged against the scanner's least-significant-change bands, so a small move is reported as within noise rather than a result. A regional body figure shows bone, lean and fat per region, and both tables export to CSV.</p></div>
+    <div class="rise"><h3>Can it import a Garmin ECG?</h3><p>Yes. Export the PDF from the Garmin ECG app and drop it onto the journal page. The app reads the classification, average heart rate and the traced waveform, then draws the strips in the app. It never reads the printed name or date of birth, and the clinical fields are encrypted before they reach disk.</p></div>
     <div class="rise"><h3>Does it work if I travel?</h3><p>Yes. Each dose freezes the calendar day and timezone it was logged in, so your history stays on the days you actually dosed. The Today view tracks your device's day and refreshes on wake, at local midnight, and when your timezone changes.</p></div>
   </div>
 </section></div>
@@ -728,9 +754,9 @@
     var ptick = prail.querySelectorAll('i');
 
     /* theme wipe: dark overlay retreats to reveal the light theme underneath */
-    var tw = document.getElementById('themewipe');
-    var twStack = tw && tw.querySelector('.tw-stack');
-    var twLbl = document.getElementById('twlbl');
+    var wipes = [].slice.call(document.querySelectorAll('.themewipe')).map(function(el){
+      return { stack: el.querySelector('.tw-stack'), lbl: el.querySelector('.tw-lbl') };
+    }).filter(function(w){ return w.stack; });
 
     /* phone shots drift at slightly different rates */
     var phones = [].slice.call(document.querySelectorAll('.mobiles .shot'));
@@ -747,7 +773,8 @@
       });
 
       /* theme wipe, driven by the frame's own travel through the viewport */
-      if (twStack){
+      for (var w=0;w<wipes.length;w++){
+        var twStack = wipes[w].stack, twLbl = wipes[w].lbl;
         var r = twStack.getBoundingClientRect();
         var k = (vh - r.top) / (vh * 0.75 + r.height * 0.5);
         k = k < 0 ? 0 : (k > 1 ? 1 : k);
