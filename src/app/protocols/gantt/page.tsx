@@ -128,7 +128,7 @@ export default async function ProtocolGanttPage() {
   return (
     <main className={PAGE_MAIN}>
       <BackButton fallback="/protocols" />
-      <div className="mb-6 flex items-start justify-between gap-3">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <PitstopHeading title="Gantt" index={8} className="text-3xl font-semibold tracking-tight" split={["GAN", "TT"]} />
           <p className="text-muted">

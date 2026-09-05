@@ -607,3 +607,189 @@ describe("reviseProtocol refuses a backdated revision", () => {
     expect(res.ok).toBe(true);
   });
 });
+
+describe("reviseProtocol carries the cycle plan forward", () => {
+  function armRevision(old: Record<string, unknown>) {
+    currentUser.mockResolvedValue({ id: "u1" });
+    protocolFindFirst.mockResolvedValue(old);
+    doseLogFindFirst.mockResolvedValue(null);
+    protocolCreate.mockResolvedValue({ id: "p-new" });
+    protocolUpdateMany.mockResolvedValue({ count: 1 });
+    // Not reset by the file's global beforeEach — clear here so this
+    // describe's own assertions never see another test's calls.
+    auditLogCreate.mockClear();
+    transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        protocol: { updateMany: protocolUpdateMany, create: protocolCreate },
+        auditLog: { create: auditLogCreate },
+      }),
+    );
+    runPlannedDoseGeneration.mockResolvedValue(undefined);
+  }
+
+  const CYCLE_OLD = {
+    id: "p-old",
+    peptideId: "pep1",
+    courseId: null,
+    status: "active",
+    stackId: null,
+    vialId: null,
+    startDate: new Date("2026-08-01T00:00:00.000Z"),
+    cycleOnWeeks: 4,
+    cycleOffWeeks: 2,
+    cycleAnchor: new Date("2026-08-01T00:00:00.000Z"),
+    endDate: new Date("2026-12-01T00:00:00.000Z"),
+  };
+  const NEXT = { name: "rev", peptideId: "pep1", scheduleType: "fixed_times" as const, steps: [] };
+
+  it("carries cycleOnWeeks onto the successor", async () => {
+    armRevision({ ...CYCLE_OLD });
+    const res = await reviseProtocol({ id: "p-old", startDate: "2026-09-01", next: NEXT });
+    expect(res.ok).toBe(true);
+    expect(protocolCreate.mock.calls[0][0].data.cycleOnWeeks).toBe(4);
+  });
+
+  it("carries cycleOffWeeks onto the successor", async () => {
+    armRevision({ ...CYCLE_OLD });
+    const res = await reviseProtocol({ id: "p-old", startDate: "2026-09-01", next: NEXT });
+    expect(res.ok).toBe(true);
+    expect(protocolCreate.mock.calls[0][0].data.cycleOffWeeks).toBe(2);
+  });
+
+  it("carries cycleAnchor onto the successor", async () => {
+    armRevision({ ...CYCLE_OLD });
+    const res = await reviseProtocol({ id: "p-old", startDate: "2026-09-01", next: NEXT });
+    expect(res.ok).toBe(true);
+    expect(protocolCreate.mock.calls[0][0].data.cycleAnchor).toEqual(new Date("2026-08-01T00:00:00.000Z"));
+  });
+
+  // A null anchor is not "no anchor" — cyclePlanEnd, cycleState and
+  // buildForecastPlan all fall back to `startDate`. Carrying null onto a
+  // successor that starts a month later therefore moved the cycle's plan end a
+  // month later too, and with it the reorder-by date the forecast computes
+  // from it. The fallback is pinned to the PREDECESSOR's startDate instead.
+  it("a null cycleAnchor with a cycle plan is pinned to the predecessor's startDate", async () => {
+    armRevision({ ...CYCLE_OLD, cycleAnchor: null });
+    const res = await reviseProtocol({ id: "p-old", startDate: "2026-09-01", next: NEXT });
+    expect(res.ok).toBe(true);
+    // The predecessor's own startDate, NOT the successor's 2026-09-01.
+    expect(protocolCreate.mock.calls[0][0].data.cycleAnchor).toEqual(new Date("2026-08-01T00:00:00.000Z"));
+  });
+
+  it("a null cycleAnchor with NO cycle plan stays null", async () => {
+    armRevision({ ...CYCLE_OLD, cycleAnchor: null, cycleOnWeeks: null, cycleOffWeeks: null });
+    const res = await reviseProtocol({ id: "p-old", startDate: "2026-09-01", next: NEXT });
+    expect(res.ok).toBe(true);
+    expect(protocolCreate.mock.calls[0][0].data.cycleAnchor).toBeNull();
+  });
+
+  it("a null cycleAnchor with a cycle plan and no predecessor startDate stays null", async () => {
+    armRevision({ ...CYCLE_OLD, cycleAnchor: null, startDate: null });
+    const res = await reviseProtocol({ id: "p-old", startDate: "2026-09-01", next: NEXT });
+    expect(res.ok).toBe(true);
+    expect(protocolCreate.mock.calls[0][0].data.cycleAnchor).toBeNull();
+  });
+
+  it("carries the predecessor's original endDate onto the successor when next.endDate is absent/blank", async () => {
+    armRevision({ ...CYCLE_OLD });
+    const resAbsent = await reviseProtocol({ id: "p-old", startDate: "2026-09-01", next: NEXT });
+    expect(resAbsent.ok).toBe(true);
+    expect(protocolCreate.mock.calls[0][0].data.endDate).toEqual(new Date("2026-12-01T00:00:00.000Z"));
+
+    protocolCreate.mockClear();
+    armRevision({ ...CYCLE_OLD });
+    const resBlank = await reviseProtocol({ id: "p-old", startDate: "2026-09-01", next: { ...NEXT, endDate: "   " } });
+    expect(resBlank.ok).toBe(true);
+    expect(protocolCreate.mock.calls[0][0].data.endDate).toEqual(new Date("2026-12-01T00:00:00.000Z"));
+  });
+
+  it("an explicit non-blank next.endDate overrides the carried one", async () => {
+    armRevision({ ...CYCLE_OLD });
+    const res = await reviseProtocol({ id: "p-old", startDate: "2026-09-01", next: { ...NEXT, endDate: "2026-10-15" } });
+    expect(res.ok).toBe(true);
+    expect(protocolCreate.mock.calls[0][0].data.endDate).toEqual(new Date("2026-10-15T00:00:00.000Z"));
+  });
+
+  it("refuses (writes nothing) when the carried/explicit endDate is on or before the new start", async () => {
+    armRevision({ ...CYCLE_OLD });
+    const res = await reviseProtocol({ id: "p-old", startDate: "2026-09-01", next: { ...NEXT, endDate: "2026-09-01" } });
+    expect(res.ok).toBe(false);
+    expect(res.ok ? "" : res.error).toBe(
+      "The course ends on 2026-09-01, before the revision would start. Pick an earlier start date or clear the end date.",
+    );
+    expect(protocolCreate).not.toHaveBeenCalled();
+    expect(protocolUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("creates the successor with shiftPinned NOT set", async () => {
+    armRevision({ ...CYCLE_OLD });
+    const res = await reviseProtocol({ id: "p-old", startDate: "2026-09-01", next: NEXT });
+    expect(res.ok).toBe(true);
+    expect(protocolCreate.mock.calls[0][0].data).not.toHaveProperty("shiftPinned");
+  });
+});
+
+describe("reviseProtocol close is compare-and-swap", () => {
+  function armRevision(old: Record<string, unknown>) {
+    currentUser.mockResolvedValue({ id: "u1" });
+    protocolFindFirst.mockResolvedValue(old);
+    doseLogFindFirst.mockResolvedValue(null);
+    protocolCreate.mockResolvedValue({ id: "p-new" });
+    protocolUpdateMany.mockResolvedValue({ count: 1 });
+    // Not reset by the file's global beforeEach — clear here so this
+    // describe's own assertions never see another test's calls.
+    auditLogCreate.mockClear();
+    transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        protocol: { updateMany: protocolUpdateMany, create: protocolCreate },
+        auditLog: { create: auditLogCreate },
+      }),
+    );
+    runPlannedDoseGeneration.mockResolvedValue(undefined);
+  }
+
+  const CAS_OLD = {
+    id: "p-old",
+    peptideId: "pep1",
+    courseId: null,
+    status: "active",
+    stackId: null,
+    vialId: null,
+    startDate: new Date("2026-08-01T00:00:00.000Z"),
+    cycleOnWeeks: null,
+    cycleOffWeeks: null,
+    cycleAnchor: null,
+    endDate: null,
+  };
+  const NEXT = { name: "rev", peptideId: "pep1", scheduleType: "fixed_times" as const, steps: [] };
+
+  it("the close updateMany where-clause includes status: \"active\"", async () => {
+    armRevision({ ...CAS_OLD });
+    const res = await reviseProtocol({ id: "p-old", startDate: "2026-09-01", next: NEXT });
+    expect(res.ok).toBe(true);
+    expect(protocolUpdateMany.mock.calls[0][0].where).toMatchObject({ id: "p-old", status: "active" });
+  });
+
+  it("refuses when updateMany resolves { count: 0 }, and writes no successor or audit row", async () => {
+    armRevision({ ...CAS_OLD });
+    protocolUpdateMany.mockResolvedValue({ count: 0 });
+    const res = await reviseProtocol({ id: "p-old", startDate: "2026-09-01", next: NEXT });
+    expect(res.ok).toBe(false);
+    expect(res.ok ? "" : res.error).toBe("This protocol was already revised or closed. Refresh and try again.");
+    expect(protocolCreate).not.toHaveBeenCalled();
+    expect(auditLogCreate).not.toHaveBeenCalled();
+  });
+
+  it("double apply creates exactly one successor across two calls", async () => {
+    armRevision({ ...CAS_OLD });
+    protocolUpdateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+
+    const first = await reviseProtocol({ id: "p-old", startDate: "2026-09-01", next: NEXT });
+    expect(first.ok).toBe(true);
+    expect(protocolCreate).toHaveBeenCalledTimes(1);
+
+    const second = await reviseProtocol({ id: "p-old", startDate: "2026-09-01", next: NEXT });
+    expect(second.ok).toBe(false);
+    expect(protocolCreate).toHaveBeenCalledTimes(1);
+  });
+});

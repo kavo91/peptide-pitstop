@@ -135,7 +135,7 @@ export default async function InventoryPage() {
 
   return (
     <main className={PAGE_MAIN}>
-      <div className="mb-6 flex items-start justify-between gap-3">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           {pit ? (
             <div className="flex min-w-0 items-center gap-2">

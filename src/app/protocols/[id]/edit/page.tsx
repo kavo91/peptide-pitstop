@@ -12,6 +12,7 @@ import { dosesPerWeek } from "@/lib/schedule/frequency";
 import { planCarryForward, daysSpentInPhase } from "@/lib/protocol-revision";
 import { viewerToday } from "@/lib/viewer-tz";
 import { type DoseUnit } from "@/lib/dosing/types";
+import { ShiftPinToggle } from "@/components/shift/ShiftPinToggle";
 
 export const dynamic = "force-dynamic";
 
@@ -136,6 +137,13 @@ export default async function EditProtocolPage({ params }: { params: Promise<{ i
             : undefined
         }
       />
+
+      {protocol.status === "active" && (
+        <section className="mt-8">
+          <h2 className="mb-3 text-sm font-medium text-muted">Dose shift suggestions</h2>
+          <ShiftPinToggle protocolId={protocol.id} pinned={protocol.shiftPinned} mode="checkbox" />
+        </section>
+      )}
 
       {/* Clinician view for blend peptides: how each component's mass moves
           across the ladder (derived from the stored vendor ratio). */}
