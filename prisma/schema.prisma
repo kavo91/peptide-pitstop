@@ -331,6 +331,12 @@ model Protocol {
   /// no backfill. Analytics groups on this rather than walking a self-link.
   courseId String?
 
+  /// User chose "keep as is" for dose-shift suggestions. The shift engine skips
+  /// a pinned protocol (it still counts toward the daily load); the edit page
+  /// and the panel's "Kept as is" list clear it. Expand-only column, default
+  /// false — the previous image runs unchanged against the new schema.
+  shiftPinned Boolean @default(false)
+
   steps        ProtocolStep[]
   plannedDoses PlannedDose[]
   doseLogs     DoseLog[]

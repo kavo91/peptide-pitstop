@@ -1,0 +1,17 @@
+-- Protocol.shiftPinned — "keep as is" for dose-shift suggestions (v1.24.0).
+--
+-- Hand-written: ONE additive column with a constant default. Prisma's SQLite
+-- generator would emit a RedefineTables block (drop + copy + rename) for this,
+-- which puts every Protocol row through a copy with no rollback but a restore
+-- (prisma/MIGRATIONS.md rule 1). SQLite's ADD COLUMN with a constant default
+-- is in-place and instant.
+--
+-- Rollback = re-pin the previous image: older code never reads this column and
+-- every existing row keeps its value (false).
+--
+-- After that rollback the DB still carries this migration, which the older
+-- image does not ship, so `migrate status` reports drift on every start and
+-- the entrypoint takes a pre-migration snapshot each time (PRE_MIGRATE_KEEP
+-- evicts the oldest after 10) — copy the good snapshot out of the snapshot
+-- dir before rolling back.
+ALTER TABLE "Protocol" ADD COLUMN "shiftPinned" BOOLEAN NOT NULL DEFAULT false;

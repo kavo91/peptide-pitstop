@@ -87,7 +87,7 @@ export default async function CostsPage({
     <main className={PAGE_MAIN}>
       <BackButton fallback="/more" />
 
-      <div className="mb-6 flex items-start justify-between gap-3">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <PitstopHeading title="Costs" index={12} design={design} className="text-3xl font-semibold tracking-tight" split={["CO", "STS"]} />
           <p className="text-muted">Landed cost per vial, per mg and per dose — shipping and sundries included.</p>
@@ -339,13 +339,13 @@ export default async function CostsPage({
           {/* ── Invoice ledger ───────────────────────────────────────────── */}
           <section className="mb-6">
             <h2 className="mb-2 text-sm font-semibold">Invoices</h2>
-            <ul className="grid gap-3 lg:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
               {purchases.map((p) => (
                 <li key={p.id} className={CARD}>
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium">{p.vendor ?? "Order"}</p>
-                      <p className="text-sm text-muted">
+                    <div className="min-w-0">
+                      <p className="font-medium break-words">{p.vendor ?? "Order"}</p>
+                      <p className="text-sm text-muted break-words">
                         {p.orderedAt}
                         {p.reference ? ` · ${p.reference}` : ""}
                       </p>
@@ -356,8 +356,8 @@ export default async function CostsPage({
                   <ul className="mt-3 space-y-1 text-sm">
                     {p.items.map((i) => (
                       <li key={i.id} className="flex items-baseline justify-between gap-3">
-                        <span className="min-w-0">
-                          <span className="truncate">{i.quantity}× {i.description}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{i.quantity}× {i.description}</span>
                           <span className="block text-xs text-muted">
                             {fmtMoney(i.subtotal, p.currency)} + {fmtMoney(i.allocated, p.currency)} ship
                             {i.kind === "peptide" && ` · ${i.vialIds.length} vial${i.vialIds.length === 1 ? "" : "s"} matched`}

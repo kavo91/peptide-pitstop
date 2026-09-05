@@ -60,7 +60,7 @@ export default async function PrescriptionsPage() {
   return (
     <main className={PAGE_MAIN}>
       <BackButton />
-      <div className="mb-6 flex items-start justify-between gap-3">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <PitstopHeading title="Prescriptions" index={9} design={activeDesign()} className="text-3xl font-semibold tracking-tight" split={["PRE", "SCRIPTIONS"]} />
           <p className="text-muted">Refills, cost, expiry, and reorder reminders.</p>

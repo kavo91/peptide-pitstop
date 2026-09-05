@@ -13,6 +13,9 @@ import { startOfDay } from "@/lib/schedule/schedule";
 import { bucketOf, PROTOCOL_SECTIONS as SECTIONS, PROTOCOL_SECTION_ACCENT as SECTION_ACCENT } from "@/lib/protocol-bucket";
 import { SignedOutNotice } from "@/components/SignedOutNotice";
 import { cycleChip } from "@/lib/cycle/label";
+import { ShiftPanel } from "@/components/shift/ShiftPanel";
+import { getShiftPanelData } from "@/lib/shift/server";
+import { viewerToday } from "@/lib/viewer-tz";
 
 export const dynamic = "force-dynamic";
 
@@ -25,11 +28,17 @@ export default async function ProtocolsPage() {
   const user = await getCurrentUser();
   if (!user) return <SignedOutNotice />;
 
-  const protocols = await prisma.protocol.findMany({
-    where: { userId: user.id },
-    include: { peptide: true, stack: true },
-    orderBy: { name: "asc" },
-  });
+  // The panel's own loader (protocol + doseLog queries, then the pure
+  // engine) no longer waits behind this page's own protocol list — both run
+  // concurrently.
+  const [protocols, shiftPanelData] = await Promise.all([
+    prisma.protocol.findMany({
+      where: { userId: user.id },
+      include: { peptide: true, stack: true },
+      orderBy: { name: "asc" },
+    }),
+    getShiftPanelData(user.id, (await viewerToday()).date),
+  ]);
   const today = startOfDay(new Date());
   // Revisions of one course, oldest first, so each row can link to the protocol
   // it replaced. The list itself stays flat by design.
@@ -69,7 +78,7 @@ export default async function ProtocolsPage() {
   return (
     <main className={PAGE_MAIN}>
       <BackButton fallback="/more" />
-      <div className="mb-6 flex items-start justify-between gap-3">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <PitstopHeading title="Protocols" index={8} className="text-3xl font-semibold tracking-tight" split={["PROTO", "COLS"]} />
           <p className="text-muted">Set start dates, schedules, and pause or resume.</p>
@@ -79,6 +88,7 @@ export default async function ProtocolsPage() {
           <Link href="/protocols/new" className="rounded-control bg-accent px-3 py-2 text-sm font-medium text-onAccent">+ Add protocol</Link>
         </div>
       </div>
+      <ShiftPanel data={shiftPanelData} />
       {SECTIONS.map(({ key, title, blurb }) => {
         const group = sortedProtocols.filter((p) => bucketOf(p, today) === key);
         if (group.length === 0) return null;

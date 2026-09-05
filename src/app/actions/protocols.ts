@@ -894,6 +894,16 @@ export interface ReviseProtocolInput {
 }
 
 /**
+ * Thrown INSIDE the transaction when the close's compare-and-swap matches zero
+ * rows — someone else already revised or closed this protocol (a
+ * double click could otherwise race two updateMany calls past an unguarded close, and each
+ * would go on to create its own successor). Throwing aborts the transaction so
+ * nothing is created and no audit row is written; the outer catch below maps
+ * it to a clean refusal.
+ */
+class RevisionRaceError extends Error {}
+
+/**
  * Complete a live protocol and create its replacement, linked as one course.
  *
  * Never mutates the old protocol's schedule — that is the whole point, and it is
@@ -906,7 +916,21 @@ export async function reviseProtocol(input: ReviseProtocolInput) {
 
   const old = await prisma.protocol.findFirst({
     where: { id: input.id, userId: user.id },
-    select: { id: true, peptideId: true, courseId: true, status: true, stackId: true, vialId: true, startDate: true },
+    select: {
+      id: true,
+      peptideId: true,
+      courseId: true,
+      status: true,
+      stackId: true,
+      vialId: true,
+      startDate: true,
+      // Read BEFORE the close below, so this is the course's ORIGINAL planned
+      // cycle/end — not whatever the close step is about to overwrite them with.
+      cycleOnWeeks: true,
+      cycleOffWeeks: true,
+      cycleAnchor: true,
+      endDate: true,
+    },
   });
   if (!old) return { ok: false as const, error: "Protocol not found." };
   if (old.status !== "active") return { ok: false as const, error: "Only a live protocol can be revised." };
@@ -938,6 +962,26 @@ export async function reviseProtocol(input: ReviseProtocolInput) {
     };
   }
 
+  // The successor must NOT hard-code endDate: null and drop the cycle
+  // columns entirely: a protocol that carries a cycle plan would then have its
+  // revision silently ejected from that cycle, moving the reorder-by date
+  // computed from it. cycleOnWeeks/cycleOffWeeks/cycleAnchor are ALWAYS
+  // carried from the predecessor below — never read from input.next, because a
+  // revision edits the schedule/dose, not the cycle plan. endDate carries the
+  // predecessor's original planned end unless the caller explicitly sets a new one.
+  const nextEndDate = input.next.endDate?.trim();
+  const successorEndDate = nextEndDate ? new Date(`${nextEndDate.slice(0, 10)}T00:00:00.000Z`) : old.endDate;
+
+  // Same house rule as the backdated-start guard above: refuse rather than
+  // clamp. An end date on or before the new start can't mean what the caller
+  // intended, and clamping it would silently corrupt the plan instead.
+  if (successorEndDate && successorEndDate.getTime() <= newStart.getTime()) {
+    return {
+      ok: false as const,
+      error: `The course ends on ${successorEndDate.toISOString().slice(0, 10)}, before the revision would start. Pick an earlier start date or clear the end date.`,
+    };
+  }
+
   // Validate + canonicalise exactly as saveProtocol does. Without this the
   // revision path is a hole in the validation: normaliseScheduleRule also
   // REJECTS never-due and malformed rules, so a schedule the ordinary save
@@ -964,10 +1008,16 @@ export async function reviseProtocol(input: ReviseProtocolInput) {
 
   try {
     const newId = await prisma.$transaction(async (tx) => {
-      await tx.protocol.updateMany({
-        where: { id: old.id, userId: user.id },
+      // Compare-and-swap: only close a protocol that is still active. Without
+      // status in the where-clause a double-submit (double click, retried
+      // request) races two updateMany calls past this point and each proceeds
+      // to create its own successor — two live protocols from one revision.
+      // The loser's updateMany now matches zero rows and gets caught below.
+      const closed = await tx.protocol.updateMany({
+        where: { id: old.id, userId: user.id, status: "active" },
         data: { status: "completed", endDate },
       });
+      if (closed.count === 0) throw new RevisionRaceError();
 
       // Future planned doses are NOT deleted here. isRetired() in
       // lib/planned/materialize.ts retires a non-active protocol's rows from
@@ -1004,8 +1054,22 @@ export async function reviseProtocol(input: ReviseProtocolInput) {
             : "mcg",
           doseBasis: input.next.doseBasis === "per_week" ? "per_week" : "per_injection",
           startDate: newStart,
-          endDate: null,
+          endDate: successorEndDate,
           status: "active",
+          // Carried from the predecessor, ALWAYS — never read from input.next.
+          // Dropping these on revise would silently eject the course
+          // from its cycle plan and move its reorder-by date. Not
+          // shiftPinned: the successor starts unpinned, same as any new row.
+          cycleOnWeeks: old.cycleOnWeeks,
+          cycleOffWeeks: old.cycleOffWeeks,
+          // A NULL anchor is not "no anchor" — every consumer
+          // (cyclePlanEnd, cycleState, buildForecastPlan) falls back to
+          // `startDate`, so carrying null onto a successor that starts later
+          // silently moves the cycle's plan end forward by exactly the
+          // revision gap, and with it the reorder-by date. Pin the fallback to
+          // the predecessor's own startDate the moment there is a cycle to
+          // anchor; a protocol with no cycle plan still carries null.
+          cycleAnchor: old.cycleAnchor ?? (old.cycleOnWeeks ? old.startDate : null),
           steps: {
             create: (input.next.steps ?? []).map((s, i) => ({
               stepIndex: i,
@@ -1038,6 +1102,9 @@ export async function reviseProtocol(input: ReviseProtocolInput) {
     revalidatePath("/today");
     return { ok: true as const, id: newId };
   } catch (e) {
+    if (e instanceof RevisionRaceError) {
+      return { ok: false as const, error: "This protocol was already revised or closed. Refresh and try again." };
+    }
     console.error("reviseProtocol failed", e);
     return { ok: false as const, error: "Could not revise the protocol." };
   }

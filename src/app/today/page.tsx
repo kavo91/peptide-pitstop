@@ -14,6 +14,8 @@ import { StackCard } from "@/components/StackCard";
 import { PAGE_MAIN } from "@/lib/layout";
 import { CycleBanner } from "@/components/CycleBanner";
 import { getCycleBannerItems } from "@/lib/cycle/server";
+import { ShiftNudge } from "@/components/shift/ShiftNudge";
+import { getShiftPanelData } from "@/lib/shift/server";
 
 export const dynamic = "force-dynamic";
 
@@ -48,12 +50,15 @@ export default async function TodayPage({
   const viewKey = ymd(viewDate);
   const isToday = viewKey === todayKey;
 
-  const [due, logged, cycleItems] = await Promise.all([
+  const [due, logged, cycleItems, shiftData] = await Promise.all([
     getTodayDoses(user.id, viewDate, isToday ? new Date() : viewDate),
     getLoggedToday(user.id, viewDate),
     // Cycle prompts are about TODAY's decision, so they only show on the real
     // today view — browsing back to last Tuesday must not offer "stop dosing".
     isToday ? getCycleBannerItems(user.id, viewDate) : Promise.resolve([]),
+    // Same rule for the shift nudge: only the real today view links to
+    // "Smooth your week".
+    isToday ? getShiftPanelData(user.id, viewer.date) : Promise.resolve(null),
   ]);
 
   // Stacks are surfaced (with one-tap "Log stack") only on the actual today
@@ -105,6 +110,7 @@ export default async function TodayPage({
       <BackButton fallback="/" />
       <h1 className="sr-only">Today</h1>
       <CycleBanner alerts={cycleItems} />
+      {isToday && shiftData && <ShiftNudge data={shiftData} />}
       {stacks.length > 0 ? (
         // Desktop (≥1440px): stacks rail BESIDE the dose list (left rail ~320px,
         // right card). Mobile / smaller laptops: single column, stacks above the
