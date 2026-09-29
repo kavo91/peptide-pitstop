@@ -1,10 +1,11 @@
 /**
  * Sample/demo data for local development — NO real personal data.
  *
- * Gives a fresh install a populated, in-progress demo: a couple of common research
+ * Gives a fresh install a populated, in-progress demo: a few common research
  * peptides with half-lives, reconstituted vials, ~4 weeks of dose history (so
  * adherence, the heatmap, and plasma-level curves render), a titrating protocol +
- * fixed ones, a small illustrative bloodwork panel, two made-up DEXA scans with
+ * fixed ones, two weekly protocols sharing Mon/Thu (so "Smooth your week" has a
+ * suggestion), a nasal protocol dosed in pumps, a small illustrative bloodwork panel, two made-up DEXA scans with
  * an RMR test, an illness window, and four weeks of made-up Garmin wellness and
  * training rows (so the body figure, LSC deltas and the Training card render).
  * All values are made-up examples. The owner is created UNPROVISIONED so first run forces /setup
@@ -72,6 +73,12 @@ async function main() {
   await prisma.syringe.create({
     data: { userId: user.id, name: "0.5 mL U-100 insulin", graduationType: "units", unitsPerMl: 100, capacityMl: "0.5", capacityUnits: 50, increment: "1" },
   });
+  // A nasal pump is a device row too: always mL-graduated, `increment` is the
+  // metered spray volume and capacityUnits is pumps per fill (5 / 0.1 = 50),
+  // exactly what saveSyringe derives for a pump.
+  const pump = await prisma.syringe.create({
+    data: { userId: user.id, name: "Nasal spray pump (0.1 mL)", deviceType: "pump", graduationType: "ml", unitsPerMl: 100, capacityMl: "5", capacityUnits: 50, increment: "0.1" },
+  });
 
   // Demo peptides — common research peptides used here purely as examples.
   // halfLifeHours are illustrative (drive the plasma-curve estimate).
@@ -86,6 +93,17 @@ async function main() {
   });
   const ipa = await prisma.peptide.create({
     data: { userId: user.id, name: "Ipamorelin", category: "growth", substanceClass: "mass", defaultStrengthMg: "10", halfLifeHours: "2", missedDosePolicy: "prompt" },
+  });
+  // Thymosin Alpha-1 runs Mon/Thu like TB-500, so two weekly protocols share the
+  // same two days and the "Smooth your week" panel on /protocols has a move to
+  // suggest. Category and half-life are the built-in library's own values.
+  const ta1 = await prisma.peptide.create({
+    data: { userId: user.id, name: "Thymosin Alpha-1", category: "Immune", substanceClass: "mass", halfLifeHours: "2", missedDosePolicy: "take_now" },
+  });
+  // A nasal-route peptide: logged in pumps on the pump device above, no
+  // injection site. No half-life is set, so it stays off the plasma chart.
+  const oxy = await prisma.peptide.create({
+    data: { userId: user.id, name: "Oxytocin", category: "Hormone", substanceClass: "mass", route: "nasal", missedDosePolicy: "skip" },
   });
 
   // A demo prescription (example pharmacy) for one peptide.
@@ -109,6 +127,15 @@ async function main() {
   const ipaVial = await prisma.vial.create({
     data: { userId: user.id, peptideId: ipa.id, prescriptionId: rx.id, labelStrengthMg: "10", status: "in_use", openedAt: CYCLE_START },
   });
+  await prisma.vial.create({
+    data: { userId: user.id, peptideId: ta1.id, labelStrengthMg: "5", status: "sealed" },
+  });
+  // The nasal course started two weeks ago; its spray bottle is filled from a
+  // reconstituted vial like any other preparation.
+  const NASAL_START = new Date(Date.now() - 14 * DAY);
+  const oxyVial = await prisma.vial.create({
+    data: { userId: user.id, peptideId: oxy.id, labelStrengthMg: "2", status: "in_use", openedAt: NASAL_START },
+  });
 
   // Reconstitutions (concentration drives the draw-volume math).
   const bpcPrep = await prisma.preparation.create({
@@ -116,6 +143,10 @@ async function main() {
   });
   const ipaPrep = await prisma.preparation.create({
     data: { vialId: ipaVial.id, prepType: "reconstituted", bacWaterMl: "2", totalMg: "10", concentrationMcgPerMl: "5000", remainingMl: "1.4", reconstitutedAt: CYCLE_START, active: true },
+  });
+  // 2 mg in 5 mL = 400 mcg/mL, so an 80 mcg dose is 0.2 mL = 2 pumps of 0.1 mL.
+  const oxyPrep = await prisma.preparation.create({
+    data: { vialId: oxyVial.id, prepType: "reconstituted", bacWaterMl: "5", totalMg: "2", concentrationMcgPerMl: "400", remainingMl: "2.4", reconstitutedAt: NASAL_START, active: true },
   });
 
   // Protocols: BPC-157 with a 2-week titration ramp; TB-500 fixed twice-weekly;
@@ -147,6 +178,20 @@ async function main() {
       rebaseMode: "rolling", targetDose: "200", doseInputUnit: "mcg", defaultSyringeId: syr1ml.id, startDate: CYCLE_START, status: "active",
     },
   });
+  await prisma.protocol.create({
+    data: {
+      userId: user.id, peptideId: ta1.id, name: "Thymosin Alpha-1 (Mon/Thu)",
+      source: "manual", scheduleType: "fixed_times", scheduleRule: "FREQ=WEEKLY;BYDAY=MO,TH",
+      rebaseMode: "fixed_anchor", targetDose: "1.5", doseInputUnit: "mg", defaultSyringeId: syr1ml.id, startDate: CYCLE_START, status: "active",
+    },
+  });
+  const oxyProtocol = await prisma.protocol.create({
+    data: {
+      userId: user.id, peptideId: oxy.id, name: "Oxytocin nasal daily",
+      source: "manual", scheduleType: "fixed_times", scheduleRule: "FREQ=DAILY",
+      rebaseMode: "rolling", targetDose: "80", doseInputUnit: "mcg", defaultSyringeId: pump.id, startDate: NASAL_START, status: "active",
+    },
+  });
 
   // ── Demo dose history ──────────────────────────────────────────────────────
   // ~4 weeks of daily BPC-157 + Ipamorelin logs (a couple skipped for realistic
@@ -174,6 +219,19 @@ async function main() {
       takenAt: new Date(day.getTime() + 21 * 60 * 60 * 1000 + (n % 25) * 60 * 1000),
       doseMcg: "200", doseInputUnit: "mcg", volumeMl: "0.04",
       syringeId: syr1ml.id, injectionSite: sites[n % 2], route: "injection", source: "app",
+    });
+    n++;
+  }
+  // Two weeks of daily nasal doses on the pump (one day missed): 80 mcg is
+  // 0.2 mL, which the logged-dose display turns back into "2 pumps".
+  for (let d = 14; d >= 1; d--) {
+    if (d === 6) continue;
+    const day = new Date(today.getTime() - d * DAY);
+    logs.push({
+      userId: user.id, clientUuid: `demo-oxy-${n}`, preparationId: oxyPrep.id, protocolId: oxyProtocol.id,
+      takenAt: new Date(day.getTime() + 9 * 60 * 60 * 1000 + (n % 20) * 60 * 1000),
+      doseMcg: "80", doseInputUnit: "mcg", volumeMl: "0.2",
+      syringeId: pump.id, injectionSite: null, route: "nasal", source: "app",
     });
     n++;
   }
@@ -320,7 +378,7 @@ async function main() {
   }
   await prisma.wearableDaily.createMany({ data: wearRows });
 
-  console.log(`Seed complete: 3 demo peptides, 2 reconstitutions, ${logs.length} dose logs, 3 protocols, ${results.length} sample lab results, 2 demo DEXA scans + 1 RMR test, ${wearRows.length} demo wearable days.`);
+  console.log(`Seed complete: 5 demo peptides, 3 reconstitutions, ${logs.length} dose logs, 5 protocols, ${results.length} sample lab results, 2 demo DEXA scans + 1 RMR test, ${wearRows.length} demo wearable days.`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());
