@@ -12,15 +12,16 @@ interface Props {
    * shown beneath the caption. Omit for the unchanged single-label display.
    * Values are pre-stringified by `doseUnitBreakdown` (safe resolver path).
    */
-  multiUnit?: { mcg: string; mg: string; ml: string; units: string };
+  multiUnit?: { mcg: string; mg: string; ml: string; units: string; /** Pump count — set by pump callers; the pump glyph shows it in place of insulin units. */ pumps?: string };
   /** Active design pack — threaded from the form. Gates pitstop presentation. */
   design?: "pitstop" | "current";
   /**
-   * Device rendering: a PEN dials a dose (dose-window graphic, "Dial to"),
-   * a syringe draws to a barrel mark. Presentation only — every number shown
-   * comes from the same computeDraw result either way.
+   * Device rendering: a PEN dials a dose (dose-window graphic, "Dial to"), a
+   * PUMP sprays a metered count (bottle + nozzle glyph, "Spray"), a syringe
+   * draws to a barrel mark. Presentation only — every number shown comes from
+   * the same computeDraw result either way.
    */
-  device?: "syringe" | "pen";
+  device?: "syringe" | "pen" | "pump";
 }
 
 export function VisualSyringe({ capacityMl, fillMl, markingLabel, overfill = false, multiUnit, design = "current", device = "syringe" }: Props) {
@@ -100,6 +101,68 @@ export function VisualSyringe({ capacityMl, fillMl, markingLabel, overfill = fal
             <div><dt className="text-muted">mg</dt><dd>{multiUnit.mg}</dd></div>
             <div><dt className="text-muted">mL</dt><dd>{multiUnit.ml}</dd></div>
             <div><dt className="text-muted">units</dt><dd>{multiUnit.units}</dd></div>
+          </dl>
+        )}
+      </figure>
+    );
+  }
+
+  if (device === "pump") {
+    // Nasal pump: a small labelled bottle with a spray nozzle — there is no
+    // barrel to fill, so the dose window carries the pump count, the number
+    // that matters, mirroring the pen's dose-window graphic. Kept simple: no
+    // fraction-of-capacity fill, no pitstop gradient — just the count.
+    const bodyX = 70;
+    const bodyW = 90;
+    const bodyH = 34;
+    const bodyY = H / 2 - bodyH / 2;
+    const winW = 90;
+    const winX = bodyX + bodyW / 2 - winW / 2;
+    const strokeCol = "rgb(var(--muted))";
+    const accent = overfill ? "rgb(var(--danger))" : pit ? "#FF5B14" : "rgb(var(--accent))";
+    return (
+      <figure className="w-full">
+        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Nasal pump: ${markingLabel}`} className="w-full">
+          {/* bottle body */}
+          <rect x={bodyX} y={bodyY} width={bodyW} height={bodyH} rx={8} fill="rgb(var(--surface))" stroke={strokeCol} strokeWidth={1.5} />
+          {/* neck */}
+          <rect x={bodyX + bodyW} y={bodyY + bodyH / 2 - 5} width={14} height={10} rx={2} fill="rgb(var(--surface))" stroke={strokeCol} strokeWidth={1.5} />
+          {/* nozzle + spray glyph */}
+          <line x1={bodyX + bodyW + 14} y1={bodyY + bodyH / 2} x2={bodyX + bodyW + 26} y2={bodyY + bodyH / 2} stroke={strokeCol} strokeWidth={2} />
+          {[0, 1, 2].map((i) => (
+            <line
+              key={i}
+              x1={bodyX + bodyW + 28}
+              y1={bodyY + bodyH / 2 - 6 + i * 6}
+              x2={bodyX + bodyW + 36}
+              y2={bodyY + bodyH / 2 - 9 + i * 9}
+              stroke={overfill ? "rgb(var(--danger))" : "rgb(var(--muted))"}
+              strokeWidth={1.5}
+              opacity={0.6}
+            />
+          ))}
+          {/* dose window on the bottle */}
+          <rect x={winX} y={bodyY + bodyH / 2 - 8} width={winW} height={16} rx={3} fill="rgb(var(--bg))" stroke={accent} strokeWidth={1.5} />
+          <text x={winX + winW / 2} y={bodyY + bodyH / 2 + 4} fontSize="10" textAnchor="middle" className="tabular-nums" fill={overfill ? "rgb(var(--danger))" : "rgb(var(--ink))"} fontWeight="600">
+            {markingLabel}
+          </text>
+        </svg>
+        {pit ? (
+          <figcaption className="mt-1 text-center font-mono uppercase text-[10px] tracking-[0.1em] text-accentStrong">
+            Spray {markingLabel}
+          </figcaption>
+        ) : (
+          <figcaption className="mt-1 text-center text-sm font-medium tabular-nums">
+            Spray <span className={overfill ? "text-danger" : "text-accentStrong"}>{markingLabel}</span>
+          </figcaption>
+        )}
+        {multiUnit && (
+          <dl aria-label="Dose in all units" className="mt-2 grid grid-cols-4 gap-1 text-center text-xs tabular-nums">
+            <div><dt className="text-muted">mcg</dt><dd>{multiUnit.mcg}</dd></div>
+            <div><dt className="text-muted">mg</dt><dd>{multiUnit.mg}</dd></div>
+            <div><dt className="text-muted">mL</dt><dd>{multiUnit.ml}</dd></div>
+            {/* insulin "units" mean nothing on a metered pump — show the pump count instead */}
+            <div><dt className="text-muted">pumps</dt><dd>{multiUnit.pumps ?? "—"}</dd></div>
           </dl>
         )}
       </figure>

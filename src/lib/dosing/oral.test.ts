@@ -79,6 +79,16 @@ describe("formatLoggedDoseDisplay (null-guarded display helper)", () => {
   it("falls back to mcg on an empty/missing oral unit", () => {
     expect(formatLoggedDoseDisplay({ doseMcg: "500", doseInputUnit: "", route: "oral" })).toBe("500 mcg");
   });
+
+  it("shows the pump count alongside mass for a nasal dose logged on a pump", () => {
+    expect(formatLoggedDoseDisplay({ doseMcg: "250", doseInputUnit: "ml", route: "nasal", pumps: "1" })).toBe("1 pump · 250 mcg");
+    expect(formatLoggedDoseDisplay({ doseMcg: "500", doseInputUnit: "ml", route: "nasal", pumps: "2" })).toBe("2 pumps · 500 mcg");
+  });
+
+  it("falls back to plain mass for a nasal dose with no pump count", () => {
+    expect(formatLoggedDoseDisplay({ doseMcg: "250", doseInputUnit: "ml", route: "nasal" })).toBe("250 mcg");
+    expect(formatLoggedDoseDisplay({ doseMcg: "250", doseInputUnit: "ml", route: "nasal", pumps: null })).toBe("250 mcg");
+  });
 });
 
 describe("injection path is unaffected by the oral branch (regression)", () => {

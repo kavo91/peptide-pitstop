@@ -2,9 +2,10 @@
 
 import { Save, SlidersHorizontal, X } from "lucide-react";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateProtocol } from "@/app/actions/protocols";
+import { useSavedFlash } from "./useSavedFlash";
 
 /**
  * In-view editor for the two things the Gantt exists to adjust: the course's
@@ -15,6 +16,14 @@ import { updateProtocol } from "@/app/actions/protocols";
  * `undefined`, column untouched server-side), and router.refresh()es on
  * success so the bars re-render from the server's truth rather than from
  * whatever this client happens to hold.
+ *
+ * Both that refresh and `updateProtocol`'s own revalidatePath("/protocols/gantt")
+ * re-render the row from the saved values, and the page keys this panel on those
+ * values — so a real edit remounts it and destroys every piece of plain state,
+ * `open` included (the panel visibly collapses back to the Edit button). The
+ * "Saved" confirmation is therefore held by useSavedFlash, which survives it.
+ * `open` is reopened from that surviving flash (see below), so the panel the
+ * user was working in comes back with "Saved" on it instead of collapsing.
  */
 interface Props {
   id: string;
@@ -37,8 +46,18 @@ export function GanttRowEditor(p: Props) {
   const [offWeeks, setOffWeeks] = useState(p.cycleOffWeeks?.toString() ?? "");
   const [anchor, setAnchor] = useState(p.cycleAnchor ?? "");
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { saved, flashSaved, clearSaved } = useSavedFlash("gantt-row", p.id);
   const [error, setError] = useState<string | null>(null);
+
+  // The remount described above destroys `open`, so without this a successful
+  // edit would close the panel at the moment the confirmation arrives, which
+  // reads as the UI throwing the panel away. The flash outlives
+  // the remount, so reopen from it: if this row saved moments ago, the panel it
+  // saved from belongs back on screen. Keyed on `saved` changing, so a manual
+  // close during those few seconds stays closed (close also spends the flash).
+  useEffect(() => {
+    if (saved) setOpen(true);
+  }, [saved]);
 
   const toInt = (s: string): number | null => {
     const n = parseInt(s, 10);
@@ -47,7 +66,7 @@ export function GanttRowEditor(p: Props) {
 
   async function save() {
     setBusy(true);
-    setSaved(false);
+    clearSaved();
     setError(null);
     try {
       const endDirty = endDate !== (p.endDate ?? "");
@@ -62,7 +81,7 @@ export function GanttRowEditor(p: Props) {
         ...(anchorDirty ? { cycleAnchorISO: anchor ? new Date(anchor).toISOString() : null } : {}),
       });
       if (res.ok) {
-        setSaved(true);
+        flashSaved();
         router.refresh();
       } else {
         setError(res.error ?? "Could not save.");
@@ -95,7 +114,7 @@ export function GanttRowEditor(p: Props) {
         </p>
         <button
           type="button"
-          onClick={() => setOpen(false)}
+          onClick={() => { setOpen(false); clearSaved(); }}
           aria-label={`Close editor for ${p.name}`}
           className="rounded-control p-1 text-muted hover:bg-line/10"
         >
@@ -108,7 +127,7 @@ export function GanttRowEditor(p: Props) {
           <input
             type="date"
             value={endDate}
-            onChange={(e) => { setEndDate(e.target.value); setSaved(false); }}
+            onChange={(e) => { setEndDate(e.target.value); clearSaved(); }}
             className={field}
           />
         </label>
@@ -121,7 +140,7 @@ export function GanttRowEditor(p: Props) {
             max={104}
             placeholder="continuous"
             value={onWeeks}
-            onChange={(e) => { setOnWeeks(e.target.value); setSaved(false); }}
+            onChange={(e) => { setOnWeeks(e.target.value); clearSaved(); }}
             className={field}
           />
         </label>
@@ -134,7 +153,7 @@ export function GanttRowEditor(p: Props) {
             max={104}
             placeholder="no restart"
             value={offWeeks}
-            onChange={(e) => { setOffWeeks(e.target.value); setSaved(false); }}
+            onChange={(e) => { setOffWeeks(e.target.value); clearSaved(); }}
             className={field}
           />
         </label>
@@ -143,7 +162,7 @@ export function GanttRowEditor(p: Props) {
           <input
             type="date"
             value={anchor}
-            onChange={(e) => { setAnchor(e.target.value); setSaved(false); }}
+            onChange={(e) => { setAnchor(e.target.value); clearSaved(); }}
             className={field}
           />
         </label>

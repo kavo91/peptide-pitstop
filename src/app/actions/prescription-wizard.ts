@@ -116,7 +116,7 @@ function buildPeptideData(input: {
         ? input.missedDosePolicy
         : "prompt",
     storageNotes: input.storageNotes?.trim() || null,
-    route: input.route === "oral" ? "oral" : "injection",
+    route: input.route === "oral" || input.route === "nasal" ? input.route : "injection",
   };
 }
 
@@ -595,7 +595,10 @@ async function saveStackWizard(
 
   for (const component of components) {
     const peptide = await resolveStackComponentPeptide(tx, userId, component);
-    if (peptide.route === "oral") {
+    // Stack components dose via a plain injection volume/syringe protocol — a
+    // nasal (pump) or oral peptide has no such draw, so both are rejected here
+    // exactly like oral was before nasal existed.
+    if (peptide.route !== "injection") {
       throw new Error("Stack components must use injection-route peptides.");
     }
     if (findDuplicateResolvedPeptideIds([...resolvedPeptideIds, peptide.id]).length > 0) {
@@ -732,7 +735,7 @@ export interface PrescriptionWizardInput {
     halfLifeHours?: string;
     minIntervalHours?: string;
     missedDosePolicy?: "skip" | "take_now" | "prompt";
-    route?: "injection" | "oral";
+    route?: "injection" | "oral" | "nasal";
     storageNotes?: string;
   };
   stack?: {

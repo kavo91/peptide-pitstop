@@ -26,8 +26,10 @@ function buildPeptideData(input: PeptideInput) {
       ? input.missedDosePolicy!
       : "prompt",
     storageNotes: input.storageNotes?.trim() || null,
-    // Administration route. Oral skips reconstitution/syringe/site. Default injection.
-    route: input.route === "oral" ? "oral" : "injection",
+    // Administration route. Oral skips reconstitution/syringe/site. Nasal keeps
+    // reconstitution (prep/BUD/remaining mL) but doses via a pump, not a
+    // syringe/pen, and has no injection site. Default injection.
+    route: input.route === "oral" || input.route === "nasal" ? input.route : "injection",
   };
 }
 
@@ -42,7 +44,7 @@ export interface PeptideInput {
   minIntervalHours?: string;
   missedDosePolicy?: string; // skip | take_now | prompt
   storageNotes?: string;
-  route?: string; // injection | oral
+  route?: string; // injection | oral | nasal
 }
 
 export async function savePeptide(input: PeptideInput) {

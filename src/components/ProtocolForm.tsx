@@ -103,6 +103,11 @@ export function ProtocolForm({
   const [entries, setEntries] = useState<Schedule>(initialSchedule);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A save that SUCCEEDED but carried a non-fatal server notice (today: the
+  // cycle anchor was held back because this protocol has logged doses). The
+  // form normally navigates away on success, which would flash the message
+  // past unread — so it parks here with the onward href until acknowledged.
+  const [notice, setNotice] = useState<{ text: string; href: string } | null>(null);
   // Non-null while the revise confirmation is open. Holds the labels of what
   // changed, the carried-forward ladder (editable in the dialog) and the new
   // protocol's start day.
@@ -257,6 +262,7 @@ export function ProtocolForm({
 
     setBusy(true);
     setError(null);
+    setNotice(null);
     const res = await saveProtocol(next);
     setBusy(false);
     if (!res.ok) {
@@ -264,7 +270,12 @@ export function ProtocolForm({
       return;
     }
     // New protocol → go to its edit page (to add titration steps); edit → back to list.
-    window.location.href = initial?.id ? "/protocols" : `/protocols/${res.id}/edit`;
+    const onward = initial?.id ? "/protocols" : `/protocols/${res.id}/edit`;
+    if (res.warning) {
+      setNotice({ text: res.warning, href: onward });
+      return;
+    }
+    window.location.href = onward;
   }
 
   async function confirmRevise() {
@@ -601,6 +612,18 @@ export function ProtocolForm({
       )}
 
       {error && <p className="text-sm text-danger">{error}</p>}
+      {notice && (
+        <div className="rounded-card bg-warn/10 p-3 text-sm text-warn ring-1 ring-warn/20" role="status">
+          <p>{notice.text}</p>
+          <button
+            type="button"
+            onClick={() => { window.location.href = notice.href; }}
+            className="mt-2 rounded-control bg-warn/15 px-3 py-1.5 font-medium text-warn"
+          >
+            Got it
+          </button>
+        </div>
+      )}
       <div className="flex gap-2">
         <button type="button" onClick={save} disabled={busy || !scheduleValid || perWeekBlocked || presetTimeInvalid || cycleBlocked} className="flex flex-1 items-center justify-center gap-2 rounded-control bg-accent px-4 py-3 font-medium text-onAccent disabled:opacity-40">{busy ? "…" : <><Save className="h-4 w-4" aria-hidden /> {initial?.id ? "Save protocol" : "Create & add steps"}</>}</button>
         <Link href="/protocols" className="rounded-control bg-bg px-4 py-3 text-sm ring-1 ring-line/15">Cancel</Link>

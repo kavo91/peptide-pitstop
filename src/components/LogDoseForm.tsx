@@ -9,6 +9,8 @@ import { computeDraw } from "@/lib/dosing/engine";
 import { splitProspectiveDose, weakestBlendSource, roundSplitForDisplay, type BlendComponent } from "@/lib/blends-core";
 import { doseUnitBreakdown } from "@/lib/dosing/unit-breakdown";
 import type { DoseUnit } from "@/lib/dosing/types";
+import { isPump, type DeviceType } from "@/lib/device-type";
+import { pumpsToMl, mlToPumps, formatPumps } from "@/lib/dosing/nasal";
 import { budWarning } from "@/lib/bud";
 import { logDose } from "@/app/actions/doses";
 import { enqueue } from "@/lib/offline/outbox";
@@ -27,12 +29,17 @@ interface SyringeDTO {
   id: string;
   name: string;
   graduationType: "units" | "ml";
-  deviceType: "syringe" | "pen";
+  deviceType: DeviceType;
   unitsPerMl: number;
   capacityMl: string;
   capacityUnits: number;
   increment: string;
 }
+
+/** The dose-amount unit shown in the form. "pumps" is UI-only (see onConfirm/draw below) — it never reaches computeDraw or the server, which only ever see a DoseUnit. */
+type FormDoseUnit = DoseUnit | "pumps";
+const INJECTION_UNITS: FormDoseUnit[] = ["mcg", "mg", "ml", "units"];
+const PUMP_UNITS: FormDoseUnit[] = ["pumps", "mcg", "mg"];
 
 interface Props {
   /** Vendor-blend composition for a blend peptide — enables the live per-component preview. */
@@ -66,18 +73,27 @@ interface Props {
   minIntervalHours?: number | null;
   /** Raw recent-site codes, most-recent-first, for the BodyMap component. */
   recentSites: string[];
+  /** "injection" | "nasal" (never "oral" — the oral branch renders OralLogForm instead). Drives the device list filter (pumps only for nasal). */
+  route?: string;
 }
-
-const UNITS: DoseUnit[] = ["mcg", "mg", "ml", "units"];
 
 function toLocalInput(d: Date): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
-export function LogDoseForm({ protocolId, peptideName, preparation, syringes, defaultSyringeId, defaultTakenAtISO, useLiveTakenAt = false, initialDoseValue, initialDoseUnit, hoursSinceLast, halfLifeHours, minIntervalHours, recentSites, blendComponents = null }: Props) {
+export function LogDoseForm({ protocolId, peptideName, preparation, syringes, defaultSyringeId, defaultTakenAtISO, useLiveTakenAt = false, initialDoseValue, initialDoseUnit, hoursSinceLast, halfLifeHours, minIntervalHours, recentSites, blendComponents = null, route = "injection" }: Props) {
+  const nasal = route === "nasal";
+  // A nasal peptide's device must be a pump; every other route must never be
+  // offered one (today.ts already resolves the DEFAULT this way — this filter
+  // is the belt to that braces, so a stale/shared default can't slip through).
+  const availableSyringes = syringes.filter((s) => (nasal ? isPump(s.deviceType) : !isPump(s.deviceType)));
   const [doseValue, setDoseValue] = useState(initialDoseValue);
-  const [doseUnit, setDoseUnit] = useState<DoseUnit>(initialDoseUnit);
-  const [syringeId, setSyringeId] = useState(defaultSyringeId ?? syringes[0]?.id ?? "");
+  const [doseUnit, setDoseUnit] = useState<FormDoseUnit>(initialDoseUnit);
+  const [syringeId, setSyringeId] = useState(() =>
+    defaultSyringeId && availableSyringes.some((s) => s.id === defaultSyringeId)
+      ? defaultSyringeId
+      : availableSyringes[0]?.id ?? "",
+  );
   const [site, setSite] = useState(() => suggestNextSite(recentSites));
   const [notes, setNotes] = useState("");
   const [takenAt, setTakenAt] = useState(toLocalInput(useLiveTakenAt ? new Date() : defaultTakenAtISO ? new Date(defaultTakenAtISO) : new Date()));
@@ -98,7 +114,7 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
         })
       : null;
 
-  const syringe = syringes.find((s) => s.id === syringeId) ?? syringes[0];
+  const syringe = availableSyringes.find((s) => s.id === syringeId) ?? availableSyringes[0];
 
   useEffect(() => {
     if (!useLiveTakenAt || takenAtTouched || busy || done) return;
@@ -114,11 +130,26 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
     return () => { window.clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
   }, [useLiveTakenAt, takenAtTouched, busy, done]);
 
+  // "pumps" is UI-only — computeDraw (and the server) only ever see a real
+  // DoseUnit. Convert pumps × increment → mL before anything downstream sees it.
+  const effectiveDose = useMemo(() => {
+    if (!doseValue) return null;
+    if (doseUnit === "pumps") {
+      if (!syringe) return null;
+      try {
+        return { value: pumpsToMl(doseValue, syringe.increment).toString(), unit: "ml" as DoseUnit };
+      } catch {
+        return null;
+      }
+    }
+    return { value: doseValue, unit: doseUnit };
+  }, [doseValue, doseUnit, syringe]);
+
   const draw = useMemo(() => {
-    if (!syringe || !doseValue || new Decimal(doseValue || 0).lte(0)) return null;
+    if (!syringe || !effectiveDose || new Decimal(effectiveDose.value || 0).lte(0)) return null;
     try {
       return computeDraw({
-        dose: { value: doseValue, unit: doseUnit },
+        dose: effectiveDose,
         preparation: { prepType: "premixed", concentrationMcgPerMl: new Decimal(preparation.concentrationMcgPerMl) },
         syringe: { ...syringe },
         remainingMl: preparation.remainingMl,
@@ -126,7 +157,7 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
     } catch {
       return null;
     }
-  }, [doseValue, doseUnit, preparation, syringe]);
+  }, [effectiveDose, preparation, syringe]);
 
   // BUD is a date concern and is deliberately kept OUT of computeDraw, which
   // must stay pure and clock-free. It is merged in here so it renders through
@@ -146,12 +177,19 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
   // Four-unit breakdown of the TARGET dose. Recomputed with the draw, so it
   // tracks the selected syringe (units = rawUnits = volume × unitsPerMl).
   const multiUnit = useMemo(
-    () => (draw && syringe ? doseUnitBreakdown(draw, { ...syringe }) : undefined),
+    () =>
+      draw && syringe
+        ? {
+            ...doseUnitBreakdown(draw, { ...syringe }),
+            // A pump's fourth column is its pump count, not insulin units.
+            ...(isPump(syringe.deviceType) ? { pumps: mlToPumps(draw.markingValue, syringe.increment).toString() } : {}),
+          }
+        : undefined,
     [draw, syringe],
   );
 
   async function onConfirm() {
-    if (!syringe) return;
+    if (!syringe || !effectiveDose) return;
     setBusy(true);
     setError(null);
 
@@ -162,9 +200,10 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
       protocolId,
       preparationId: preparation.id,
       syringeId: syringe.id,
-      doseValue,
-      doseUnit,
-      injectionSite: site || undefined,
+      doseValue: effectiveDose.value,
+      doseUnit: effectiveDose.unit,
+      // A pump has no injection site.
+      injectionSite: isPump(syringe.deviceType) ? undefined : site || undefined,
       notes: notes || undefined,
       takenAtISO: logTime.toISOString(),
       useServerTime: logNow,
@@ -215,7 +254,11 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
   }
 
   if (!syringe) {
-    return <p className="text-sm text-muted">No syringe yet — add one in Settings.</p>;
+    return (
+      <p className="text-sm text-muted">
+        {nasal ? "No nasal pump yet — add one in Settings → Syringes." : "No syringe yet — add one in Settings."}
+      </p>
+    );
   }
 
   return (
@@ -230,20 +273,20 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
         />
         <select
           value={doseUnit}
-          onChange={(e) => setDoseUnit(e.target.value as DoseUnit)}
+          onChange={(e) => setDoseUnit(e.target.value as FormDoseUnit)}
           className="rounded-control border border-line/15 bg-bg px-3 py-2"
           aria-label="Dose unit"
         >
-          {UNITS.map((u) => (
+          {(isPump(syringe.deviceType) ? PUMP_UNITS : INJECTION_UNITS).map((u) => (
             <option key={u} value={u}>{u}</option>
           ))}
         </select>
       </div>
 
       <label className="block text-sm text-muted">
-        Syringe
+        {isPump(syringe.deviceType) ? "Nasal pump" : "Syringe"}
         <select value={syringeId} onChange={(e) => setSyringeId(e.target.value)} className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-ink" aria-label="Syringe">
-          {syringes.map((s) => (
+          {availableSyringes.map((s) => (
             <option key={s.id} value={s.id}>{s.name}</option>
           ))}
         </select>
@@ -275,7 +318,9 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
             markingLabel={
               draw.markingScale === "units"
                 ? `${draw.markingValue.toString()} units`
-                : `${draw.markingValue.toDecimalPlaces(2).toString()} mL`
+                : isPump(syringe.deviceType)
+                  ? `${formatPumps(mlToPumps(draw.markingValue, syringe.increment))} (${draw.markingValue.toDecimalPlaces(2).toString()} mL)`
+                  : `${draw.markingValue.toDecimalPlaces(2).toString()} mL`
             }
             overfill={blocked}
             multiUnit={multiUnit}
@@ -323,14 +368,16 @@ export function LogDoseForm({ protocolId, peptideName, preparation, syringes, de
           className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-ink"
         />
       </label>
-      <div className="space-y-1">
-        <p className="text-sm text-muted">Injection site</p>
-        <BodyMap
-          value={site || null}
-          onChange={setSite}
-          recentSites={recentSites}
-        />
-      </div>
+      {!isPump(syringe.deviceType) && (
+        <div className="space-y-1">
+          <p className="text-sm text-muted">Injection site</p>
+          <BodyMap
+            value={site || null}
+            onChange={setSite}
+            recentSites={recentSites}
+          />
+        </div>
+      )}
       <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes (optional, encrypted)" className="w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-sm" />
 
       {error && <p className="text-sm text-danger">{error}</p>}

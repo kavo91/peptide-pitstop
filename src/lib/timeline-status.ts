@@ -36,6 +36,21 @@ export function clipSlotsToRange(
 }
 
 /**
+ * A closed protocol has no open doses. Once a course is completed nothing on it
+ * is still due, so only what already happened — taken, missed, skipped — stays
+ * on the grid; today's `pending` and every future `projected` slot are dropped.
+ * Closing stamps endDate = today (`endDateOnClose`), which bounds the misses;
+ * without this, the closed course would still show today's slot as Planned.
+ */
+export function dropOpenSlotsIfClosed(
+  protocolStatus: string,
+  slots: ResolvedOcc["slots"],
+): ResolvedOcc["slots"] {
+  if (protocolStatus !== "completed") return slots;
+  return slots.filter((s) => s.status !== "pending" && s.status !== "projected");
+}
+
+/**
  * Single source of truth for dose-status presentation (labels, explainers, dot +
  * chip Tailwind classes, legend order). Previously these maps were triplicated
  * across DosesMonth / DosesWeek / DayDetail and had drifted. Keyed by every

@@ -8,6 +8,8 @@ import { computeDraw } from "@/lib/dosing/engine";
 import { splitProspectiveDose, weakestBlendSource, roundSplitForDisplay, type BlendComponent } from "@/lib/blends-core";
 import { doseUnitBreakdown } from "@/lib/dosing/unit-breakdown";
 import type { DoseUnit } from "@/lib/dosing/types";
+import { isPump, type DeviceType } from "@/lib/device-type";
+import { pumpsToMl, mlToPumps, formatPumps } from "@/lib/dosing/nasal";
 import { budStatus, budWarning } from "@/lib/bud";
 import type { ProtocolDoseOption } from "@/lib/log/protocol-options";
 import { logDose } from "@/app/actions/doses";
@@ -26,6 +28,8 @@ import { BodyMap } from "./BodyMap";
 interface PrepOption {
   peptideId: string;
   peptideName: string;
+  /** "injection" | "nasal" — drives the device-list filter (pumps only for nasal). */
+  route: string;
   preparation: {
     id: string;
     concentrationMcgPerMl: string;
@@ -44,14 +48,17 @@ interface SyringeDTO {
   id: string;
   name: string;
   graduationType: "units" | "ml";
-  deviceType: "syringe" | "pen";
+  deviceType: DeviceType;
   unitsPerMl: number;
   capacityMl: string;
   capacityUnits: number;
   increment: string;
 }
 
-const UNITS: DoseUnit[] = ["mcg", "mg", "ml", "units"];
+/** The dose-amount unit shown in the form. "pumps" is UI-only — see the pumps→mL conversion below. */
+type FormDoseUnit = DoseUnit | "pumps";
+const INJECTION_UNITS: FormDoseUnit[] = ["mcg", "mg", "ml", "units"];
+const PUMP_UNITS: FormDoseUnit[] = ["pumps", "mcg", "mg"];
 
 function nowLocalInput(): string {
   const n = new Date();
@@ -82,11 +89,23 @@ export function AdHocLogForm({
   protocolOptions?: ProtocolDoseOption[];
   design?: "pitstop" | "current";
 }) {
+  // Devices available for a given route: a nasal peptide must be dosed on a
+  // pump, every other route must never be offered one.
+  function syringesForRoute(route: string | undefined): SyringeDTO[] {
+    const nasal = route === "nasal";
+    return syringes.filter((s) => (nasal ? isPump(s.deviceType) : !isPump(s.deviceType)));
+  }
+
   const [protocolId, setProtocolId] = useState("");
   const [prepId, setPrepId] = useState(options[0]?.preparation.id ?? "");
-  const [syringeId, setSyringeId] = useState(() => (defaultSyringeId && syringes.some((s) => s.id === defaultSyringeId) ? defaultSyringeId : syringes[0]?.id ?? ""));
-  const [doseValue, setDoseValue] = useState("");
-  const [doseUnit, setDoseUnit] = useState<DoseUnit>("mcg");
+  const [syringeId, setSyringeId] = useState(() => {
+    const avail = syringesForRoute(options[0]?.route);
+    return defaultSyringeId && avail.some((s) => s.id === defaultSyringeId) ? defaultSyringeId : avail[0]?.id ?? "";
+  });
+  // A pump device defaults to a filled-in "1 pump" rather than a blank value —
+  // there is no sensible blank injection-style default for a nasal peptide.
+  const [doseValue, setDoseValue] = useState(() => (options[0]?.route === "nasal" ? "1" : ""));
+  const [doseUnit, setDoseUnit] = useState<FormDoseUnit>(() => (options[0]?.route === "nasal" ? "pumps" : "mcg"));
   const [takenAt, setTakenAt] = useState(nowLocalInput());
   const [takenAtTouched, setTakenAtTouched] = useState(false);
   const [site, setSite] = useState(() => {
@@ -102,7 +121,8 @@ export function AdHocLogForm({
   const [advance, setAdvance] = useState<TitrationAdvanceSuggestion | undefined>();
 
   const opt = options.find((o) => o.preparation.id === prepId);
-  const syr = syringes.find((s) => s.id === syringeId);
+  const availableSyringes = syringesForRoute(opt?.route);
+  const syr = availableSyringes.find((s) => s.id === syringeId);
 
   useEffect(() => {
     if (takenAtTouched || busy || done) return;
@@ -130,11 +150,26 @@ export function AdHocLogForm({
         })
       : null;
 
+  // "pumps" is UI-only — computeDraw (and the server) only ever see a real
+  // DoseUnit. Convert pumps × increment → mL before anything downstream sees it.
+  const effectiveDose = useMemo(() => {
+    if (!doseValue) return null;
+    if (doseUnit === "pumps") {
+      if (!syr) return null;
+      try {
+        return { value: pumpsToMl(doseValue, syr.increment).toString(), unit: "ml" as DoseUnit };
+      } catch {
+        return null;
+      }
+    }
+    return { value: doseValue, unit: doseUnit };
+  }, [doseValue, doseUnit, syr]);
+
   const draw = useMemo(() => {
-    if (!opt || !syr || !doseValue || new Decimal(doseValue || 0).lte(0)) return null;
+    if (!opt || !syr || !effectiveDose || new Decimal(effectiveDose.value || 0).lte(0)) return null;
     try {
       return computeDraw({
-        dose: { value: doseValue, unit: doseUnit },
+        dose: effectiveDose,
         preparation: { prepType: "premixed", concentrationMcgPerMl: new Decimal(opt.preparation.concentrationMcgPerMl) },
         syringe: { ...syr },
         remainingMl: opt.preparation.remainingMl,
@@ -142,7 +177,7 @@ export function AdHocLogForm({
     } catch {
       return null;
     }
-  }, [opt, syr, doseValue, doseUnit]);
+  }, [opt, syr, effectiveDose]);
 
   // BUD notice for the SELECTED preparation. Kept out of computeDraw so that
   // stays pure/clock-free; capped at "warn" so an already-injected dose is
@@ -157,9 +192,26 @@ export function AdHocLogForm({
   // Four-unit breakdown of the TARGET dose, recomputed with the draw so it
   // tracks the selected syringe (units = rawUnits = volume × unitsPerMl).
   const multiUnit = useMemo(
-    () => (draw && syr ? doseUnitBreakdown(draw, { ...syr }) : undefined),
+    () =>
+      draw && syr
+        ? {
+            ...doseUnitBreakdown(draw, { ...syr }),
+            // A pump's fourth column is its pump count, not insulin units.
+            ...(isPump(syr.deviceType) ? { pumps: mlToPumps(draw.markingValue, syr.increment).toString() } : {}),
+          }
+        : undefined,
     [draw, syr],
   );
+
+  /**
+   * Keep the selected device valid for `route` after a prep/protocol switch: a
+   * device from the WRONG category (pump for injection, non-pump for nasal)
+   * can never stay selected, so swap to the first device of the right kind.
+   */
+  function syncSyringeForRoute(route: string | undefined) {
+    const avail = syringesForRoute(route);
+    if (!avail.some((s) => s.id === syringeId)) setSyringeId(avail[0]?.id ?? "");
+  }
 
   /**
    * Pick a Protocol: set the dose to its RESOLVED per-injection value (from the
@@ -187,6 +239,9 @@ export function AdHocLogForm({
       setPrepId(prepForProtocol.preparation.id);
       const raw = recentSitesByPeptide[prepForProtocol.peptideId] ?? [];
       setSite(suggestNextSite(raw));
+      // Only the device needs re-syncing here — doseValue/doseUnit are already
+      // the resolver's real value (mcg/mg/ml/units, never "pumps"), set above.
+      syncSyringeForRoute(prepForProtocol.route);
     }
   }
 
@@ -201,6 +256,19 @@ export function AdHocLogForm({
     if (newOpt) {
       const raw = recentSitesByPeptide[newOpt.peptideId] ?? [];
       setSite(suggestNextSite(raw));
+      syncSyringeForRoute(newOpt.route);
+      // Reset the dose amount/unit to a sane default when the current one no
+      // longer makes sense for the new device category: "pumps" isn't a valid
+      // unit off a pump, and a bare mass unit (mcg/mg) carries over fine so it
+      // is left alone rather than clobbering whatever the user had typed.
+      const nasal = newOpt.route === "nasal";
+      if (nasal && doseUnit !== "pumps" && doseUnit !== "mcg" && doseUnit !== "mg") {
+        setDoseUnit("pumps");
+        setDoseValue("1");
+      } else if (!nasal && doseUnit === "pumps") {
+        setDoseUnit("mcg");
+        setDoseValue("");
+      }
     }
   }
 
@@ -211,7 +279,7 @@ export function AdHocLogForm({
     pickedProtocol != null && !options.some((o) => o.peptideId === pickedProtocol.peptideId);
 
   async function onConfirm() {
-    if (!opt || !syr) return;
+    if (!opt || !syr || !effectiveDose) return;
     setBusy(true);
     setError(null);
 
@@ -221,9 +289,10 @@ export function AdHocLogForm({
     const input = {
       preparationId: opt.preparation.id,
       syringeId: syr.id,
-      doseValue,
-      doseUnit,
-      injectionSite: site || undefined,
+      doseValue: effectiveDose.value,
+      doseUnit: effectiveDose.unit,
+      // A pump has no injection site.
+      injectionSite: isPump(syr.deviceType) ? undefined : site || undefined,
       notes: notes || undefined,
       takenAtISO: logTime.toISOString(),
       useServerTime: logNow,
@@ -360,16 +429,19 @@ export function AdHocLogForm({
 
       <div className="flex gap-2">
         <input inputMode="decimal" value={doseValue} onChange={(e) => setDoseValue(e.target.value)} placeholder="Dose" className="w-28 rounded-control border border-line/15 bg-bg px-3 py-2 tabular-nums" aria-label="Dose amount" />
-        <select value={doseUnit} onChange={(e) => setDoseUnit(e.target.value as DoseUnit)} className="rounded-control border border-line/15 bg-bg px-3 py-2" aria-label="Dose unit">
-          {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+        <select value={doseUnit} onChange={(e) => setDoseUnit(e.target.value as FormDoseUnit)} className="rounded-control border border-line/15 bg-bg px-3 py-2" aria-label="Dose unit">
+          {(opt?.route === "nasal" ? PUMP_UNITS : INJECTION_UNITS).map((u) => <option key={u} value={u}>{u}</option>)}
         </select>
       </div>
 
       <label className="block text-sm">
-        Syringe
+        {opt?.route === "nasal" ? "Nasal pump" : "Syringe"}
         <select value={syringeId} onChange={(e) => setSyringeId(e.target.value)} className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2">
-          {syringes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          {availableSyringes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
+        {availableSyringes.length === 0 && opt?.route === "nasal" && (
+          <span className="mt-1 block text-xs text-warn">⚠ No nasal pump yet — add one in Settings → Syringes.</span>
+        )}
       </label>
 
       {/* Pit-board row: Rajdhani uppercase muted label + a mono-styled field.
@@ -424,7 +496,9 @@ export function AdHocLogForm({
               draw
                 ? draw.markingScale === "units"
                   ? `${draw.markingValue.toString()} units`
-                  : `${draw.markingValue.toDecimalPlaces(2).toString()} mL`
+                  : isPump(syr!.deviceType)
+                    ? `${formatPumps(mlToPumps(draw.markingValue, syr!.increment))} (${draw.markingValue.toDecimalPlaces(2).toString()} mL)`
+                    : `${draw.markingValue.toDecimalPlaces(2).toString()} mL`
                 : "—"
             }
             overfill={blocked}
@@ -462,14 +536,16 @@ export function AdHocLogForm({
         </>
       )}
 
-      <div className="space-y-1">
-        <p className="text-sm">Injection site</p>
-        <BodyMap
-          value={site || null}
-          onChange={setSite}
-          recentSites={recentSitesForPeptide}
-        />
-      </div>
+      {!(syr && isPump(syr.deviceType)) && (
+        <div className="space-y-1">
+          <p className="text-sm">Injection site</p>
+          <BodyMap
+            value={site || null}
+            onChange={setSite}
+            recentSites={recentSitesForPeptide}
+          />
+        </div>
+      )}
       <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes (optional, encrypted)" className="w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-sm" />
       {error && <p className="text-sm text-danger">{error}</p>}
 

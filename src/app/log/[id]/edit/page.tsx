@@ -12,6 +12,7 @@ import { decryptField } from "@/lib/crypto/fieldEncryption";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { EditDoseForm } from "@/components/EditDoseForm";
 import { OralEditDoseForm } from "@/components/OralEditDoseForm";
+import { coerceDeviceType } from "@/lib/device-type";
 
 export const dynamic = "force-dynamic";
 
@@ -129,7 +130,7 @@ export default async function EditDosePage({ params }: { params: Promise<{ id: s
         id: log.syringe.id,
         name: log.syringe.name,
         graduationType: log.syringe.graduationType as "units" | "ml",
-        deviceType: (log.syringe.deviceType === "pen" ? "pen" : "syringe") as "syringe" | "pen",
+        deviceType: coerceDeviceType(log.syringe.deviceType),
         unitsPerMl: log.syringe.unitsPerMl,
         capacityMl: log.syringe.capacityMl.toString(),
         capacityUnits: log.syringe.capacityUnits,

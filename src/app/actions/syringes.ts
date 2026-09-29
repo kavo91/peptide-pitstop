@@ -1,8 +1,10 @@
 "use server";
 
+import Decimal from "decimal.js";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/owner";
+import { coerceDeviceType } from "@/lib/device-type";
 
 function posNum(v?: string | null): number | null {
   const n = Number((v ?? "").toString().trim());
@@ -13,7 +15,7 @@ export interface SyringeInput {
   id?: string;
   name: string;
   graduationType?: string; // units | ml
-  deviceType?: string; // syringe | pen (presentation + wording only)
+  deviceType?: string; // syringe | pen (presentation + wording only) | pump (mL-graduated, derives pumps per fill)
   unitsPerMl?: string;
   capacityMl?: string;
   capacityUnits?: string;
@@ -26,21 +28,34 @@ export async function saveSyringe(input: SyringeInput) {
   const name = input.name.trim();
   if (!name) return { ok: false as const, error: "Name is required." };
 
+  const deviceType = coerceDeviceType(input.deviceType);
+  const isPumpDevice = deviceType === "pump";
+
   const unitsPerMl = posNum(input.unitsPerMl) ?? 100;
   const capacityMl = posNum(input.capacityMl);
-  const capacityUnits = posNum(input.capacityUnits);
   const increment = posNum(input.increment);
   if (!capacityMl) return { ok: false as const, error: "Capacity (mL) must be positive." };
-  if (!capacityUnits) return { ok: false as const, error: "Capacity (units) must be positive." };
   if (!increment) return { ok: false as const, error: "Increment must be positive." };
+
+  // A pump is always mL-graduated (fixed metered spray volume) — the barrel/
+  // units fields the UI hides for it are derived, never entered: capacityUnits
+  // becomes "pumps per fill" so the legacy NOT-NULL column stays meaningful.
+  let capacityUnits: number;
+  if (isPumpDevice) {
+    capacityUnits = new Decimal(capacityMl).div(increment).toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber();
+  } else {
+    const parsedCapacityUnits = posNum(input.capacityUnits);
+    if (!parsedCapacityUnits) return { ok: false as const, error: "Capacity (units) must be positive." };
+    capacityUnits = Math.round(parsedCapacityUnits);
+  }
 
   const data = {
     name,
-    graduationType: input.graduationType === "ml" ? "ml" : "units",
-    deviceType: input.deviceType === "pen" ? "pen" : "syringe",
+    graduationType: isPumpDevice ? "ml" : input.graduationType === "ml" ? "ml" : "units",
+    deviceType,
     unitsPerMl: Math.round(unitsPerMl),
     capacityMl: capacityMl.toString(),
-    capacityUnits: Math.round(capacityUnits),
+    capacityUnits,
     increment: increment.toString(),
   };
 

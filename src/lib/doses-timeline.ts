@@ -5,7 +5,7 @@ import { timeInTz } from "@/lib/tz-day";
 import { resolveTitration } from "@/lib/titration/resolve";
 import { buildResolveInput } from "@/lib/titration/from-protocol";
 import { supersededFrom, type LoggedDose, type TimelineEntry } from "./doses-timeline-core";
-import { buildTimelineEntries, clipSlotsToRange, type ResolvedOcc } from "./timeline-status";
+import { buildTimelineEntries, clipSlotsToRange, dropOpenSlotsIfClosed, type ResolvedOcc } from "./timeline-status";
 import { monthMetricsByDay } from "./month-metrics";
 
 const KEY = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -89,8 +89,9 @@ async function buildResolvedOccurrences(userId: string, rangeStart: Date, rangeE
       peptideName: p.peptide.name,
       stackId: p.stackId,
       stackName: p.stack?.name ?? null,
-      // Clip the expanded-range buffer back to the viewed window.
-      slots: clipSlotsToRange(mapped, KEY(startOfDay(rangeStart)), KEY(startOfDay(rangeEnd))),
+      // Clip the expanded-range buffer back to the viewed window; a closed
+      // protocol keeps only taken/missed history, never an open dose.
+      slots: dropOpenSlotsIfClosed(p.status, clipSlotsToRange(mapped, KEY(startOfDay(rangeStart)), KEY(startOfDay(rangeEnd)))),
     });
   }
   return out;

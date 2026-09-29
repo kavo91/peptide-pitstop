@@ -7,6 +7,8 @@ import Decimal from "decimal.js";
 import { computeDraw } from "@/lib/dosing/engine";
 import { reconcileDoseEditRemaining } from "@/lib/dosing/recompute";
 import type { DoseUnit } from "@/lib/dosing/types";
+import { isPump, type DeviceType } from "@/lib/device-type";
+import { pumpsToMl, mlToPumps, formatPumps } from "@/lib/dosing/nasal";
 import { editDoseLog } from "@/app/actions/doses";
 import { trackingDayOf, deviceTimeZone, toDeviceDatetimeLocal } from "@/lib/local-day";
 import { VisualSyringe } from "./VisualSyringe";
@@ -15,12 +17,17 @@ interface SyringeDTO {
   id: string;
   name: string;
   graduationType: "units" | "ml";
-  deviceType: "syringe" | "pen";
+  deviceType: DeviceType;
   unitsPerMl: number;
   capacityMl: string;
   capacityUnits: number;
   increment: string;
 }
+
+/** The dose-amount unit shown in the form. "pumps" is UI-only — see the pumps→mL conversion below. */
+type FormDoseUnit = DoseUnit | "pumps";
+const INJECTION_UNITS: FormDoseUnit[] = ["mcg", "mg", "ml", "units"];
+const PUMP_UNITS: FormDoseUnit[] = ["pumps", "mcg", "mg"];
 
 interface Props {
   dose: {
@@ -49,11 +56,16 @@ interface Props {
   peptideName: string;
 }
 
-const UNITS: DoseUnit[] = ["mcg", "mg", "ml", "units"];
-
 export function EditDoseForm({ dose, prep, syringe, peptideName }: Props) {
-  const [doseValue, setDoseValue] = useState(dose.amount);
-  const [doseUnit, setDoseUnit] = useState<DoseUnit>(dose.doseInputUnit);
+  const pumpDevice = syringe != null && isPump(syringe.deviceType);
+  // A dose entered in pumps is persisted as `{ doseInputUnit: "ml", amount: <mL> }`
+  // (see LogDoseForm). Show it back as pumps, the pump dropdown's only volume
+  // unit, rather than a raw mL amount the pump unit list does not have.
+  const initialIsPumpVolume = pumpDevice && dose.doseInputUnit === "ml";
+  const [doseValue, setDoseValue] = useState(() =>
+    initialIsPumpVolume && syringe ? mlToPumps(dose.amount, syringe.increment).toString() : dose.amount,
+  );
+  const [doseUnit, setDoseUnit] = useState<FormDoseUnit>(() => (initialIsPumpVolume ? "pumps" : dose.doseInputUnit));
   const [takenAt, setTakenAt] = useState(dose.takenAtLocal);
   // Only a TOUCHED time field is submitted: an untouched edit (site/notes only)
   // must keep the stored takenAt AND its frozen localDay/tz — re-sending the
@@ -75,12 +87,27 @@ export function EditDoseForm({ dose, prep, syringe, peptideName }: Props) {
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // "pumps" is UI-only — computeDraw (and the server) only ever see a real
+  // DoseUnit. Convert pumps × increment → mL before anything downstream sees it.
+  const effectiveDose = useMemo(() => {
+    if (!doseValue) return null;
+    if (doseUnit === "pumps") {
+      if (!syringe) return null;
+      try {
+        return { value: pumpsToMl(doseValue, syringe.increment).toString(), unit: "ml" as DoseUnit };
+      } catch {
+        return null;
+      }
+    }
+    return { value: doseValue, unit: doseUnit };
+  }, [doseValue, doseUnit, syringe]);
+
   const draw = useMemo(() => {
-    if (!prep || !syringe || !doseValue) return null;
+    if (!prep || !syringe || !effectiveDose) return null;
     try {
-      if (new Decimal(doseValue).lte(0)) return null;
+      if (new Decimal(effectiveDose.value).lte(0)) return null;
       return computeDraw({
-        dose: { value: doseValue, unit: doseUnit },
+        dose: effectiveDose,
         preparation: { prepType: prep.prepType, concentrationMcgPerMl: new Decimal(prep.concentrationMcgPerMl) },
         syringe: { ...syringe },
         remainingMl: prep.remainingMl,
@@ -88,7 +115,7 @@ export function EditDoseForm({ dose, prep, syringe, peptideName }: Props) {
     } catch {
       return null;
     }
-  }, [doseValue, doseUnit, prep, syringe]);
+  }, [effectiveDose, prep, syringe]);
 
   const blocked = draw?.warnings.some((w) => w.severity === "block") ?? false;
 
@@ -111,6 +138,10 @@ export function EditDoseForm({ dose, prep, syringe, peptideName }: Props) {
   const oldRemaining = new Decimal(prep.remainingMl);
 
   async function confirm() {
+    if (!effectiveDose) {
+      setError("Enter a valid dose amount.");
+      return;
+    }
     const when = new Date(takenAt);
     if (Number.isNaN(when.getTime())) {
       setError("Enter a valid date and time.");
@@ -120,14 +151,15 @@ export function EditDoseForm({ dose, prep, syringe, peptideName }: Props) {
     setError(null);
     const res = await editDoseLog({
       id: dose.id,
-      doseValue,
-      doseUnit,
+      doseValue: effectiveDose.value,
+      doseUnit: effectiveDose.unit,
       // `when` parses the datetime-local string in the DEVICE zone, so the
       // stamp freezes the day the editor actually typed.
       ...(takenAtTouched
         ? { takenAtISO: when.toISOString(), localDay: trackingDayOf(when), tz: deviceTimeZone() ?? undefined }
         : {}),
-      injectionSite: site || null,
+      // A pump has no injection site.
+      injectionSite: pumpDevice ? null : site || null,
       notes: notes || null,
     });
     setBusy(false);
@@ -197,11 +229,11 @@ export function EditDoseForm({ dose, prep, syringe, peptideName }: Props) {
         />
         <select
           value={doseUnit}
-          onChange={(e) => setDoseUnit(e.target.value as DoseUnit)}
+          onChange={(e) => setDoseUnit(e.target.value as FormDoseUnit)}
           className="rounded-control border border-line/15 bg-bg px-3 py-2"
           aria-label="Dose unit"
         >
-          {UNITS.map((u) => (
+          {(pumpDevice ? PUMP_UNITS : INJECTION_UNITS).map((u) => (
             <option key={u} value={u}>{u}</option>
           ))}
         </select>
@@ -220,7 +252,9 @@ export function EditDoseForm({ dose, prep, syringe, peptideName }: Props) {
             markingLabel={
               draw.markingScale === "units"
                 ? `${draw.markingValue.toString()} units`
-                : `${draw.markingValue.toDecimalPlaces(2).toString()} mL`
+                : pumpDevice
+                  ? `${formatPumps(mlToPumps(draw.markingValue, syringe.increment))} (${draw.markingValue.toDecimalPlaces(2).toString()} mL)`
+                  : `${draw.markingValue.toDecimalPlaces(2).toString()} mL`
             }
             overfill={blocked}
           />
@@ -243,10 +277,12 @@ export function EditDoseForm({ dose, prep, syringe, peptideName }: Props) {
         <input type="datetime-local" value={takenAt} onChange={(e) => { setTakenAt(e.target.value); setTakenAtTouched(true); }} className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-ink" />
       </label>
 
-      <label className="block text-sm text-muted">
-        Injection site
-        <input value={site} onChange={(e) => setSite(e.target.value)} placeholder="e.g. left abdomen" className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-ink" />
-      </label>
+      {!pumpDevice && (
+        <label className="block text-sm text-muted">
+          Injection site
+          <input value={site} onChange={(e) => setSite(e.target.value)} placeholder="e.g. left abdomen" className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-ink" />
+        </label>
+      )}
 
       <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes (optional, encrypted)" className="w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-sm" />
 

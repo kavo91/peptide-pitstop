@@ -87,7 +87,11 @@ export function SyringeManager({ syringes, defaultSyringeId = null }: { syringes
                   </span>
                 )}
               </p>
-              <p className="text-xs text-muted">{s.graduationType} · {s.capacityMl} mL / {s.capacityUnits}u · step {s.increment}</p>
+              <p className="text-xs text-muted">
+                {s.deviceType === "pump"
+                  ? `pump · ${s.capacityMl} mL bottle · ${s.increment} mL per pump (${s.capacityUnits} pumps per fill)`
+                  : `${s.graduationType} · ${s.capacityMl} mL / ${s.capacityUnits}u · step ${s.increment}`}
+              </p>
             </div>
             <div className="flex gap-3">
               {s.id === defaultSyringeId ? (
@@ -109,19 +113,32 @@ export function SyringeManager({ syringes, defaultSyringeId = null }: { syringes
           <select className={input} value={form.deviceType ?? "syringe"} onChange={(e) => set("deviceType", e.target.value)} aria-label="Device type">
             <option value="syringe">Syringe (draw to a mark)</option>
             <option value="pen">Pen (dial a dose)</option>
+            <option value="pump">Nasal pump (fixed spray volume)</option>
           </select>
-          <select className={input} value={form.graduationType} onChange={(e) => set("graduationType", e.target.value)} aria-label="Graduation type">
-            <option value="units">unit-graduated (insulin)</option>
-            <option value="ml">mL-graduated</option>
-          </select>
-          <div className="flex gap-2">
-            <input className={input} inputMode="decimal" placeholder="Units/mL" value={form.unitsPerMl} onChange={(e) => set("unitsPerMl", e.target.value)} />
-            <input className={input} inputMode="decimal" placeholder="Capacity mL" value={form.capacityMl} onChange={(e) => set("capacityMl", e.target.value)} />
-          </div>
-          <div className="flex gap-2">
-            <input className={input} inputMode="decimal" placeholder="Capacity units" value={form.capacityUnits} onChange={(e) => set("capacityUnits", e.target.value)} />
-            <input className={input} inputMode="decimal" placeholder="Smallest mark" value={form.increment} onChange={(e) => set("increment", e.target.value)} />
-          </div>
+          {form.deviceType !== "pump" && (
+            <select className={input} value={form.graduationType} onChange={(e) => set("graduationType", e.target.value)} aria-label="Graduation type">
+              <option value="units">unit-graduated (insulin)</option>
+              <option value="ml">mL-graduated</option>
+            </select>
+          )}
+          {form.deviceType !== "pump" && (
+            <div className="flex gap-2">
+              <input className={input} inputMode="decimal" placeholder="Units/mL" value={form.unitsPerMl} onChange={(e) => set("unitsPerMl", e.target.value)} />
+              <input className={input} inputMode="decimal" placeholder="Capacity mL" value={form.capacityMl} onChange={(e) => set("capacityMl", e.target.value)} />
+            </div>
+          )}
+          {form.deviceType === "pump" && (
+            <input className={input} inputMode="decimal" placeholder="Bottle fill, mL" value={form.capacityMl} onChange={(e) => set("capacityMl", e.target.value)} />
+          )}
+          {form.deviceType !== "pump" && (
+            <div className="flex gap-2">
+              <input className={input} inputMode="decimal" placeholder="Capacity units" value={form.capacityUnits} onChange={(e) => set("capacityUnits", e.target.value)} />
+              <input className={input} inputMode="decimal" placeholder="Smallest mark" value={form.increment} onChange={(e) => set("increment", e.target.value)} />
+            </div>
+          )}
+          {form.deviceType === "pump" && (
+            <input className={input} inputMode="decimal" placeholder="Spray volume, mL (e.g. 0.1)" value={form.increment} onChange={(e) => set("increment", e.target.value)} />
+          )}
           {error && <p className="text-sm text-danger">{error}</p>}
           <div className="flex gap-2">
             <button type="button" onClick={save} disabled={busy} className="flex flex-1 items-center justify-center gap-1.5 rounded-control bg-accent px-4 py-2 text-sm font-medium text-onAccent disabled:opacity-40">{busy ? "…" : <><Save className="h-4 w-4" aria-hidden /> Save</>}</button>

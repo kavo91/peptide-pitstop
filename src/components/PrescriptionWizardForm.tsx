@@ -384,7 +384,7 @@ export function PrescriptionWizardForm({
     halfLifeHours: "",
     minIntervalHours: "",
     missedDosePolicy: "prompt" as "skip" | "take_now" | "prompt",
-    route: "injection" as "injection" | "oral",
+    route: "injection" as "injection" | "oral" | "nasal",
     storageNotes: "",
   });
   const [stackMode, setStackMode] = useState<"existing" | "new">(
@@ -468,7 +468,7 @@ export function PrescriptionWizardForm({
       substanceClass: (choice?.substanceClass ?? "mass") as "mass" | "IU",
       defaultStrengthMg: choice?.defaultStrengthMg ?? "",
       halfLifeHours: choice?.halfLifeHours ?? "",
-      route: (choice?.route ?? "injection") as "injection" | "oral",
+      route: (choice?.route === "oral" || choice?.route === "nasal" ? choice.route : "injection") as "injection" | "oral" | "nasal",
       storageNotes: choice?.storageNotes ?? "",
     });
   }
@@ -705,11 +705,12 @@ export function PrescriptionWizardForm({
                     name="peptide-route"
                     value={peptide.route}
                     onChange={(event) =>
-                      patchPeptide({ route: event.target.value as "injection" | "oral" })
+                      patchPeptide({ route: event.target.value as "injection" | "oral" | "nasal" })
                     }
                   >
                     <option value="injection">Injection</option>
                     <option value="oral">Oral</option>
+                    <option value="nasal">Nasal spray (mix, then pump)</option>
                   </select>
                   <select
                     className={field}
