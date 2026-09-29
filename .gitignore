@@ -30,6 +30,8 @@ prisma/prisma/
 prisma/scratch*.db
 .env.designdev
 
-# DOCUMENTS_DIR default (<dirname(DATABASE_URL)>/documents) — uploaded clinic PDFs
-prisma/documents/
-documents/
+# DOCUMENTS_DIR default (<dirname(DATABASE_URL)>/documents) — uploaded clinic PDFs.
+# Anchored to the two local-dev locations: an unanchored `documents/` also
+# matches source directories such as src/app/api/documents/.
+/prisma/documents/
+/documents/
