@@ -25,6 +25,7 @@ import { budStatus, resolveBudDays, beyondUseDateFrom, type BudState } from "@/l
 import { buildForecastPlan, conv1ToLocalDay } from "@/lib/forecast-slots";
 import { forecastCoverage, type ForecastContainer } from "@/lib/reorder-forecast";
 import type { DoseUnit } from "@/lib/dosing/types";
+import { coerceDeviceType, type DeviceType } from "@/lib/device-type";
 
 // Re-export so existing importers (`@/lib/inventory`) keep working after the
 // move to the pure schedule/frequency module.
@@ -34,7 +35,7 @@ export interface SyringeDTO {
   id: string;
   name: string;
   graduationType: "units" | "ml";
-  deviceType: "syringe" | "pen";
+  deviceType: DeviceType;
   unitsPerMl: number;
   capacityMl: string;
   capacityUnits: number;
@@ -156,7 +157,7 @@ export async function getInventory(userId: string, now = new Date()): Promise<Vi
       id: s.id,
       name: s.name,
       graduationType: s.graduationType as "units" | "ml",
-      deviceType: (s.deviceType === "pen" ? "pen" : "syringe") as "syringe" | "pen",
+      deviceType: coerceDeviceType(s.deviceType),
       unitsPerMl: s.unitsPerMl,
       capacityMl: s.capacityMl.toString(),
       capacityUnits: s.capacityUnits,

@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/owner";
 import { computeDraw } from "@/lib/dosing/engine";
 import { buildOralDoseRecord, isOralDoseUnit } from "@/lib/dosing/oral";
+import { isPump } from "@/lib/device-type";
 import { reconcileDoseEditRemaining } from "@/lib/dosing/recompute";
 import { doseTakenAt } from "@/lib/dose-clock";
 import { encryptField } from "@/lib/crypto/fieldEncryption";
@@ -49,8 +50,14 @@ export interface LogDoseInput {
   localDay?: string;
   tz?: string;
   clientUuid?: string;
-  /** "oral" routes the dose through the prep-less / syringe-less oral path. Default injection. */
-  route?: "injection" | "oral";
+  /**
+   * "oral" routes the dose through the prep-less / syringe-less oral path.
+   * "nasal" is informational only here — the server always re-derives the
+   * authoritative route from the peptide record (see logDose), never trusts
+   * this field for anything but the oral/injection branch dispatch. Default
+   * injection.
+   */
+  route?: "injection" | "oral" | "nasal";
   /** The oral peptide being logged (oral has no prep to derive the peptide from). */
   peptideId?: string;
 }
@@ -152,9 +159,17 @@ export async function logDose(input: LogDoseInput): Promise<LogDoseResult> {
 
   // Ownership-scoped lookups — reject ids that aren't the caller's.
   if (!input.preparationId) return { ok: false, error: "A preparation is required to log an injection" };
-  const prep = await prisma.preparation.findFirst({ where: { id: input.preparationId, vial: { userId: user.id } }, include: { vial: true } });
+  const prep = await prisma.preparation.findFirst({
+    where: { id: input.preparationId, vial: { userId: user.id } },
+    include: { vial: { include: { peptide: { select: { route: true } } } } },
+  });
   if (!prep) return { ok: false, error: "Preparation not found" };
   if (!prep.active) return { ok: false, error: "That preparation is no longer active." };
+  // The authoritative route — from the peptide record, never trusted from the
+  // client — decides whether this write is a nasal (pump) dose: sets `route`
+  // and drops any injection site (a pump has none), matching the oral path's
+  // server-side-derived behaviour above.
+  const isNasalDose = prep.vial.peptide.route === "nasal";
 
   const syringe = input.syringeId
     ? await prisma.syringe.findFirst({ where: { id: input.syringeId, OR: [{ userId: user.id }, { userId: null }] } })
@@ -274,7 +289,8 @@ export async function logDose(input: LogDoseInput): Promise<LogDoseResult> {
         volumeMl: draw.deliveredVolumeMl.toString(),
         syringeUnits: draw.markingScale === "units" ? draw.markingValue.toString() : null,
         syringeId: syringe.id,
-        injectionSite: input.injectionSite,
+        injectionSite: isNasalDose ? null : input.injectionSite,
+        route: isNasalDose ? "nasal" : null,
         source: "app",
         notes: input.notes ? encryptField(input.notes) : null,
       },
@@ -638,7 +654,11 @@ export async function editDoseLog(input: EditDoseLogInput): Promise<{ ok: boolea
           takenAt,
           deltaMinutes,
           ...stamp,
-          injectionSite: input.injectionSite === undefined ? log.injectionSite : input.injectionSite,
+          // A pump device has no injection site, so any client-sent value is
+          // dropped. (logDose keys the same rule on the peptide's nasal route.)
+          injectionSite: log.syringe && isPump(log.syringe.deviceType)
+            ? null
+            : input.injectionSite === undefined ? log.injectionSite : input.injectionSite,
           notes: input.notes === undefined ? log.notes : (input.notes ? encryptField(input.notes) : null),
         },
       });

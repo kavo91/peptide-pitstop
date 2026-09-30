@@ -12,7 +12,7 @@
 
 > **Your data never leaves your server.** Handing your weight, hormone, and dosing history to someone else's startup is a leap of faith — Peptide Pitstop removes the leap. No accounts in someone else's cloud. No telemetry. No third party between you and your health record. You host it, you back it up, you export it, you delete it — on your terms.
 
-Peptide Pitstop is a private, self-hosted web app for managing peptide and GLP-1 therapy — reconstitution math, dose logging, prescriptions, bloodwork, plasma-level modelling, DEXA body composition, Garmin training metrics and Garmin ECG import — installable as an offline PWA on your phone and living entirely on infrastructure you own. The dosing engine, the highest-stakes part, is exhaustively tested — pure decimal math, no floating-point drift.
+Peptide Pitstop is a private, self-hosted web app for managing peptide and GLP-1 therapy — reconstitution math, dose logging for injections, oral peptides and nasal sprays, prescriptions, bloodwork, plasma-level modelling, DEXA body composition, Garmin training metrics and Garmin ECG import — installable as an offline PWA on your phone and living entirely on infrastructure you own. The dosing engine, the highest-stakes part, is exhaustively tested — pure decimal math, no floating-point drift.
 
 > ℹ️ Single-user today, with the data model already scoped for multi-user.
 
@@ -55,13 +55,19 @@ If you stop using Peptide Pitstop tomorrow, you walk away with a complete, reada
 
 ## 📸 Screenshots
 
-> Screenshots use demo seed data only (BPC-157, TB-500, Ipamorelin, plus made-up DEXA, RMR and Garmin training values). The one exception is the ECG: those strips are the maintainer's own recording, imported from the Garmin PDF. The app never reads the printed name or date of birth, so neither appears.
+> Screenshots use demo seed data only (BPC-157, TB-500, Ipamorelin, Thymosin Alpha-1 and a nasal Oxytocin protocol, plus made-up DEXA, RMR and Garmin training values). The one exception is the ECG: those strips are the maintainer's own recording, imported from the Garmin PDF. The app never reads the printed name or date of birth, so neither appears.
 
 **Today** — what's due and what's been logged, with one-tap actions
 ![Today](docs/screenshots/today.png)
 
 **Log a dose** — draw volume, syringe markings, and an injection-site map
 ![Log a dose](docs/screenshots/dosing.png)
+
+**Smooth your week.** Doses per day for the coming week, and a suggested day rotation that spreads them out without changing amounts, times or doses per week
+![Smooth your week panel on the Protocols page (demo data)](docs/screenshots/smooth-your-week.png)
+
+**Nasal sprays.** A nasal dose shown as a pump count on its spray pump, with the millilitres beside it and no injection site
+![A nasal dose shown as 2 pumps (0.2 mL) on the Today page (demo data)](docs/screenshots/nasal-dose.png)
 
 **Analytics & plasma** — adherence, a dose-history heatmap, and plasma-level estimates
 ![Analytics and plasma curves](docs/screenshots/analytics.png)
@@ -87,6 +93,7 @@ The motorsport "pit-wall" dark theme ships alongside a clean light theme, and th
 | ![Today — light](docs/screenshots/today-light.png) | ![Today — mobile](docs/screenshots/today-mobile.png) |
 | ![Analytics — light](docs/screenshots/analytics-light.png) | ![Analytics — mobile](docs/screenshots/analytics-mobile.png) |
 | ![Regional body figure, light theme](docs/screenshots/body-figure-light.png) | ![Bloodwork — mobile](docs/screenshots/bloodwork-mobile.png) |
+| ![Smooth your week, light theme](docs/screenshots/smooth-your-week-light.png) | ![A nasal dose in pumps, on mobile](docs/screenshots/nasal-dose-mobile.png) |
 
 ---
 
@@ -95,8 +102,9 @@ The motorsport "pit-wall" dark theme ships alongside a clean light theme, and th
 ### Dosing — the safety-critical core
 - **Reconstitution engine.** Concentration, draw volume, and syringe markings computed with `decimal.js` — pure decimal maths, no floating-point drift. Handles reconstituted *and* premixed vials.
 - **Exhaustively tested.** The dosing and schedule logic is covered by an extensive vitest suite including property tests, real-world regression cases, unit-equivalence checks, and syringe-bound guardrails.
-- **Quick logging.** Log a dose in seconds — on your phone — with a visual syringe picker and injection-site body map. Supports injections, oral peptides, and ad-hoc doses.
+- **Quick logging.** Log a dose in seconds — on your phone — with a visual syringe picker and injection-site body map. Supports injections, oral peptides, nasal sprays, and ad-hoc doses.
 - **Syringes and pens.** A device can be a barrel syringe or a dial-a-dose pen. Pens get a dose-window graphic and pen wording instead of a drawn barrel — presentation only, never a change to the dose maths. Set one device as your default and it is preselected wherever a protocol hasn't pinned its own.
+- **Nasal sprays, counted in pumps.** Set a peptide's route to nasal and add your spray pump by its volume per spray and its bottle fill. The log form shows the dose as a pump count with the millilitres beside it and asks for no injection site; a nasal peptide is only ever offered a pump, and an injection is never offered one. The bottle is filled from a reconstituted vial, so the remaining volume is tracked like any other preparation.
 
 ### Protocols, prescriptions & inventory
 - **Protocols with titration & stacks.** Multi-peptide schedules, ramping/titration steps, and stacked protocols with human-readable cadence and half-life shown inline. Protocols are grouped by lifecycle — active, scheduled to start later, paused, past their end date, and completed — so a protocol queued for next month never sits indistinguishable from one running today.
@@ -104,6 +112,7 @@ The motorsport "pit-wall" dark theme ships alongside a clean light theme, and th
 - **Cycle planning.** Give a protocol a course-level on/off plan in weeks — run for eight, break for four — and the app tracks where you are in it: a day-of-cycle chip on the list, a banner as the planned last dose approaches and once a break is over, and notifications on the same exactly-once ledger as dose reminders. Distinct from an intra-week dosing rhythm: this governs whether the protocol should be running at all. The suggested length is drawn from the peptide's own literature and shown with its source quote, as reference only.
 - **Titration inside a stack.** A stack's components can each carry their own ramp, built at creation time and optionally moved in lockstep. Every stack surface resolves the dose you are actually on rather than the protocol's headline target, and schedule rewrites are refused on a stack that is mid-ladder — the same guard that protects a standalone protocol.
 - **Gantt view.** A timeline of concurrent courses, with cycle boundaries and end dates editable in place, for seeing how overlapping protocols actually line up.
+- **Smooth your week.** Weekly protocols tend to land on the same days. The Protocols page counts doses per day for the coming week and suggests moving a protocol to other weekdays so the load spreads out. Amounts, times and doses per week never change: the only move is rotating a weekly pattern. One combined plan covers every weekly protocol that can move, and each change also shows the week it would give on its own, the first dose on the new days, and any planned dose that will not happen. Apply the whole plan or one protocol at a time, or choose *Keep as is* to leave a protocol out of future suggestions. Today shows a short note only when there is something to suggest. Oral and nasal protocols, protocols in a stack, and courses that end within a week are never moved.
 - **Prescriptions & vials.** Full CRUD for prescriptions, vials, and preparations, with per-dose vial-volume accounting.
 - **Guided prescription wizard (opt-in).** A step-by-step flow for entering a prescription and its protocol, reachable from Prescriptions. Off by default — set `ENABLE_PRESCRIPTION_WIZARD=1` to switch it on.
 - **Inventory & reorder.** Depletion forecasting (doses remaining / days of supply) and lead-time-aware reorder status so you restock before you run dry. A repeating course projects its next on-cycle as provisional demand, so the reorder date keys to the restart rather than going quiet through the off-weeks and flipping to *order now* after the shipping window has closed.
@@ -343,7 +352,7 @@ sqlite3 /path/to/peptides.db \
 
 - [Dose reminder notifications](docs/ha-reminder-automation.md) — Web Push setup (VAPID + device enrolment) and the optional Home Assistant fallback relay.
 - [Dose timestamps, tracking days, and timezones](docs/tracking-day-timezones.md) — authoritative instants, phone-local display, the 02:00 rollover, manual entries, and offline replay.
-- [Demo seed](prisma/seed.ts), what `npm run db:seed` loads: three example peptides, four weeks of doses, a lab panel, two made-up DEXA scans with an RMR test, an illness window, and four weeks of made-up Garmin wellness and training rows. The ECG import has no seed; drop your own Garmin PDF onto the journal page.
+- [Demo seed](prisma/seed.ts), what `npm run db:seed` loads: five example peptides (one of them a nasal spray on a pump device), four weeks of doses, two weekly protocols on the same days for Smooth your week, a lab panel, two made-up DEXA scans with an RMR test, an illness window, and four weeks of made-up Garmin wellness and training rows. The ECG import has no seed; drop your own Garmin PDF onto the journal page.
 
 > Apple Health is intentionally **not** a built-in integration: HealthKit is device-only and a self-hosted web app cannot write to it.
 

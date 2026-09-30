@@ -17,6 +17,7 @@ const {
   runPlannedDoseGeneration,
   normaliseScheduleRule,
   doseLogFindFirst,
+  doseLogCount,
   auditLogCreate,
 } = vi.hoisted(() => ({
   protocolFindFirst: vi.fn(),
@@ -35,6 +36,7 @@ const {
   runPlannedDoseGeneration: vi.fn(),
   normaliseScheduleRule: vi.fn(),
   doseLogFindFirst: vi.fn(),
+  doseLogCount: vi.fn(),
   auditLogCreate: vi.fn(),
 }));
 
@@ -50,7 +52,7 @@ vi.mock("@/lib/db", () => ({
     protocolStep: {
       createMany: protocolStepCreateMany,
     },
-    doseLog: { findFirst: doseLogFindFirst },
+    doseLog: { findFirst: doseLogFindFirst, count: doseLogCount },
     auditLog: { create: auditLogCreate },
     $transaction: transaction,
   },
@@ -109,6 +111,9 @@ beforeEach(() => {
   assertPrescriptionCompatible.mockReset();
   runPlannedDoseGeneration.mockReset();
   normaliseScheduleRule.mockReset();
+  doseLogCount.mockReset();
+  // Default: nothing logged yet. Tests that need history set it explicitly.
+  doseLogCount.mockResolvedValue(0);
   currentUser.mockResolvedValue({ id: "u1" });
   protocolUpdateMany.mockResolvedValue({ count: 1 });
   protocolCount.mockResolvedValue(0);
@@ -287,7 +292,15 @@ describe("updateProtocol — gantt quick edits (end date + cycle plan)", () => {
     stackId: null,
     cycleOnWeeks: 8,
     cycleOffWeeks: 4,
+    cycleAnchor: null as Date | null,
   };
+
+  // Synthetic dates for the cycle-anchor cases. endDate is cleared on these
+  // rows so a start moved past the fixture's stored end date does not trip
+  // the "end date before start date" guard.
+  const D_START = new Date("2027-03-02T00:00:00.000Z");
+  const D_MOVED = new Date("2027-03-07T00:00:00.000Z");
+  const D_ELSEWHERE = new Date("2027-03-30T00:00:00.000Z");
 
   it("writes a new end date and regenerates planned doses", async () => {
     protocolFindFirst.mockResolvedValue({ ...target });
@@ -299,6 +312,41 @@ describe("updateProtocol — gantt quick edits (end date + cycle plan)", () => {
     expect(data.startDate).toBeUndefined();
     expect(data.cycleOnWeeks).toBeUndefined();
     expect(runPlannedDoseGeneration).toHaveBeenCalledWith("u1");
+  });
+
+  // The Gantt quick edit sends only the DIRTY fields, so Save with nothing
+  // changed arrives as `{ id }` alone. Every value in `data` is then undefined,
+  // Prisma issues no UPDATE and reports `count: 0` — indistinguishable from
+  // "no row matched". Read that way, the action would answer "Protocol not
+  // found." for a protocol that exists and belongs to the caller.
+  describe("a Save with nothing changed", () => {
+    // The default mock answers { count: 1 } unconditionally, which cannot
+    // reproduce this at all. Mirror what Prisma really does instead.
+    const asPrismaWould = async ({ data }: { data: Record<string, unknown> }) => ({
+      count: Object.values(data ?? {}).some((v) => v !== undefined) ? 1 : 0,
+    });
+
+    it("succeeds as a no-op instead of reporting the protocol missing", async () => {
+      protocolFindFirst.mockResolvedValue({ ...target });
+      protocolUpdateMany.mockImplementation(asPrismaWould);
+      const res = await updateProtocol({ id: "p1" });
+      expect(res.ok).toBe(true);
+    });
+
+    it("writes nothing at all rather than issuing an empty update", async () => {
+      protocolFindFirst.mockResolvedValue({ ...target });
+      protocolUpdateMany.mockImplementation(asPrismaWould);
+      await updateProtocol({ id: "p1" });
+      expect(protocolUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it("still refuses when a REAL write matches no row — the row vanished mid-edit", async () => {
+      protocolFindFirst.mockResolvedValue({ ...target });
+      protocolUpdateMany.mockResolvedValue({ count: 0 });
+      const res = await updateProtocol({ id: "p1", endDateISO: "2027-02-27T00:00:00.000Z" });
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toContain("Protocol not found.");
+    });
   });
 
   it("refuses an end date before the stored start date, writing nothing", async () => {
@@ -367,6 +415,88 @@ describe("updateProtocol — gantt quick edits (end date + cycle plan)", () => {
     expect(echoed).toBeUndefined();
   });
 
+  // ── cycleAnchor follows a moving startDate ────────────────────────────────
+  // Regression: a protocol created with startDate = cycleAnchor on the same
+  // day and no doses, then given a later start date from the protocol card,
+  // which sends startDateISO ONLY. The anchor stayed on the old day, so the
+  // first ON block of the cycle plan came out short by exactly the move,
+  // with nothing on any surface saying so.
+  describe("cycle anchor follows the start date", () => {
+    const linked = { ...target, startDate: D_START, endDate: null, cycleAnchor: D_START };
+
+    it("moves a LINKED anchor with the start date when NO doses are logged", async () => {
+      protocolFindFirst.mockResolvedValue({ ...linked });
+      doseLogCount.mockResolvedValue(0);
+
+      const res = await updateProtocol({ id: "p1", startDateISO: D_MOVED.toISOString() });
+
+      expect(res.ok).toBe(true);
+      const data = protocolUpdateMany.mock.calls[0][0].data;
+      expect(data.startDate).toEqual(D_MOVED);
+      expect(data.cycleAnchor).toEqual(D_MOVED);
+      if (res.ok) expect(res.warning).toBeUndefined();
+    });
+
+    it("does NOT move the anchor when doses are logged, and says so", async () => {
+      protocolFindFirst.mockResolvedValue({ ...linked });
+      doseLogCount.mockResolvedValue(7);
+
+      const res = await updateProtocol({ id: "p1", startDateISO: D_MOVED.toISOString() });
+
+      expect(res.ok).toBe(true);
+      const data = protocolUpdateMany.mock.calls[0][0].data;
+      // The start date still lands; only the anchor is held.
+      expect(data.startDate).toEqual(D_MOVED);
+      expect(data.cycleAnchor).toBeUndefined();
+      if (res.ok) expect(res.warning).toMatch(/logged doses/i);
+    });
+
+    it("never rewrites an anchor the user placed away from the start", async () => {
+      protocolFindFirst.mockResolvedValue({ ...linked, cycleAnchor: D_ELSEWHERE });
+      doseLogCount.mockResolvedValue(0);
+
+      const res = await updateProtocol({ id: "p1", startDateISO: D_MOVED.toISOString() });
+
+      expect(res.ok).toBe(true);
+      expect(protocolUpdateMany.mock.calls[0][0].data.cycleAnchor).toBeUndefined();
+      if (res.ok) expect(res.warning).toBeUndefined();
+    });
+
+    it("an explicit anchor on the same call wins over the follow", async () => {
+      protocolFindFirst.mockResolvedValue({ ...linked });
+      doseLogCount.mockResolvedValue(0);
+
+      const res = await updateProtocol({
+        id: "p1",
+        startDateISO: D_MOVED.toISOString(),
+        cycleAnchorISO: D_ELSEWHERE.toISOString(),
+      });
+
+      expect(res.ok).toBe(true);
+      expect(protocolUpdateMany.mock.calls[0][0].data.cycleAnchor).toEqual(D_ELSEWHERE);
+    });
+
+    it("costs no dose-count query when the start date is only echoed back", async () => {
+      protocolFindFirst.mockResolvedValue({ ...linked });
+
+      const res = await updateProtocol({ id: "p1", startDateISO: D_START.toISOString() });
+
+      expect(res.ok).toBe(true);
+      expect(doseLogCount).not.toHaveBeenCalled();
+      expect(protocolUpdateMany.mock.calls[0][0].data.cycleAnchor).toBeUndefined();
+    });
+
+    it("leaves a NULL anchor null — it already follows startDate at read time", async () => {
+      protocolFindFirst.mockResolvedValue({ ...linked, cycleAnchor: null });
+      doseLogCount.mockResolvedValue(0);
+
+      const res = await updateProtocol({ id: "p1", startDateISO: D_MOVED.toISOString() });
+
+      expect(res.ok).toBe(true);
+      expect(protocolUpdateMany.mock.calls[0][0].data.cycleAnchor).toBeUndefined();
+    });
+  });
+
   it("moves and clears the cycle anchor independently", async () => {
     protocolFindFirst.mockResolvedValue({ ...target });
     await updateProtocol({ id: "p1", cycleAnchorISO: "2026-09-27T00:00:00.000Z" });
@@ -376,6 +506,70 @@ describe("updateProtocol — gantt quick edits (end date + cycle plan)", () => {
     protocolFindFirst.mockResolvedValue({ ...target });
     await updateProtocol({ id: "p1", cycleAnchorISO: null });
     expect(protocolUpdateMany.mock.calls[0][0].data.cycleAnchor).toBeNull();
+  });
+});
+
+describe("saveProtocol — the edit form echoes the stored cycle anchor", () => {
+  // ProtocolForm posts the WHOLE form on every save, so `cycleAnchor` comes back
+  // unchanged even when the user only touched the start date. Before the fix that
+  // echo re-wrote the stale anchor verbatim and the cycle silently kept counting
+  // from the old day.
+  const OLD_START = new Date("2027-03-02T00:00:00.000Z");
+  const NEW_START = new Date("2027-03-07T00:00:00.000Z");
+
+  const form = {
+    id: "p1",
+    peptideId: "pep-1",
+    name: "Peptide A",
+    scheduleType: "fixed_times",
+    scheduleRule: JSON.stringify([{ dayPattern: { kind: "weekly", byDays: ["TU", "FR"] }, times: ["08:00"] }]),
+    doseBasis: "per_injection",
+    status: "active",
+    startDate: "2027-03-07",
+    cycleAnchor: "2027-03-02", // echoed from the stored row
+    cycleOnWeeks: "8",
+    cycleOffWeeks: "4",
+  };
+
+  function armEdit(opts: { delivered: number; status?: string }) {
+    // First read = the rewrite-guard snapshot; second = the pre-update snapshot.
+    protocolFindFirst
+      .mockResolvedValueOnce({
+        status: opts.status ?? "paused",
+        scheduleRule: form.scheduleRule,
+        doseBasis: "per_injection",
+        startDate: OLD_START,
+        cycleAnchor: OLD_START,
+        steps: [],
+      })
+      .mockResolvedValueOnce({ stackId: null, startDate: OLD_START, endDate: null, status: opts.status ?? "paused" });
+    doseLogCount.mockResolvedValue(opts.delivered);
+  }
+
+  it("an echoed anchor FOLLOWS the new start date when no doses are logged", async () => {
+    armEdit({ delivered: 0 });
+
+    const res = await saveProtocol(form);
+
+    expect(res.ok).toBe(true);
+    const data = protocolUpdateMany.mock.calls[0][0].data;
+    expect(data.startDate).toEqual(NEW_START);
+    expect(data.cycleAnchor).toEqual(NEW_START);
+    if (res.ok) expect(res.warning).toBeUndefined();
+  });
+
+  it("an echoed anchor is HELD, with a warning, once doses are logged", async () => {
+    // Paused, so assertNoScheduleRewrite lets the start-date change through —
+    // exactly the gap where a silent re-date would contradict logged doses.
+    armEdit({ delivered: 12 });
+
+    const res = await saveProtocol(form);
+
+    expect(res.ok).toBe(true);
+    const data = protocolUpdateMany.mock.calls[0][0].data;
+    expect(data.startDate).toEqual(NEW_START);
+    expect(data.cycleAnchor).toEqual(OLD_START); // held on the original anchor
+    if (res.ok) expect(res.warning).toMatch(/logged doses/i);
   });
 });
 

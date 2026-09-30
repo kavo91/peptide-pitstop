@@ -6,6 +6,7 @@ import { OralLogForm } from "@/components/OralLogForm";
 import { BackButton } from "@/components/BackButton";
 import { buildProtocolDoseOptions, type ProtocolForOptions } from "@/lib/log/protocol-options";
 import { activeDesign } from "@/lib/design";
+import { coerceDeviceType } from "@/lib/device-type";
 import { plannedDayWindow } from "@/lib/planned/match";
 import { viewerToday } from "@/lib/viewer-tz";
 import { PitstopHeading } from "@/components/PitstopHeading";
@@ -74,6 +75,8 @@ export default async function LogPage() {
     return {
       peptideId: p.vial.peptideId,
       peptideName: p.vial.peptide.name,
+      // Drives the pump-vs-non-pump device filter in AdHocLogForm.
+      route: p.vial.peptide.route,
       preparation: {
         id: p.id,
         concentrationMcgPerMl: p.concentrationMcgPerMl.toString(),
@@ -154,7 +157,7 @@ export default async function LogPage() {
     id: s.id,
     name: s.name,
     graduationType: s.graduationType as "units" | "ml",
-    deviceType: (s.deviceType === "pen" ? "pen" : "syringe") as "syringe" | "pen",
+    deviceType: coerceDeviceType(s.deviceType),
     unitsPerMl: s.unitsPerMl,
     capacityMl: s.capacityMl.toString(),
     capacityUnits: s.capacityUnits,

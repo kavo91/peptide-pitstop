@@ -11,6 +11,7 @@
  */
 import Decimal from "decimal.js";
 import { MCG_PER_MG } from "./engine";
+import { formatPumps } from "./nasal";
 import type { DoseUnit } from "./types";
 
 /** A dose unit valid for an oral medication (mass only — no volume/needle units). */
@@ -74,13 +75,26 @@ export function buildOralDoseRecord(args: { doseValue: Decimal.Value; doseUnit: 
  * Patient-facing label for a logged dose. Injection doses show their canonical
  * mass in mcg (anchored to a measured volume). Oral doses have no volume/syringe
  * context, so they show the entered amount in its input unit (mg = mcg/1000) for
- * clarity. Null-safe on a missing/empty unit (falls back to mcg).
+ * clarity. A nasal dose logged on a pump device shows the pump count alongside
+ * the mass ("1 pump · 250 mcg"); a nasal dose with no pump count (e.g. one
+ * recorded on a device that is not a pump) falls back to the plain mass, like
+ * injection.
+ * Null-safe on a missing/empty unit (falls back to mcg).
  */
-export function formatLoggedDoseDisplay(args: { doseMcg: string; doseInputUnit: string; route: string }): string {
+export function formatLoggedDoseDisplay(args: {
+  doseMcg: string;
+  doseInputUnit: string;
+  route: string;
+  /** Pump count for a nasal dose logged on a pump device; omitted/null otherwise. */
+  pumps?: Decimal.Value | null;
+}): string {
   const mcg = Number(args.doseMcg);
   if (args.route === "oral") {
     if (args.doseInputUnit === "mg") return `${(mcg / 1000).toLocaleString()} mg`;
     return `${mcg.toLocaleString()} ${args.doseInputUnit || "mcg"}`;
+  }
+  if (args.route === "nasal" && args.pumps != null) {
+    return `${formatPumps(args.pumps)} · ${mcg.toLocaleString()} mcg`;
   }
   return `${mcg.toLocaleString()} mcg`;
 }

@@ -2,8 +2,9 @@
 
 import { Save, Pause, Play } from "lucide-react";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { updateProtocol, pauseProtocol, resumeProtocol } from "@/app/actions/protocols";
+import { useSavedFlash } from "./useSavedFlash";
 
 interface Props {
   id: string;
@@ -15,6 +16,9 @@ interface Props {
   status: "active" | "paused" | "completed";
 }
 
+/** Per-protocol key for the notice that must outlive a revalidate remount. */
+const noticeKey = (id: string) => `pt-protocol-notice:${id}`;
+
 const STATUS_STYLE: Record<string, string> = {
   active: "bg-ok/10 text-ok",
   paused: "bg-warn/10 text-warn",
@@ -24,14 +28,48 @@ const STATUS_STYLE: Record<string, string> = {
 export function ProtocolEditor(p: Props) {
   const [startDate, setStartDate] = useState(p.startDate ?? "");
   const [status, setStatus] = useState(p.status);
-  const [saved, setSaved] = useState(false);
+  // "Saved" is time-boxed and parked in sessionStorage, because a save that
+  // changes the start date or status changes this component's key on
+  // protocols/page.tsx (`id:startDate:status`) and so remounts it before a plain
+  // flag could paint. See useSavedFlash — same reason the notice below needs
+  // sessionStorage too.
+  const { saved, flashSaved, clearSaved } = useSavedFlash("protocol", p.id);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Non-fatal server notice — today only "the cycle anchor was held because
+  // this protocol has logged doses". The save still succeeded, so this must
+  // read as information, not as a failure.
+  //
+  // It is parked in sessionStorage rather than kept in state alone because a
+  // SUCCESSFUL save that moves the start date calls revalidatePath AND changes
+  // this editor's key, so React REMOUNTS it, discarding component state before anything
+  // can be read. (The same remount is what useSavedFlash above works around.)
+  // Seeded from an effect, not from useState's initialiser, so the server and
+  // the first client render agree and hydration stays clean.
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      setNotice(sessionStorage.getItem(noticeKey(p.id)));
+    } catch {
+      /* storage blocked (private mode): the in-state copy is all we get */
+    }
+  }, [p.id]);
+
+  function showNotice(msg: string | null) {
+    setNotice(msg);
+    try {
+      if (msg) sessionStorage.setItem(noticeKey(p.id), msg);
+      else sessionStorage.removeItem(noticeKey(p.id));
+    } catch {
+      /* ignore — see above */
+    }
+  }
 
   async function save() {
     setBusy(true);
-    setSaved(false);
+    clearSaved();
     setError(null);
+    showNotice(null);
     try {
       // Only send the start date when the user actually edited it. An untouched
       // field stays `undefined` (column untouched server-side) so a status-only
@@ -42,8 +80,10 @@ export function ProtocolEditor(p: Props) {
         ...(startDirty ? { startDateISO: startDate ? new Date(startDate).toISOString() : null } : {}),
         status,
       });
-      if (res.ok) setSaved(true);
-      else setError(res.error ?? "Could not save.");
+      if (res.ok) {
+        flashSaved();
+        showNotice(res.warning ?? null);
+      } else setError(res.error ?? "Could not save.");
     } catch {
       setError("Could not save.");
     } finally {
@@ -93,14 +133,14 @@ export function ProtocolEditor(p: Props) {
           <input
             type="date"
             value={startDate}
-            onChange={(e) => { setStartDate(e.target.value); setSaved(false); }}
+            onChange={(e) => { setStartDate(e.target.value); clearSaved(); }}
             className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-sm text-ink"
           />
         </label>
         <label className="block flex-1 text-xs text-muted">Status
           <select
             value={status}
-            onChange={(e) => { setStatus(e.target.value as Props["status"]); setSaved(false); }}
+            onChange={(e) => { setStatus(e.target.value as Props["status"]); clearSaved(); }}
             className="mt-1 w-full rounded-control border border-line/15 bg-bg px-3 py-2 text-sm text-ink"
           >
             <option value="active">Active</option>
@@ -137,6 +177,14 @@ export function ProtocolEditor(p: Props) {
       )}
 
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {notice && (
+        <div className="mt-2 rounded-control bg-warn/10 p-2 text-sm text-warn ring-1 ring-warn/20" role="status">
+          <p>{notice}</p>
+          <button type="button" onClick={() => showNotice(null)} className="mt-1 text-xs font-medium underline">
+            Dismiss
+          </button>
+        </div>
+      )}
     </div>
   );
 }

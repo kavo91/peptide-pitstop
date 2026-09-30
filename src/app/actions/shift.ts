@@ -31,6 +31,7 @@ import { dosesPerWeek } from "@/lib/schedule/frequency";
 import { planCarryForward, daysSpentInPhase, type CarryStep } from "@/lib/protocol-revision";
 import {
   eligibility,
+  isInjectionRoute,
   rotateDays,
   rotatedRule,
   rotationPreservesCount,
@@ -167,9 +168,16 @@ async function applyOne(
     // 1. Load — userId + active scoped, same shape reviseProtocol itself requires.
     const row = await prisma.protocol.findFirst({
       where: { id: protocolId, userId: user.id, status: "active" },
-      include: { steps: true, peptide: { select: { name: true } } },
+      include: { steps: true, peptide: { select: { name: true, route: true } } },
     });
     if (!row) return { protocolId, ok: false, code: "not_found", error: "Protocol not found." };
+
+    // 1b. The panel only ever offers injections (getShiftPanelData drops nasal
+    // and oral protocols before the engine runs). A request for anything else
+    // is crafted or stale — refuse it here rather than trust the client.
+    if (!isInjectionRoute(row.peptide.route)) {
+      return { protocolId, ok: false, code: "ineligible", error: "Only injections are part of week smoothing." };
+    }
 
     // 2. Fingerprint must match the CURRENT row — rejects a rotation whose
     // rule changed underneath the user since the suggestion was computed.

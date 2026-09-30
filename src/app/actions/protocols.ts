@@ -16,6 +16,7 @@ import { hasActiveProtocolConflict } from "@/lib/protocol-uniqueness";
 import { assertNoScheduleRewrite, endDateOnClose, type ProtocolSnapshot } from "@/lib/protocol-revision";
 import { courseTips, supersededIds } from "@/lib/stacks/lineage";
 import { validateCyclePlan } from "@/lib/validation/cycle-plan";
+import { ANCHOR_HELD_WARNING, cycleAnchorFollow } from "@/lib/cycle/anchor";
 
 function optDecimal(v?: string | null): string | null {
   const s = (v ?? "").toString().trim();
@@ -164,6 +165,9 @@ export async function saveProtocol(input: ProtocolInput) {
     cycleAnchor: input.cycleAnchor ? new Date(input.cycleAnchor) : null,
   };
 
+  // Set when a linked cycle anchor was deliberately HELD because doses exist.
+  let anchorWarning = false;
+
   // Backstop: refuse a schedule rewrite on a live protocol that already has
   // logged doses. ProtocolForm prompts and routes to reviseProtocol before ever
   // reaching here; this catches every other door (imports, direct calls).
@@ -181,6 +185,7 @@ export async function saveProtocol(input: ProtocolInput) {
         scheduleRule: true,
         doseBasis: true,
         startDate: true,
+        cycleAnchor: true,
         steps: { select: { stepIndex: true, durationDays: true } },
       },
     });
@@ -212,6 +217,28 @@ export async function saveProtocol(input: ProtocolInput) {
         assertNoScheduleRewrite(before, after, { status: existing.status, hasDeliveredDoses: delivered > 0 });
       } catch (e) {
         return { ok: false as const, error: e instanceof Error ? e.message : "Schedule change refused." };
+      }
+
+      // Keep the cycle anchor linked to a moving start date (see lib/cycle/anchor).
+      // ProtocolForm posts the WHOLE form on every save, so a cycleAnchor equal to
+      // the stored one is an ECHO, not an instruction — reconcile it against the
+      // new start date. A caller sending a genuinely DIFFERENT anchor is stating
+      // the anchor outright and is left alone, exactly as updateProtocol treats an
+      // explicit cycleAnchorISO.
+      //
+      // Note the guard above already REFUSES a start-date change on an *active*
+      // protocol with delivered doses. This still matters for the paused and
+      // completed rows it lets through, which is precisely where a silently
+      // re-dated cycle would contradict doses that are already logged.
+      if (dayOf(data.cycleAnchor) === dayOf(existing.cycleAnchor)) {
+        const follow = cycleAnchorFollow({
+          storedStartDate: existing.startDate,
+          storedAnchor: existing.cycleAnchor,
+          nextStartDate: data.startDate,
+          hasDoseLogs: delivered > 0,
+        });
+        data.cycleAnchor = follow.anchor;
+        anchorWarning = follow.warn;
       }
     }
   }
@@ -313,7 +340,9 @@ export async function saveProtocol(input: ProtocolInput) {
 
   revalidatePath("/protocols");
   revalidatePath("/");
-  return { ok: true as const, id: savedId };
+  // Non-fatal: the save itself landed. The warning names the one thing that
+  // deliberately did not move with the start date.
+  return { ok: true as const, id: savedId, ...(anchorWarning ? { warning: ANCHOR_HELD_WARNING } : {}) };
 }
 
 export async function addProtocolStep(input: { protocolId: string; dose: string; doseInputUnit: string; durationDays?: string; notes?: string }) {
@@ -507,7 +536,7 @@ export async function updateProtocol(input: UpdateProtocolInput) {
   // the date alignment below.
   const target = await prisma.protocol.findFirst({
     where: { id: input.id, userId: user.id },
-    select: { startDate: true, endDate: true, stackId: true, courseId: true, cycleOnWeeks: true, cycleOffWeeks: true },
+    select: { startDate: true, endDate: true, stackId: true, courseId: true, cycleOnWeeks: true, cycleOffWeeks: true, cycleAnchor: true },
   });
   if (!target) return { ok: false as const, error: "Protocol not found." };
 
@@ -612,22 +641,67 @@ export async function updateProtocol(input: UpdateProtocolInput) {
     scheduleRule = norm.rule;
   }
 
+  // Keep THIS row's cycle anchor linked to a moving start date. `cycleAnchor` is
+  // only a materialised copy of `startDate` when the two were written together;
+  // left unreconciled, editing the start date would leave the cycle counting
+  // from a day the protocol no longer starts on, and the first ON block would
+  // come out short by exactly the move. (Stack siblings re-dated by the cascade
+  // below are not reconciled here.)
+  //
+  // An explicit `cycleAnchorISO` on the SAME call is the caller stating the
+  // anchor outright, so it wins and this never second-guesses it. The dose count
+  // is read ONLY when the start date really moves by DAY — the same comparison
+  // cycleAnchorFollow makes — so a status-only or echoed save pays nothing.
+  let anchorFollow = { move: false, anchor: target.cycleAnchor as Date | null, warn: false };
+  if (input.startDateISO !== undefined && input.cycleAnchorISO === undefined) {
+    const nextStart = input.startDateISO ? new Date(input.startDateISO) : null;
+    if (dayOf(nextStart) !== dayOf(target.startDate)) {
+      const doses = await prisma.doseLog.count({ where: { userId: user.id, protocolId: input.id } });
+      anchorFollow = cycleAnchorFollow({
+        storedStartDate: target.startDate,
+        storedAnchor: target.cycleAnchor,
+        nextStartDate: nextStart,
+        hasDoseLogs: doses > 0,
+      });
+    }
+  }
+
+  const data = {
+    startDate: input.startDateISO === undefined ? undefined : input.startDateISO ? new Date(input.startDateISO) : null,
+    endDate: input.endDateISO === undefined ? undefined : input.endDateISO ? new Date(input.endDateISO) : null,
+    status: input.status,
+    scheduleRule,
+    ...(cycleTouched && cyclePlan.ok
+      ? { cycleOnWeeks: cyclePlan.onWeeks, cycleOffWeeks: cyclePlan.offWeeks }
+      : {}),
+    // Explicit anchor > anchor following the start date > leave untouched.
+    cycleAnchor:
+      input.cycleAnchorISO !== undefined
+        ? input.cycleAnchorISO
+          ? new Date(input.cycleAnchorISO)
+          : null
+        : anchorFollow.move
+          ? anchorFollow.anchor
+          : undefined,
+  };
+  // The Gantt quick edit sends ONLY the fields the user actually changed, so a
+  // Save with nothing dirty arrives as `{ id }` alone and every value here is
+  // undefined. Prisma then issues no UPDATE and reports `count: 0` — the very
+  // same shape as "no row matched" — and the count check below used to turn that
+  // into a flat "Protocol not found." on a protocol that plainly exists and is
+  // owned by this user. Nothing to write is a successful no-op, not a failure.
+  const hasWrite = Object.values(data).some((v) => v !== undefined);
+
   try {
-    const { count } = await prisma.protocol.updateMany({
-      where: { id: input.id, userId: user.id },
-      data: {
-        startDate: input.startDateISO === undefined ? undefined : input.startDateISO ? new Date(input.startDateISO) : null,
-        endDate: input.endDateISO === undefined ? undefined : input.endDateISO ? new Date(input.endDateISO) : null,
-        status: input.status,
-        scheduleRule,
-        ...(cycleTouched && cyclePlan.ok
-          ? { cycleOnWeeks: cyclePlan.onWeeks, cycleOffWeeks: cyclePlan.offWeeks }
-          : {}),
-        cycleAnchor:
-          input.cycleAnchorISO === undefined ? undefined : input.cycleAnchorISO ? new Date(input.cycleAnchorISO) : null,
-      },
-    });
-    if (count === 0) return { ok: false as const, error: "Protocol not found." };
+    if (hasWrite) {
+      const { count } = await prisma.protocol.updateMany({
+        where: { id: input.id, userId: user.id },
+        data,
+      });
+      // Ownership was already established by the `target` read above, so a zero
+      // count here can only mean the row disappeared in between. Still a refusal.
+      if (count === 0) return { ok: false as const, error: "Protocol not found." };
+    }
 
     // Stack date alignment: a stack's components run as one combined protocol,
     // so a start-date CHANGE on one component re-aligns every sibling (the same
@@ -685,7 +759,10 @@ export async function updateProtocol(input: UpdateProtocolInput) {
   revalidatePath("/");
   revalidatePath("/protocols");
   revalidatePath("/protocols/gantt");
-  return { ok: true as const };
+  // Non-fatal: the start date DID persist. The warning names the one thing that
+  // deliberately did not move with it, so the user is never left believing the
+  // cycle window followed.
+  return { ok: true as const, ...(anchorFollow.warn ? { warning: ANCHOR_HELD_WARNING } : {}) };
 }
 
 /**

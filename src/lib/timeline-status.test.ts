@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildTimelineEntries,
   clipSlotsToRange,
+  dropOpenSlotsIfClosed,
   STATUS_LABEL,
   STATUS_DESCRIPTION,
   STATUS_DOT_CLASS,
@@ -109,5 +110,24 @@ describe("clipSlotsToRange", () => {
     const slots = ["2026-06-14", "2026-06-15", "2026-06-30", "2026-07-15"].map(slot);
     const out = clipSlotsToRange(slots, "2026-06-15", "2026-06-30");
     expect(out.map((s) => s.date)).toEqual(["2026-06-15", "2026-06-30"]); // boundaries inclusive, buffer dropped
+  });
+});
+
+describe("dropOpenSlotsIfClosed — a closed protocol has no open doses", () => {
+  const slot = (date: string, status: ResolvedOcc["slots"][number]["status"]): ResolvedOcc["slots"][number] => ({
+    date, time: null, status, doseLabel: "1 mg", phaseIndex: 0,
+  });
+  const slots = [
+    slot("2027-03-04", "taken"),
+    slot("2027-03-05", "missed"),
+    slot("2027-03-06", "skipped"),
+    slot("2027-03-09", "pending"),
+    slot("2027-03-10", "projected"),
+  ];
+  it("keeps only what already happened (taken / missed / skipped) on a completed protocol", () => {
+    expect(dropOpenSlotsIfClosed("completed", slots).map((s) => s.status)).toEqual(["taken", "missed", "skipped"]);
+  });
+  it("leaves an active protocol's open slots alone", () => {
+    expect(dropOpenSlotsIfClosed("active", slots)).toEqual(slots);
   });
 });

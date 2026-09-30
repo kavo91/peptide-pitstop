@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { viewerToday } from "@/lib/viewer-tz";
 import { getTodayDoses, getLoggedToday } from "@/lib/today";
 import { getStacks } from "@/lib/stacks/server";
+import { coerceDeviceType } from "@/lib/device-type";
 import { BackButton } from "@/components/BackButton";
 import { TodaysDosesCard } from "@/components/dashboard/TodaysDosesCard";
 import { StackCard } from "@/components/StackCard";
@@ -98,7 +99,7 @@ export default async function TodayPage({
     id: s.id,
     name: s.name,
     graduationType: s.graduationType as "units" | "ml",
-    deviceType: (s.deviceType === "pen" ? "pen" : "syringe") as "syringe" | "pen",
+    deviceType: coerceDeviceType(s.deviceType),
     unitsPerMl: s.unitsPerMl,
     capacityMl: s.capacityMl.toString(),
     capacityUnits: s.capacityUnits,

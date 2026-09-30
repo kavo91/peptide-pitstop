@@ -23,13 +23,14 @@ import { ReconWizard } from "@/components/ReconWizard";
 import { DeleteLogButton } from "@/components/DeleteLogButton";
 import { formatLoggedDoseDisplay } from "@/lib/dosing/oral";
 import type { DueDose, LoggedDose } from "@/lib/today";
+import type { DeviceType } from "@/lib/device-type";
 import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 
 interface Syringe {
   id: string;
   name: string;
   graduationType: "units" | "ml";
-  deviceType: "syringe" | "pen";
+  deviceType: DeviceType;
   unitsPerMl: number;
   capacityMl: string;
   capacityUnits: number;
@@ -120,6 +121,7 @@ export function TodaysDosesCard({
                     <p className="text-sm text-ink tabular-nums">
                       {d.doseValue} {d.doseUnit}
                       {d.route === "oral" && " · oral"}
+                      {d.route === "nasal" && " · nasal"}
                       {d.route !== "oral" && !d.alreadyLoggedToday && d.preparation == null && " · needs reconstitution"}
                       {d.shifted && (
                         <span className="ml-2 rounded-full bg-accent2/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-accent2Strong">
@@ -195,7 +197,11 @@ export function TodaysDosesCard({
                       initialDoseValue={d.doseValue}
                       initialDoseUnit={d.doseUnit}
                     />
-                  ) : d.preparation && syringes.length > 0 ? (
+                  ) : d.route === "nasal" && d.preparation && !d.syringe ? (
+                    // today.ts already resolved the device to a pump-or-null for
+                    // a nasal peptide — null means the user has no pump on hand.
+                    <p className="text-sm text-muted">No nasal pump yet — add one in Settings → Syringes.</p>
+                  ) : d.preparation && (d.route === "nasal" ? d.syringe != null : syringes.length > 0) ? (
                     <LogDoseForm
                       protocolId={d.protocolId}
                       peptideName={d.peptideName}
@@ -211,6 +217,7 @@ export function TodaysDosesCard({
                       halfLifeHours={d.halfLifeHours}
                       minIntervalHours={d.minIntervalHours}
                       recentSites={recentSitesByPeptide.get(d.peptideId) ?? []}
+                      route={d.route}
                     />
                   ) : d.vialForPrep ? (
                     <ReconWizard
@@ -254,6 +261,8 @@ export function TodaysDosesCard({
                   <p className="font-medium">{l.peptideName}</p>
                   {l.route === "oral" ? (
                     <p className="text-xs text-muted">Oral</p>
+                  ) : l.route === "nasal" ? (
+                    <p className="text-xs text-muted">Nasal</p>
                   ) : (
                     l.injectionSite && <p className="text-xs text-muted">{l.injectionSite}</p>
                   )}

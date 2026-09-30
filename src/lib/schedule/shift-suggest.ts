@@ -192,6 +192,15 @@ export type DayCounts = number[];
 export type SkipReason = "inactive" | "no_rule" | "not_weekly" | "stack" | "pinned" | "ends_soon";
 
 /**
+ * The panel flattens INJECTIONS per day, so only an injection protocol is part
+ * of it at all — nasal sprays and oral doses are neither counted nor moved.
+ * Any other value is an injection, the same default the peptide actions write.
+ */
+export function isInjectionRoute(route: string | null | undefined): boolean {
+  return route !== "nasal" && route !== "oral";
+}
+
+/**
  * One protocol's row in a card's week grid: the strip week split back out per
  * protocol, so the UI can draw WHO is on each day rather than only how many.
  * `before`/`after` are seven 0/1 days, Monday-first, over the suggestion's own

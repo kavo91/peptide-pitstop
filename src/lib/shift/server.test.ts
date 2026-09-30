@@ -38,8 +38,8 @@ const TODAY = new Date(2026, 8, 4);
 const weeklyRule = (byDays: string[], times: string[] = []) =>
   JSON.stringify([{ dayPattern: { kind: "weekly", byDays }, times }]);
 
-function protoRow(over: Record<string, unknown> & { id: string; peptideName?: string }) {
-  const { peptideName, ...rest } = over;
+function protoRow(over: Record<string, unknown> & { id: string; peptideName?: string; route?: string }) {
+  const { peptideName, route, ...rest } = over;
   return {
     name: rest.id,
     status: "active",
@@ -51,7 +51,7 @@ function protoRow(over: Record<string, unknown> & { id: string; peptideName?: st
     cycleAnchor: null,
     stackId: null,
     shiftPinned: false,
-    peptide: { name: peptideName ?? `${rest.id}-peptide` },
+    peptide: { name: peptideName ?? `${rest.id}-peptide`, route: route ?? "injection" },
     ...rest,
   };
 }
@@ -138,6 +138,44 @@ describe("getShiftPanelData", () => {
       { protocolId: "P-STACK", name: "P-STACK", peptideName: "BPC-157", reason: "stack" },
     ]);
     expect(result.pinned).toEqual([{ protocolId: "P-PIN", name: "P-PIN", peptideName: "TB-500" }]);
+  });
+
+  // The panel flattens INJECTIONS per day. A nasal spray is not one: it must
+  // neither count toward a day's load nor be offered a rotation, nor be listed
+  // as pinned/ineligible — it is simply not part of the panel.
+  it("leaves nasal protocols out entirely — not counted, not moved, not listed", async () => {
+    protocolFindMany.mockResolvedValue([
+      protoRow({ id: "P-INJ" }),
+      protoRow({ id: "P-NASAL", route: "nasal" }),
+      protoRow({ id: "P-NASAL-PIN", route: "nasal", shiftPinned: true }),
+      protoRow({ id: "P-NASAL-STACK", route: "nasal", stackId: "stack-1" }),
+    ]);
+
+    const result = await getShiftPanelData(USER, TODAY);
+
+    const { protocols } = computeShiftPlanMock.mock.calls[0][0];
+    expect(protocols.map((p: { id: string }) => p.id)).toEqual(["P-INJ"]);
+    // One Mon/Wed/Fri injection protocol and nothing else on the week.
+    expect(result.plan.current).toEqual([1, 0, 1, 0, 1, 0, 0]);
+    expect(result.plan.suggestions).toEqual([]);
+    expect(result.pinned).toEqual([]);
+    expect(result.ineligible).toEqual([]);
+  });
+
+  it("leaves oral protocols out too — only injections count", async () => {
+    protocolFindMany.mockResolvedValue([
+      protoRow({ id: "P-ORAL", route: "oral", scheduleRule: JSON.stringify([{ dayPattern: { kind: "daily" }, times: [] }]) }),
+      protoRow({ id: "P-INJ", route: "injection" }),
+      protoRow({ id: "P-ORAL-PIN", route: "oral", shiftPinned: true }),
+    ]);
+
+    const result = await getShiftPanelData(USER, TODAY);
+
+    const { protocols } = computeShiftPlanMock.mock.calls[0][0];
+    expect(protocols.map((p: { id: string }) => p.id)).toEqual(["P-INJ"]);
+    expect(result.plan.current).toEqual([1, 0, 1, 0, 1, 0, 0]);
+    expect(result.pinned).toEqual([]);
+    expect(result.ineligible).toEqual([]);
   });
 
   it("an engine throw never escapes — returns an empty, unavailable plan", async () => {

@@ -8,13 +8,15 @@ import { computeConcentrationMcgPerMl, computeDraw } from "@/lib/dosing/engine";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { BUD_DEFAULT_DAYS, budDayKey, beyondUseDateFrom, resolveBudDays } from "@/lib/bud";
 import { createPreparation } from "@/app/actions/reconstitution";
+import { isPump, type DeviceType } from "@/lib/device-type";
+import { formatPumps, mlToPumps } from "@/lib/dosing/nasal";
 import { VisualSyringe } from "./VisualSyringe";
 
 interface SyringeDTO {
   id: string;
   name: string;
   graduationType: "units" | "ml";
-  deviceType: "syringe" | "pen";
+  deviceType: DeviceType;
   unitsPerMl: number;
   capacityMl: string;
   capacityUnits: number;
@@ -230,7 +232,14 @@ export function ReconWizard({ vialId, peptideName, labelStrengthMg, targetDose, 
               <VisualSyringe
                 capacityMl={Number(syringe!.capacityMl)}
                 fillMl={preview.targetVolumeMl.toNumber()}
-                markingLabel={preview.markingScale === "units" ? `${preview.markingValue.toString()} units` : `${preview.markingValue.toDecimalPlaces(2).toString()} mL`}
+                markingLabel={
+                  preview.markingScale === "units"
+                    ? `${preview.markingValue.toString()} units`
+                    : isPump(syringe!.deviceType)
+                      ? `${formatPumps(mlToPumps(preview.markingValue, syringe!.increment))} (${preview.markingValue.toDecimalPlaces(2).toString()} mL)`
+                      : `${preview.markingValue.toDecimalPlaces(2).toString()} mL`
+                }
+                device={syringe!.deviceType}
                 overfill={preview.warnings.some((w) => w.severity === "block")}
               />
             </div>

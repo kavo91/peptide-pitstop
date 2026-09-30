@@ -14,6 +14,8 @@ import { budStatus, resolveBudDays, type BudState } from "@/lib/bud";
 import type { ResolvedSlot, PhaseProgress } from "@/lib/titration/types";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { compareStackGrouped, compareTime } from "@/lib/stack-sort";
+import { coerceDeviceType, isPump, type DeviceType } from "@/lib/device-type";
+import { mlToPumps } from "@/lib/dosing/nasal";
 import type { Prisma } from "@prisma/client";
 
 /** Monday (local) of the week containing `date` — matches the calendar's Monday-first weeks. */
@@ -81,7 +83,7 @@ export interface DueDose {
   /** A vial awaiting preparation, when no active prep exists. Drives the recon wizard. */
   vialForPrep: { id: string; labelStrengthMg: string; budDefaultDays: number } | null;
   syringe:
-    | { id: string; name: string; graduationType: "units" | "ml"; deviceType: "syringe" | "pen"; unitsPerMl: number; capacityMl: string; capacityUnits: number; increment: string }
+    | { id: string; name: string; graduationType: "units" | "ml"; deviceType: DeviceType; unitsPerMl: number; capacityMl: string; capacityUnits: number; increment: string }
     | null;
   /**
    * True if this slot is considered already logged.
@@ -108,9 +110,11 @@ export interface LoggedDose {
   doseInputUnit: string;
   volumeMl: string;
   injectionSite: string | null;
-  /** "injection" | "oral" — drives the logged-dose display (oral shows the dose value, no site). */
+  /** "injection" | "oral" | "nasal" — drives the logged-dose display (oral/nasal show no site). */
   route: string;
   timeLabel: string;
+  /** Pump count (volumeMl / increment) for a nasal dose logged on a pump device; null otherwise. */
+  pumps: string | null;
 }
 
 /** Doses recorded during the local day — scheduled or ad-hoc — newest first. */
@@ -131,6 +135,8 @@ export async function getLoggedToday(userId: string, date = new Date()): Promise
       preparation: { include: { vial: { include: { peptide: true } } } },
       // Oral doses have no preparation — resolve the peptide name via the protocol.
       protocol: { include: { peptide: true } },
+      // Only needed to derive a nasal dose's pump count (volumeMl / increment).
+      syringe: true,
     },
     orderBy: { takenAt: "desc" },
   });
@@ -149,6 +155,14 @@ export async function getLoggedToday(userId: string, date = new Date()): Promise
     // else the runtime TZ. ONE locale format for both branches so stamped and
     // legacy rows never mix 12h/24h styles in the same list.
     timeLabel: localeTimeLabel(new Date(l.takenAt), l.tz),
+    // Derived, not stored: a nasal dose logged on a pump device shows its pump
+    // count next to the mass. A nasal dose recorded on a device that is not a
+    // pump has no pump count, so the display falls back to plain mass, same as
+    // injection.
+    pumps:
+      l.route === "nasal" && l.syringe && isPump(l.syringe.deviceType)
+        ? mlToPumps(l.volumeMl.toString(), l.syringe.increment.toString()).toString()
+        : null,
   }));
 }
 
@@ -348,11 +362,28 @@ export async function getTodayDoses(
           orderBy: { openedAt: "desc" },
         });
 
+    const isNasal = p.peptide.route === "nasal";
+
     // Protocol default wins; else the user's preferred device.
     const syringeIdPick = p.defaultSyringeId ?? userDefaultSyringeId;
-    const syringe = !isOral && syringeIdPick
+    let syringe = !isOral && syringeIdPick
       ? await prisma.syringe.findUnique({ where: { id: syringeIdPick } })
       : null;
+    if (isNasal && !(syringe && isPump(syringe.deviceType))) {
+      // A nasal peptide's device must be a pump — the protocol/user default
+      // isn't one (or there wasn't one), so fall back to the user's first
+      // pump device (own or shared). None on hand → no device (the card
+      // prompts to add one under Settings → Syringes).
+      syringe = await prisma.syringe.findFirst({
+        where: { deviceType: "pump", OR: [{ userId }, { userId: null }] },
+        orderBy: { name: "asc" },
+      });
+    } else if (!isNasal && syringe && isPump(syringe.deviceType)) {
+      // An injection (or oral, though isOral already nulled it above) peptide
+      // must never be handed a pump — a stale/shared default could otherwise
+      // point one at it.
+      syringe = null;
+    }
 
     // Half-life timing: most recent DoseLog for this peptide (any protocol).
     // Same value for every slot. `date` can be a tracking-day noon anchor;
@@ -457,7 +488,7 @@ export async function getTodayDoses(
               id: syringe.id,
               name: syringe.name,
               graduationType: syringe.graduationType as "units" | "ml",
-              deviceType: (syringe.deviceType === "pen" ? "pen" : "syringe") as "syringe" | "pen",
+              deviceType: coerceDeviceType(syringe.deviceType),
               unitsPerMl: syringe.unitsPerMl,
               capacityMl: syringe.capacityMl.toString(),
               capacityUnits: syringe.capacityUnits,

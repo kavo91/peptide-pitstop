@@ -8,6 +8,7 @@ import { addDays } from "@/lib/schedule/schedule";
 import {
   computeShiftPlan,
   dayKey,
+  isInjectionRoute,
   stripWeekStart,
   type ShiftPlan,
   type ShiftProtocolInput,
@@ -67,7 +68,7 @@ export interface ShiftPanelData {
  * plan rather than propagating.
  */
 export async function getShiftPanelData(userId: string, today: Date): Promise<ShiftPanelData> {
-  const [protocols, doseLogs] = await Promise.all([
+  const [activeProtocols, doseLogs] = await Promise.all([
     // orderBy is load-bearing, not tidiness: candidate order IS the engine's
     // final tie-break (the combined plan keeps the lexicographically smallest k-vector over
     // candidate positions, which are this query's row order), and joint states
@@ -79,7 +80,7 @@ export async function getShiftPanelData(userId: string, today: Date): Promise<Sh
     // here, which is the order the tie-break derivation assumes.
     prisma.protocol.findMany({
       where: { userId, status: "active" },
-      include: { peptide: { select: { name: true } } },
+      include: { peptide: { select: { name: true, route: true } } },
       orderBy: { id: "asc" },
     }),
     // ONE query for every candidate's logged days — never one query per
@@ -92,6 +93,11 @@ export async function getShiftPanelData(userId: string, today: Date): Promise<Sh
       select: { protocolId: true, localDay: true, takenAt: true },
     }),
   ]);
+
+  // The panel flattens INJECTIONS per day. Nasal and oral protocols are left
+  // out before the engine runs: they neither count toward a day's load nor are
+  // offered a rotation, and they are not listed as pinned/ineligible.
+  const protocols = activeProtocols.filter((p) => isInjectionRoute(p.peptide.route));
 
   const loggedByProtocol = new Map<string, Set<string>>();
   for (const row of doseLogs) {

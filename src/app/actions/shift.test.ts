@@ -143,7 +143,7 @@ describe("applyShiftSuggestion — fingerprint", () => {
     peptideId: "pep-1",
     prescriptionId: null,
     stackId: null,
-    name: "Retatrutide",
+    name: "Peptide A",
     source: "manual",
     scheduleType: "titration",
     scheduleRule: weeklyRule(["MO", "WE", "FR"], ["07:00"]),
@@ -161,7 +161,7 @@ describe("applyShiftSuggestion — fingerprint", () => {
     cycleAnchor: null,
     shiftPinned: false,
     steps: [],
-    peptide: { name: "Retatrutide" },
+    peptide: { name: "Peptide A" },
   };
 
   it("fingerprint computed for a different k than requested → code:changed, reviseProtocol not called", async () => {
@@ -196,7 +196,7 @@ describe("applyShiftSuggestion — eligibility re-check", () => {
     userId: "user-1",
     peptideId: "pep-1",
     prescriptionId: null,
-    name: "Retatrutide",
+    name: "Peptide A",
     source: "manual",
     scheduleType: "titration",
     scheduleRule: weeklyRule(["MO", "WE", "FR"], ["07:00"]),
@@ -215,7 +215,7 @@ describe("applyShiftSuggestion — eligibility re-check", () => {
     stackId: null as string | null,
     shiftPinned: false,
     steps: [],
-    peptide: { name: "Retatrutide" },
+    peptide: { name: "Peptide A", route: "injection" },
   };
 
   async function attemptOn(row: typeof BASE) {
@@ -251,6 +251,17 @@ describe("applyShiftSuggestion — eligibility re-check", () => {
     expect(res.ok).toBe(false);
     expect(!res.ok && res.code).toBe("ineligible");
     expect(!res.ok && res.error).toBe("This course ends within a week.");
+    expect(reviseProtocol).not.toHaveBeenCalled();
+  });
+
+  // The panel only ever offers injections, so a request for a nasal or oral
+  // protocol is crafted or stale — refuse it at the boundary rather than trust
+  // the client.
+  it.each(["nasal", "oral"])("a %s peptide → code:ineligible, reviseProtocol not called", async (route) => {
+    const res = await attemptOn({ ...BASE, peptide: { name: "Not-an-injection", route } });
+    expect(res.ok).toBe(false);
+    expect(!res.ok && res.code).toBe("ineligible");
+    expect(!res.ok && res.error).toBe("Only injections are part of week smoothing.");
     expect(reviseProtocol).not.toHaveBeenCalled();
   });
 
@@ -334,7 +345,7 @@ describe("applyShiftSuggestion — happy path", () => {
     peptideId: "pep-1",
     prescriptionId: "rx-1",
     stackId: null,
-    name: "Retatrutide",
+    name: "Peptide A",
     source: "manual",
     scheduleType: "titration",
     scheduleRule: weeklyRule(["MO", "WE", "FR"], ["07:00"]),
@@ -356,7 +367,7 @@ describe("applyShiftSuggestion — happy path", () => {
       { stepIndex: 0, dose: "100", doseInputUnit: "mcg", durationDays: 7, notes: null },
       { stepIndex: 1, dose: "200", doseInputUnit: "mcg", durationDays: 7, notes: null },
     ],
-    peptide: { name: "Retatrutide" },
+    peptide: { name: "Peptide A" },
   };
 
   // Ascending tracking-day keys (Mon/Wed/Fri), as prisma.doseLog.findMany
@@ -430,7 +441,7 @@ describe("applyShiftSuggestion — happy path", () => {
     expect(call.next).toEqual({
       peptideId: "pep-1",
       prescriptionId: "rx-1",
-      name: "Retatrutide",
+      name: "Peptide A",
       source: "manual",
       scheduleType: "titration",
       scheduleRule: rotatedRule(HAPPY_ROW.scheduleRule, 1),
@@ -507,7 +518,7 @@ describe("applyShiftSuggestion — reviseProtocol result mapping", () => {
     peptideId: "pep-1",
     prescriptionId: null,
     stackId: null,
-    name: "Retatrutide",
+    name: "Peptide A",
     source: "manual",
     scheduleType: "titration",
     scheduleRule: weeklyRule(["MO", "WE", "FR"], ["07:00"]),
@@ -525,7 +536,7 @@ describe("applyShiftSuggestion — reviseProtocol result mapping", () => {
     cycleAnchor: null,
     shiftPinned: false,
     steps: [],
-    peptide: { name: "Retatrutide" },
+    peptide: { name: "Peptide A" },
   };
 
   const request = () =>
@@ -586,7 +597,7 @@ describe("applyShiftSuggestion — start date snapping", () => {
     peptideId: "pep-1",
     prescriptionId: null,
     stackId: null,
-    name: "Retatrutide",
+    name: "Peptide A",
     source: "manual",
     scheduleType: "titration",
     scheduleRule: weeklyRule(["MO", "WE", "FR"], ["07:00"]),
@@ -604,7 +615,7 @@ describe("applyShiftSuggestion — start date snapping", () => {
     cycleAnchor: null,
     shiftPinned: false,
     steps: [],
-    peptide: { name: "Retatrutide" },
+    peptide: { name: "Peptide A" },
   };
 
   async function applyWith(
@@ -672,7 +683,7 @@ describe("applyShiftSuggestion — the SNAPPED start is capped as well as the ra
     peptideId: "pep-1",
     prescriptionId: null,
     stackId: null,
-    name: "Retatrutide",
+    name: "Peptide A",
     source: "manual",
     scheduleType: "fixed_times",
     scheduleRule: weeklyRule(["MO", "WE", "FR"], ["07:00"]),
@@ -691,7 +702,7 @@ describe("applyShiftSuggestion — the SNAPPED start is capped as well as the ra
     cycleAnchor: null,
     shiftPinned: false,
     steps: [],
-    peptide: { name: "Retatrutide" },
+    peptide: { name: "Peptide A" },
   };
 
   it("a protocol whose own startDate is 60 days out → code:invalid, reviseProtocol not called", async () => {
