@@ -91,13 +91,13 @@ describe("getShiftPanelData", () => {
   it("a legacy row taken 23:30Z buckets to the next local day", async () => {
     protocolFindMany.mockResolvedValue([protoRow({ id: "P1" })]);
     doseLogFindMany.mockResolvedValue([
-      { protocolId: "P1", localDay: null, takenAt: new Date("2027-03-01T23:30:00.000Z") },
+      { protocolId: "P1", localDay: null, takenAt: new Date("2026-08-24T23:30:00.000Z") },
     ]);
 
     await getShiftPanelData(USER, TODAY);
 
     const passed = computeShiftPlanMock.mock.calls[0][0].protocols as { id: string; loggedDayKeys: string[] }[];
-    expect(passed.find((p) => p.id === "P1")!.loggedDayKeys).toEqual(["2027-03-02"]);
+    expect(passed.find((p) => p.id === "P1")!.loggedDayKeys).toEqual(["2026-08-25"]);
   });
 
   // cycleOffWeeks is load-bearing, not decoration: courseEnd() reads it to tell

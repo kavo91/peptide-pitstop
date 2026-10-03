@@ -107,8 +107,8 @@ describe("findCanonicalCollisions", () => {
   });
 });
 
-describe("the fold table is the agreed table", () => {
-  it("matches the agreed table exactly, so an edit to both copies still needs a deliberate test change", () => {
+describe("the fold table is pinned", () => {
+  it("matches the pinned table exactly, so any edit needs a deliberate test change", () => {
     expect(BIOMARKER_ALIASES).toEqual({
       ALP: ["Alk. Phos.", "Alkaline Phosphatase (ALP)"],
       "Calcium (corrected)": ["Corrected Calcium", "Calcium (adjusted for albumin)"],

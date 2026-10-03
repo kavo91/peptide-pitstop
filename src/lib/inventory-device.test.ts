@@ -27,7 +27,7 @@ import { computeDraw, dosesPerVial } from "./dosing/engine";
 import { forecastSyringe } from "./forecast-syringe";
 
 const D = (v: string) => new Decimal(v);
-const NOW = new Date(2026, 9, 3, 12);
+const NOW = new Date(2027, 9, 3, 12);
 const peptide = { id: "pep", name: "Test Pep", defaultBudDays: 60, route: "nasal" };
 
 const PUMP = { id: "pump", name: "Pump 0.1 mL", graduationType: "ml", deviceType: "pump", unitsPerMl: 100, capacityMl: D("10"), capacityUnits: 1000, increment: D("0.1"), userId: null };
@@ -36,8 +36,8 @@ const FINE = { id: "fine", name: "U-100 0.3 mL half-unit", graduationType: "unit
 function protocol(over: Record<string, unknown>) {
   return {
     id: "pr1", userId: "u1", peptideId: "pep", peptide, steps: [], prescription: null, prescriptionId: null, status: "active",
-    doseBasis: "per_injection", targetDose: D("130"), doseInputUnit: "mcg", scheduleRule: "FREQ=DAILY", rebaseMode: "fixed_anchor",
-    startDate: new Date(2026, 8, 1), endDate: null, adherenceWindowMin: 120, cycleOnWeeks: null, cycleOffWeeks: null, cycleAnchor: null,
+    doseBasis: "per_injection", targetDose: D("120"), doseInputUnit: "mcg", scheduleRule: "FREQ=DAILY", rebaseMode: "fixed_anchor",
+    startDate: new Date(2027, 8, 1), endDate: null, adherenceWindowMin: 120, cycleOnWeeks: null, cycleOffWeeks: null, cycleAnchor: null,
     defaultSyringeId: "pump",
     ...over,
   };
@@ -52,7 +52,7 @@ function vial(preparations: unknown[]) {
 
 const prep = {
   id: "prep1", prepType: "reconstituted", concentrationMcgPerMl: D("1000"), remainingMl: D("3"), bacWaterMl: D("10"), totalMg: D("10"),
-  reconstitutedAt: new Date(2026, 9, 1), beyondUseDate: new Date(2026, 11, 1), active: true,
+  reconstitutedAt: new Date(2027, 9, 1), beyondUseDate: new Date(2027, 11, 1), active: true,
 };
 
 beforeEach(() => {
@@ -60,7 +60,7 @@ beforeEach(() => {
 });
 
 describe("getInventory uses the protocol's real device", () => {
-  for (const [label, dev, dose] of [["mL-graduated pump", PUMP, "130"], ["fine-step syringe", FINE, "125"]] as const) {
+  for (const [label, dev, dose] of [["mL-graduated pump", PUMP, "120"], ["fine-step syringe", FINE, "125"]] as const) {
     it(`${label}: doses left and runs-out match the logger and the reorder tile`, async () => {
       db.vials = [vial([prep])];
       db.protocols = [protocol({ defaultSyringeId: dev.id, targetDose: D(dose) })];

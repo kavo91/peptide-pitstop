@@ -222,7 +222,7 @@ describe(`date-only protocol fields under ${zone}`, () => {
   });
 
   it("rebase never shifts a dose past the end day, but keeps the end day itself", () => {
-    // MO/WE/FR week from Sun 2027-10-03; Mon dose taken Tue → WE/FR shift to TH 10-08 / SA 10-10.
+    // MO/WE/FR week from Sun 2027-10-03; Mon dose taken Tue → WE/FR shift to TH 10-07 / SA 10-09.
     const shifted = rebaseWeek({
       rebaseMode: "fixed_anchor", freq: "WEEKLY", weekStart: L("2027-10-03"), plannedDays: ["MO", "WE", "FR"],
       actual: { plannedDate: L("2027-10-04"), actualDate: L("2027-10-05") }, today: L("2027-10-05"), endDate: D("2027-10-09"),

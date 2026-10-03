@@ -13,8 +13,7 @@
  * Standard CRP and hs-CRP are different assays and stay separate here; they
  * share one row only at display time (see `displayGroupName` in bloodwork.ts).
  *
- * `scripts/merge-bloodwork-dedupe.cjs` carries a copy of both tables for the
- * one-off DB merge; a test keeps the copies identical.
+ * Existing rows are not rewritten; only new imports fold.
  */
 
 /** Canonical name → the other spellings that fold onto it. */

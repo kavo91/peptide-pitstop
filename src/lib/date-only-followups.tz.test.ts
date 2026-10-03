@@ -42,8 +42,8 @@ const passes = (b: Bound, v: Date) =>
   (b.gte === undefined || v >= b.gte);
 
 // Calendar days across a year, plus both 2027 DST switches of both matrix zones
-// (New York 03-14 / 11-07, Santiago 04-04 / 09-05 — midnight does not exist
-// on 09-06) and the days around them.
+// (New York 03-14 / 11-07, Santiago 04-04 / 09-05; midnight does not exist
+// on 09-05) and the days around them.
 const DAYS: string[] = [];
 for (let i = 0; i < 400; i += 3) DAYS.push(K(addDays(L("2026-12-31"), i)));
 for (const k of ["2027-03-14", "2027-04-04", "2027-09-05", "2027-11-07"]) {
