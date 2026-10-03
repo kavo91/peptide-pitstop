@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import Decimal from "decimal.js";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { editDoseLog } from "@/app/actions/doses";
+import { SAVE_FAILED_MESSAGE } from "@/lib/save-failure";
 import { trackingDayOf, deviceTimeZone, toDeviceDatetimeLocal } from "@/lib/local-day";
 
 interface Props {
@@ -62,21 +63,26 @@ export function OralEditDoseForm({ dose, peptideName }: Props) {
     }
     setBusy(true);
     setError(null);
-    const res = await editDoseLog({
-      id: dose.id,
-      doseValue,
-      doseUnit,
-      ...(takenAtTouched
-        ? { takenAtISO: when.toISOString(), localDay: trackingDayOf(when), tz: deviceTimeZone() ?? undefined }
-        : {}),
-      notes: notes || null,
-    });
-    setBusy(false);
-    if (res.ok) {
-      setDone(true);
-      window.location.href = "/";
-    } else {
-      setError(res.error ?? "Could not save the edit.");
+    try {
+      const res = await editDoseLog({
+        id: dose.id,
+        doseValue,
+        doseUnit,
+        ...(takenAtTouched
+          ? { takenAtISO: when.toISOString(), localDay: trackingDayOf(when), tz: deviceTimeZone() ?? undefined }
+          : {}),
+        notes: notes || null,
+      });
+      if (res.ok) {
+        setDone(true);
+        window.location.href = "/";
+      } else {
+        setError(res.error ?? "Could not save the edit.");
+      }
+    } catch {
+      setError(SAVE_FAILED_MESSAGE);
+    } finally {
+      setBusy(false);
     }
   }
 

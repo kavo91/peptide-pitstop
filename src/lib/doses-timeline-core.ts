@@ -1,4 +1,5 @@
 import { compareStackGrouped, compareTime } from "./stack-sort";
+import { dateOnlyKey } from "./schedule/schedule";
 
 export type DoseStatus = "taken_ontime" | "taken_offschedule" | "taken_rebased" | "planned" | "missed";
 
@@ -93,10 +94,6 @@ export function classifyTimeline(args: {
   });
 }
 
-/** Local-date key, YYYY-MM-DD — the same shape slot dates carry. */
-const DATE_KEY = (d: Date): string =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
 export interface SupersedableProtocol {
   id: string;
   peptideId: string;
@@ -168,7 +165,9 @@ export function supersededFrom(protocols: SupersedableProtocol[]): Map<string, s
       // Explicit chain first; the peptide-wide inference only fills the gap.
       const sameCourse = group.filter((o) => course(o) === course(p));
       const successor = earliestAfter(sameCourse) ?? earliestAfter(group);
-      if (successor) out.set(p.id, DATE_KEY(successor));
+      // A stored start date is date-only: read its own day as a local
+      // YYYY-MM-DD (local getters put a 00:00Z start on the day before west of UTC).
+      if (successor) out.set(p.id, dateOnlyKey(successor));
     }
   }
   return out;

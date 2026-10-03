@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/lib/auth/owner";
 import { PEPTIDE_LIBRARY } from "@/lib/peptide-library";
 import { vialLabelStrengthMg, perInjectionMcg, DAILY_SCHEDULE_RULE } from "@/lib/stacks/compute";
 import { normaliseScheduleRule } from "@/lib/schedule/normalise";
+import { dateOnlyKey } from "@/lib/schedule/schedule";
 import { encryptField } from "@/lib/crypto/fieldEncryption";
 import { getTodayDoses } from "@/lib/today";
 import { resolveTrackingDayStamp, dayAnchor } from "@/lib/tz-day";
@@ -18,6 +19,9 @@ import { peptideTokens } from "@/lib/stacks/server";
 import { courseTips, courseGroupIds, type LineageProtocol } from "@/lib/stacks/lineage";
 import { logDose } from "./doses";
 import type { DoseUnit } from "@/lib/dosing/types";
+
+/** Date-only protocol field → "YYYY-MM-DD" (either stored form); null stays null. */
+const dayKeyOrNull = (d: Date | null | undefined): string | null => (d ? dateOnlyKey(d) : null);
 
 // getStacks (a data reader) + its stack-view types now live in a server-only lib
 // module, since a "use server" module should export only server actions. Re-export
@@ -731,7 +735,7 @@ export async function updateStackSchedule(stackId: string, scheduleRule: string,
 
   const ruleChanged = comps.some((c) => c.scheduleRule !== rule);
   const startChanged =
-    newStart !== undefined && comps.some((c) => (c.startDate?.getTime() ?? null) !== (newStart?.getTime() ?? null));
+    newStart !== undefined && comps.some((c) => dayKeyOrNull(c.startDate) !== dayKeyOrNull(newStart));
   const liveTitrating = comps.some((c) => c._count.steps > 0 && c._count.doseLogs > 0);
   if ((ruleChanged || startChanged) && liveTitrating) {
     return {

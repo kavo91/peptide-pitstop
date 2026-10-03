@@ -34,10 +34,13 @@
  *
  * PURE — date-only, no I/O.
  */
+import { dateOnlyKey } from "../schedule/schedule";
 
-/** Date-only "YYYY-MM-DD"; null stays null. Matches actions/protocols.dayOf. */
-const day = (d: Date | null | undefined): string | null =>
-  d ? new Date(d).toISOString().slice(0, 10) : null;
+/**
+ * Date-only "YYYY-MM-DD" of either stored form; null stays null. Matches
+ * actions/protocols.dayOf.
+ */
+const day = (d: Date | null | undefined): string | null => (d ? dateOnlyKey(d) : null);
 
 export interface AnchorFollowInput {
   /** Protocol.startDate as currently stored. */

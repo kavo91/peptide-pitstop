@@ -11,6 +11,13 @@ docker-compose.yml
 **/*.db-wal
 **/*.db-shm
 **/*.db-journal
+# Uploaded report PDFs (DOCUMENTS_DIR defaults to a documents/ folder beside a
+# local dev DB) and the prisma/prisma/ scratch folder are user data, never build
+# context — the Dockerfiles COPY . . and then copy prisma/ into the runtime
+# image. Anchored to the repo root: src/app/api/documents/ is source.
+/documents
+/prisma/documents
+/prisma/prisma
 # macOS metadata
 **/._*
 **/.DS_Store

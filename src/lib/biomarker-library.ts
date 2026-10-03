@@ -11,6 +11,9 @@
  * results as "borderline". They are set ONLY where the optimal target is
  * well-established and widely cited; otherwise left undefined (do not invent
  * ranges). Reference only — not medical advice.
+ *
+ * Names must be the canonical spellings in `biomarker-aliases.ts`: `ensureBiomarkers`
+ * upserts these on every lab write, so an old spelling here re-creates its row.
  */
 export interface LibraryBiomarker {
   name: string;
@@ -45,11 +48,11 @@ export const BIOMARKER_LIBRARY: LibraryBiomarker[] = [
 
   // ── Metabolic / glycaemic ───────────────────────────────────────────────
   { name: "HbA1c", defaultUnit: "%", category: "Metabolic", optimalLow: "4.0", optimalHigh: "5.4" },
-  { name: "Glucose (Fasting)", defaultUnit: "mmol/L", category: "Metabolic", optimalLow: "4.0", optimalHigh: "5.4" },
+  { name: "Glucose (fasting)", defaultUnit: "mmol/L", category: "Metabolic", optimalLow: "4.0", optimalHigh: "5.4" },
 
   // ── Hormones ────────────────────────────────────────────────────────────
   { name: "TSH", defaultUnit: "mIU/L", category: "Hormones", optimalLow: "0.5", optimalHigh: "2.5" },
-  { name: "Testosterone", defaultUnit: "nmol/L", category: "Hormones" },
+  { name: "Testosterone (total)", defaultUnit: "nmol/L", category: "Hormones" },
 
   // ── Inflammation ────────────────────────────────────────────────────────
   { name: "CRP (hs)", defaultUnit: "mg/L", category: "Inflammation", optimalHigh: "1.0" },

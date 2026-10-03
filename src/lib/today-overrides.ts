@@ -26,7 +26,7 @@
  */
 // Relative (not "@/") imports: today-overrides.ts is imported by today.test.ts
 // under vitest, which does not resolve the "@/" path alias for value imports.
-import { startOfDay } from "./schedule/schedule";
+import { startOfDay, dateOnlyDay } from "./schedule/schedule";
 import { parseSchedule, slotsOn } from "./schedule/entries";
 
 /** Local-calendar-day key "YYYY-MM-DD" (derived in the runtime TZ — see file header). */
@@ -85,10 +85,10 @@ export function classifyOverrideDays(
     //     no scheduled projection (routine or rebase-shifted) may survive past it.
     // A degenerate window (startDate after endDate) strands nothing.
     const degenerate =
-      proto.startDate && proto.endDate && startOfDay(proto.startDate) > startOfDay(proto.endDate);
+      proto.startDate && proto.endDate && dateOnlyDay(proto.startDate) > dateOnlyDay(proto.endDate);
     if (!degenerate) {
-      if (proto.startDate && rowDay < startOfDay(proto.startDate)) continue;
-      if (proto.endDate && rowDay > startOfDay(proto.endDate)) continue;
+      if (proto.startDate && rowDay < dateOnlyDay(proto.startDate)) continue;
+      if (proto.endDate && rowDay > dateOnlyDay(proto.endDate)) continue;
     }
     const onGrid = slotsOn(parseSchedule(proto.scheduleRule), rowDay, proto.startDate, proto.endDate).length > 0;
     if (onGrid) {

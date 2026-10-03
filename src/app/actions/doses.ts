@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/owner";
 import { computeDraw } from "@/lib/dosing/engine";
+import { prepFillMl } from "@/lib/dosing/prep-fill";
 import { buildOralDoseRecord, isOralDoseUnit } from "@/lib/dosing/oral";
 import { isPump } from "@/lib/device-type";
 import { reconcileDoseEditRemaining } from "@/lib/dosing/recompute";
@@ -70,14 +71,6 @@ export interface LogDoseResult {
   rebase?: RebaseSuggestion;
   /** Set when the logged dose matches the NEXT titration step — drives the phase-advance prompt. */
   advance?: TitrationAdvanceSuggestion;
-}
-
-/** The original fill volume of a preparation, used to clamp volume restoration. */
-function prepFillMl(prep: { prepType: string; bacWaterMl: Decimal | null; totalMg: Decimal; concentrationMcgPerMl: Decimal }): Decimal {
-  if (prep.prepType === "reconstituted" && prep.bacWaterMl) return new Decimal(prep.bacWaterMl.toString());
-  // premixed (or missing bac): mass / concentration
-  const conc = new Decimal(prep.concentrationMcgPerMl.toString());
-  return conc.gt(0) ? new Decimal(prep.totalMg.toString()).times(1000).div(conc) : new Decimal(0);
 }
 
 /**

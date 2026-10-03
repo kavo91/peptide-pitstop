@@ -51,5 +51,10 @@ jobs:
       - name: Tests
         run: npm test
 
+      # Date-only protocol fields west of UTC (America/New_York, America/Santiago);
+      # the main suite is pinned to Australia/Brisbane and cannot see that class.
+      - name: Test (time-zone matrix)
+        run: npm run test:tz
+
       - name: Build
         run: npm run build

@@ -127,6 +127,8 @@ import { createHash } from "node:crypto";
 import {
   type WeekdayCode,
   startOfDay,
+  dateOnlyDay,
+  dateOnlyKey,
   addDays,
   daysBetween,
   weekdayCode,
@@ -442,7 +444,7 @@ export function courseEnd(
 ): Date | null {
   const repeats = (p.cycleOffWeeks ?? 0) > 0;
   const cycle = repeats ? null : cyclePlanEnd(p.cycleAnchor ?? p.startDate, p.cycleOnWeeks);
-  const hard = p.endDate ? startOfDay(p.endDate) : null;
+  const hard = p.endDate ? dateOnlyDay(p.endDate) : null;
   if (hard && cycle) return hard <= cycle ? hard : cycle;
   return hard ?? cycle;
 }
@@ -488,7 +490,7 @@ export function shiftFingerprint(args: {
   const parts = [
     args.protocolId,
     args.scheduleRule ?? "",
-    args.startDate ? dayKey(args.startDate) : "",
+    args.startDate ? dateOnlyKey(args.startDate) : "",
     String(args.k),
   ].join("|");
   return createHash("sha256").update(parts).digest("hex");
@@ -561,13 +563,13 @@ interface Walk {
  */
 function steadyFloor(startDate: Date | null, today: Date): Date | null {
   if (!startDate) return null;
-  const start = startOfDay(startDate);
+  const start = dateOnlyDay(startDate);
   return start > addDays(today, 7) ? start : null;
 }
 
 /** What the protocol really does — doses begin on its stored start date. */
 function realRuntime(p: ShiftProtocolInput): Runtime {
-  const anchor = p.startDate ? startOfDay(p.startDate) : null;
+  const anchor = p.startDate ? dateOnlyDay(p.startDate) : null;
   return { schedule: parseSchedule(p.scheduleRule), anchor, floor: anchor, end: courseEnd(p) };
 }
 
@@ -575,7 +577,7 @@ function realRuntime(p: ShiftProtocolInput): Runtime {
 function steadyRuntime(p: ShiftProtocolInput, today: Date): Runtime {
   return {
     schedule: parseSchedule(p.scheduleRule),
-    anchor: p.startDate ? startOfDay(p.startDate) : null,
+    anchor: p.startDate ? dateOnlyDay(p.startDate) : null,
     floor: steadyFloor(p.startDate, today),
     end: courseEnd(p),
   };
@@ -1222,7 +1224,7 @@ function buildCombinedPlan(
         startDate: ch.cand.p.startDate,
         k: ch.opt.k,
       }),
-      protocolStartDate: ch.cand.p.startDate ? dayKey(ch.cand.p.startDate) : null,
+      protocolStartDate: ch.cand.p.startDate ? dateOnlyKey(ch.cand.p.startDate) : null,
       // opt.realRt.end IS courseEnd(ch.cand.p) — computed once per candidate
       // and carried onto every option's runtime.
       courseEndDate: ch.opt.realRt.end ? dayKey(ch.opt.realRt.end) : null,
@@ -1443,7 +1445,7 @@ function buildSuggestion(
     perTime,
     sameTimeDays,
     weekStart: dayKey(stripWeek),
-    protocolStartDate: cand.p.startDate ? dayKey(cand.p.startDate) : null,
+    protocolStartDate: cand.p.startDate ? dateOnlyKey(cand.p.startDate) : null,
     // opt.realRt.end IS courseEnd(cand.p) — the loop already computed it once
     // per candidate and carried it onto every option's runtime.
     courseEndDate: opt.realRt.end ? dayKey(opt.realRt.end) : null,

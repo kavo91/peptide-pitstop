@@ -21,6 +21,7 @@ const h = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
   del: vi.fn(),
+  findMany: vi.fn(),
   findUnique: vi.fn(),
   getTodayDoses: vi.fn(),
   webPushAvailable: vi.fn(),
@@ -31,7 +32,7 @@ const h = vi.hoisted(() => ({
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findUnique: h.findUnique },
-    reminderSend: { create: h.create, update: h.update, delete: h.del },
+    reminderSend: { create: h.create, update: h.update, delete: h.del, findMany: h.findMany },
     // Device-zone lookup for notification TEXT. Default: no stamped dose.
     doseLog: { findFirst: h.doseFindFirst },
   },
@@ -54,6 +55,7 @@ describe("sendDueReminders — channel ledger + claim release", () => {
     h.findUnique.mockResolvedValue(null); // default reminder anchors
     h.doseFindFirst.mockResolvedValue(null); // no stamped device zone by default
     h.getTodayDoses.mockResolvedValue(DUE);
+    h.findMany.mockResolvedValue([]); // nothing claimed yet today
     h.create.mockResolvedValue({ id: "claim1" });
     h.update.mockResolvedValue({});
     h.del.mockResolvedValue({});
@@ -131,12 +133,62 @@ describe("sendDueReminders — channel ledger + claim release", () => {
   it("does not double-send: a duplicate claim (unique violation) skips dispatch", async () => {
     h.webPushAvailable.mockResolvedValue(true);
     h.sendWebPush.mockResolvedValue(1);
-    h.create.mockRejectedValue(new Error("unique constraint"));
+    h.create.mockRejectedValue(Object.assign(new Error("unique constraint"), { code: "P2002" }));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const sent = await sendDueReminders("u1", NOW);
 
     expect(sent).toBe(0);
     expect(h.sendWebPush).not.toHaveBeenCalled();
     expect(h.del).not.toHaveBeenCalled();
+    // A lost race is the lock working, not a fault — it must not log as one.
+    expect(errSpy).not.toHaveBeenCalled();
+    errSpy.mockRestore();
+  });
+});
+
+/**
+ * Server log noise: `prisma:error … Unique constraint failed
+ * (userId, dayKey, key)`. An event stays in-window for ~4 ticks (−30/+30 min,
+ * 15-min tick) while its dose is unlogged, so every tick after the first
+ * re-attempted the claim insert. Prisma logs the P2002 itself BEFORE throwing,
+ * so catching it cannot silence the line — the fix is to not re-insert a key
+ * already claimed today. The unique insert stays as the lock for a genuine
+ * concurrent tick.
+ */
+describe("sendDueReminders — already-claimed events", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.findUnique.mockResolvedValue(null);
+    h.doseFindFirst.mockResolvedValue(null);
+    h.getTodayDoses.mockResolvedValue(DUE);
+    h.findMany.mockResolvedValue([]);
+    h.create.mockResolvedValue({ id: "claim1" });
+    h.update.mockResolvedValue({});
+    h.del.mockResolvedValue({});
+    h.webPushAvailable.mockResolvedValue(true);
+    h.sendWebPush.mockResolvedValue(1);
+  });
+
+  it("does not re-insert a claim that already exists today (no Prisma P2002 log)", async () => {
+    h.findMany.mockResolvedValue([{ key: "p1@06:00" }]);
+
+    const sent = await sendDueReminders("u1", NOW);
+
+    expect(sent).toBe(0);
+    expect(h.create).not.toHaveBeenCalled();
+    expect(h.sendWebPush).not.toHaveBeenCalled();
+  });
+
+  it("logs a claim failure that is NOT a duplicate (e.g. DB locked) instead of swallowing it", async () => {
+    h.create.mockRejectedValue(Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" }));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const sent = await sendDueReminders("u1", NOW);
+
+    expect(sent).toBe(0);
+    expect(h.sendWebPush).not.toHaveBeenCalled(); // still never sends unclaimed
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
   });
 });

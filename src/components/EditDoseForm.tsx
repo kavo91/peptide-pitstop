@@ -10,6 +10,7 @@ import type { DoseUnit } from "@/lib/dosing/types";
 import { isPump, type DeviceType } from "@/lib/device-type";
 import { pumpsToMl, mlToPumps, formatPumps } from "@/lib/dosing/nasal";
 import { editDoseLog } from "@/app/actions/doses";
+import { SAVE_FAILED_MESSAGE } from "@/lib/save-failure";
 import { trackingDayOf, deviceTimeZone, toDeviceDatetimeLocal } from "@/lib/local-day";
 import { VisualSyringe } from "./VisualSyringe";
 
@@ -149,26 +150,31 @@ export function EditDoseForm({ dose, prep, syringe, peptideName }: Props) {
     }
     setBusy(true);
     setError(null);
-    const res = await editDoseLog({
-      id: dose.id,
-      doseValue: effectiveDose.value,
-      doseUnit: effectiveDose.unit,
-      // `when` parses the datetime-local string in the DEVICE zone, so the
-      // stamp freezes the day the editor actually typed.
-      ...(takenAtTouched
-        ? { takenAtISO: when.toISOString(), localDay: trackingDayOf(when), tz: deviceTimeZone() ?? undefined }
-        : {}),
-      // A pump has no injection site.
-      injectionSite: pumpDevice ? null : site || null,
-      notes: notes || null,
-    });
-    setBusy(false);
-    if (res.ok) {
-      setDone(true);
-      window.location.href = "/";
-    } else {
-      setError(res.error ?? "Could not save the edit.");
-      setReviewing(false);
+    try {
+      const res = await editDoseLog({
+        id: dose.id,
+        doseValue: effectiveDose.value,
+        doseUnit: effectiveDose.unit,
+        // `when` parses the datetime-local string in the DEVICE zone, so the
+        // stamp freezes the day the editor actually typed.
+        ...(takenAtTouched
+          ? { takenAtISO: when.toISOString(), localDay: trackingDayOf(when), tz: deviceTimeZone() ?? undefined }
+          : {}),
+        // A pump has no injection site.
+        injectionSite: pumpDevice ? null : site || null,
+        notes: notes || null,
+      });
+      if (res.ok) {
+        setDone(true);
+        window.location.href = "/";
+      } else {
+        setError(res.error ?? "Could not save the edit.");
+        setReviewing(false);
+      }
+    } catch {
+      setError(SAVE_FAILED_MESSAGE);
+    } finally {
+      setBusy(false);
     }
   }
 

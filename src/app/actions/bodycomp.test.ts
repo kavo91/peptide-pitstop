@@ -32,10 +32,14 @@ vi.mock("next/cache", () => ({ revalidatePath: m.revalidatePath }));
 vi.mock("@/lib/documents", () => ({ deleteDocumentFile: m.deleteDocumentFile }));
 vi.mock("@/lib/crypto/fieldEncryption", () => ({
   encryptField: (v: string | null | undefined) => (v == null ? null : `ENC(${v})`),
-  decryptField: (v: string | null | undefined) => (v == null ? null : v.replace(/^ENC\((.*)\)$/, "$1")),
+  decryptField: (v: string | null | undefined) => {
+    // A corrupt cell throws, as the real GCM decrypt does on a failed tag.
+    if (v === "CORRUPT") throw new Error("unable to authenticate data");
+    return v == null ? null : v.replace(/^ENC\((.*)\)$/, "$1");
+  },
 }));
 
-import { createBodyCompScan, deleteBodyCompScan, type CreateScanInput } from "./bodycomp";
+import { createBodyCompScan, deleteBodyCompScan, findScanNear, type CreateScanInput } from "./bodycomp";
 
 // SYNTHETIC minimal scan (the phase-1 invented subject).
 const INPUT: CreateScanInput = {
@@ -130,5 +134,25 @@ describe("deleteBodyCompScan document cleanup", () => {
     m.deleteDocumentFile.mockRejectedValueOnce(new Error("EACCES"));
     const res = await deleteBodyCompScan("scan1");
     expect(res).toEqual({ ok: true });
+  });
+});
+
+// The RMR form's scan prefill must fail soft on a bad cell —
+// one undecryptable weight must not throw the whole lookup.
+describe("findScanNear fails soft on an undecryptable weight", () => {
+  const near = (clinicWeightKg: string | null) => ({
+    id: "scan1", localDay: "2026-01-10", scannedAt: new Date("2026-01-10T00:00:00.000Z"),
+    sex: "male", ageYears: 40, heightCm: 178, clinicWeightKg,
+  });
+  it("corrupt weight → empty weight, scan still returned", async () => {
+    (m.prisma.bodyCompScan as Record<string, unknown>).findMany = vi.fn().mockResolvedValue([near("CORRUPT")]);
+    const res = await findScanNear("2026-01-10T01:00:00.000Z");
+    expect(res?.id).toBe("scan1");
+    expect(res?.clinicWeightKg).toBe("");
+  });
+  it("good weight decrypts as before", async () => {
+    (m.prisma.bodyCompScan as Record<string, unknown>).findMany = vi.fn().mockResolvedValue([near("ENC(81.2)")]);
+    const res = await findScanNear("2026-01-10T01:00:00.000Z");
+    expect(res?.clinicWeightKg).toBe("81.2");
   });
 });

@@ -18,7 +18,7 @@
  * PURE — calendar arithmetic only, DST-safe via addDays, and date-only
  * throughout (time-of-day on either input is ignored).
  */
-import { startOfDay, daysBetween, addDays } from "../schedule/schedule";
+import { startOfDay, dateOnlyDay, daysBetween, addDays } from "../schedule/schedule";
 
 export type CyclePhase = "on" | "off" | "ended";
 
@@ -64,7 +64,7 @@ const planned = (weeks: number | null | undefined): weeks is number =>
  */
 export function cyclePlanEnd(anchor: Date | null, onWeeks: number | null): Date | null {
   if (!anchor || !planned(onWeeks)) return null;
-  return addDays(startOfDay(anchor), onWeeks * 7 - 1);
+  return addDays(dateOnlyDay(anchor), onWeeks * 7 - 1);
 }
 
 /**
@@ -76,7 +76,7 @@ export function cycleState(input: CyclePlanInput): CycleState | null {
   const { onWeeks, offWeeks } = input;
   if (!planned(onWeeks) || !input.anchor) return null;
 
-  const anchor = startOfDay(input.anchor);
+  const anchor = dateOnlyDay(input.anchor);
   const today = startOfDay(input.today);
   const elapsed = daysBetween(anchor, today); // 0 on the anchor day
   if (elapsed < 0) return null; // not started yet

@@ -9,6 +9,7 @@ import {
   type PrescriptionWizardResult,
 } from "@/app/actions/prescription-wizard";
 import { type WeekdayCode } from "@/lib/schedule/schedule";
+import { displayMgPerMlFromStoredMcg, storeMcgPerMlFromMgInput } from "@/lib/prescription-wizard-concentration";
 import {
   parseSchedule,
   scheduleSummary,
@@ -64,24 +65,6 @@ const COMPOSITE_LIBRARY_CATEGORIES = new Set(["blend", "blends", "stack", "stack
 
 function isCompositeLibraryOption(option: LibraryOption) {
   return COMPOSITE_LIBRARY_CATEGORIES.has(option.category.trim().toLowerCase());
-}
-
-function displayMgPerMlFromStoredMcg(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  const numeric = Number(trimmed);
-  if (!Number.isFinite(numeric)) return "";
-  const mgPerMl = numeric / 1000;
-  return Number.isInteger(mgPerMl) ? String(mgPerMl) : mgPerMl.toString();
-}
-
-function storeMcgPerMlFromMgInput(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  const numeric = Number(trimmed);
-  if (!Number.isFinite(numeric)) return trimmed;
-  const mcgPerMl = numeric * 1000;
-  return Number.isInteger(mcgPerMl) ? String(mcgPerMl) : mcgPerMl.toString();
 }
 
 type ComponentState = {

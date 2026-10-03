@@ -21,7 +21,7 @@ beforeEach(() => {
 });
 
 describe("GET /api/documents/[id]", () => {
-  it("401 without a session, before any lookup", async () => {
+  it("401 when the session no longer resolves to a user, before any lookup", async () => {
     m.currentUser.mockResolvedValueOnce(null);
     const res = await call("doc1");
     expect(res.status).toBe(401);

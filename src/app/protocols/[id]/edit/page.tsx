@@ -9,15 +9,18 @@ import { BlendStepBreakdown } from "@/components/BlendStepBreakdown";
 import { buildBlendStepBreakdown } from "@/lib/blend-step-breakdown";
 import { componentsForPeptide } from "@/lib/blends";
 import { dosesPerWeek } from "@/lib/schedule/frequency";
+import { dateOnlyKey } from "@/lib/schedule/schedule";
 import { planCarryForward, daysSpentInPhase } from "@/lib/protocol-revision";
 import { viewerToday } from "@/lib/viewer-tz";
+import { doseDayKey } from "@/lib/local-day";
 import { type DoseUnit } from "@/lib/dosing/types";
 import { ShiftPinToggle } from "@/components/shift/ShiftPinToggle";
 
 export const dynamic = "force-dynamic";
 
+/** Date-only protocol field → "YYYY-MM-DD" for a date input (either stored form). */
 function toDateInput(d: Date | null): string | undefined {
-  return d ? new Date(d).toISOString().slice(0, 10) : undefined;
+  return d ? dateOnlyKey(d) : undefined;
 }
 
 export default async function EditProtocolPage({ params }: { params: Promise<{ id: string }> }) {
@@ -66,10 +69,9 @@ export default async function EditProtocolPage({ params }: { params: Promise<{ i
     select: { takenAt: true, localDay: true },
   });
   // Tracking-day keys, ascending — a dose's frozen localDay wins; legacy rows
-  // fall back to the UTC date of takenAt.
-  const deliveredDayKeys = deliveredRows.map(
-    (d) => d.localDay ?? new Date(d.takenAt).toISOString().slice(0, 10),
-  );
+  // fall back to the runtime-local day of takenAt (`doseDayKey`, shared with
+  // the shift loader).
+  const deliveredDayKeys = deliveredRows.map(doseDayKey);
   const carrySteps0 = protocol.steps.map((s) => ({
     stepIndex: s.stepIndex,
     dose: s.dose.toString(),
@@ -98,7 +100,7 @@ export default async function EditProtocolPage({ params }: { params: Promise<{ i
   const savedSnapshot = {
     scheduleRule: protocol.scheduleRule,
     doseBasis: protocol.doseBasis,
-    startDate: protocol.startDate ? new Date(protocol.startDate).toISOString().slice(0, 10) : null,
+    startDate: protocol.startDate ? dateOnlyKey(protocol.startDate) : null,
     steps: protocol.steps.map((s) => ({ stepIndex: s.stepIndex, durationDays: s.durationDays })),
   };
   // Offer the revision on EXACTLY the protocols the server would refuse an

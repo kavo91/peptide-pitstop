@@ -8,6 +8,7 @@ import { computeConcentrationMcgPerMl, computeDraw } from "@/lib/dosing/engine";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { BUD_DEFAULT_DAYS, budDayKey, beyondUseDateFrom, resolveBudDays } from "@/lib/bud";
 import { createPreparation } from "@/app/actions/reconstitution";
+import { SAVE_FAILED_MESSAGE } from "@/lib/save-failure";
 import { isPump, type DeviceType } from "@/lib/device-type";
 import { formatPumps, mlToPumps } from "@/lib/dosing/nasal";
 import { VisualSyringe } from "./VisualSyringe";
@@ -103,18 +104,23 @@ export function ReconWizard({ vialId, peptideName, labelStrengthMg, targetDose, 
   async function confirm() {
     setBusy(true);
     setError(null);
-    const res = await createPreparation({
-      vialId,
-      prepType,
-      totalMg: prepType === "reconstituted" ? totalMg : undefined,
-      bacWaterMl: prepType === "reconstituted" ? bacWaterMl : undefined,
-      concentrationMcgPerMl: prepType === "premixed" ? concentration?.toString() : undefined,
-      vialVolumeMl: prepType === "premixed" ? vialVolumeMl : undefined,
-      beyondUseDateISO: beyondUseDateFrom(new Date(), resolvedBudDays).toISOString(),
-    });
-    setBusy(false);
-    if (res.ok) setDone(true);
-    else setError(res.error ?? "Could not save preparation");
+    try {
+      const res = await createPreparation({
+        vialId,
+        prepType,
+        totalMg: prepType === "reconstituted" ? totalMg : undefined,
+        bacWaterMl: prepType === "reconstituted" ? bacWaterMl : undefined,
+        concentrationMcgPerMl: prepType === "premixed" ? concentration?.toString() : undefined,
+        vialVolumeMl: prepType === "premixed" ? vialVolumeMl : undefined,
+        beyondUseDateISO: beyondUseDateFrom(new Date(), resolvedBudDays).toISOString(),
+      });
+      if (res.ok) setDone(true);
+      else setError(res.error ?? "Could not save preparation");
+    } catch {
+      setError(SAVE_FAILED_MESSAGE);
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (done) {

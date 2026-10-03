@@ -3,11 +3,12 @@
  * newest-first) table styled as a race telemetry sheet. Presentational and
  * read-only: it receives already-decoded panel data from the server page and
  * derives nothing but display state (out-of-range flags + improved-vs-prior
- * arrows). Rendered ONLY when the pitstop design is active.
+ * arrows). Rendered ONLY when the pitstop design is active. Standard CRP and
+ * hs-CRP share one "CRP" row; an hs value carries a hover note.
  *
  * Reference only — not medical advice.
  */
-import { parseNumeric, type Flag } from "@/lib/bloodwork";
+import { assayNote, parseNumeric, pickPerDisplayGroup, type Flag } from "@/lib/bloodwork";
 
 /** A single decoded result row as the bloodwork page assembles it. */
 export interface MatrixResult {
@@ -63,23 +64,25 @@ export function BloodworkMatrix({ panels }: { panels: MatrixPanel[] }) {
   // defensively in case the caller passes the full history.
   const cols = panels.slice(0, 3);
 
-  // Collect every biomarker that appears across the shown panels, preserving a
-  // stable alphabetical order for the rows.
+  // Fast lookup: panel index → (display row → picked result). Standard CRP and
+  // hs-CRP share the "CRP" row; hs wins when one panel has both.
+  const byPanel = cols.map((p) => pickPerDisplayGroup(p.results, (r) => r.biomarkerName));
+
+  // Only an hs-CRP pick carries a note (hs wins over standard), so a caption legend
+  // can say what the dotted values are on screens without hover (phones).
+  const anyNote = byPanel.some((m) =>
+    [...m.values()].some((pk) => assayNote(pk.item.biomarkerName, pk.alternates) != null),
+  );
+
+  // Every display row across the shown panels, in a stable alphabetical order.
   const names = new Set<string>();
-  for (const p of cols) for (const r of p.results) names.add(r.biomarkerName);
+  for (const m of byPanel) for (const row of m.keys()) names.add(row);
   const rowNames = [...names].sort((a, b) => a.localeCompare(b));
 
-  // Fast lookup: panel index → (name → result).
-  const byPanel = cols.map((p) => {
-    const m = new Map<string, MatrixResult>();
-    for (const r of p.results) if (!m.has(r.biomarkerName)) m.set(r.biomarkerName, r);
-    return m;
-  });
-
-  // Per-biomarker meta (unit + ref) taken from the most recent panel that has it.
+  // Per-row meta (unit + ref) taken from the most recent panel that has it.
   function metaFor(name: string): { unit: string; ref: string } {
     for (const m of byPanel) {
-      const r = m.get(name);
+      const r = m.get(name)?.item;
       if (!r) continue;
       const ref =
         r.referenceLow != null || r.referenceHigh != null
@@ -117,8 +120,8 @@ export function BloodworkMatrix({ panels }: { panels: MatrixPanel[] }) {
                   <td className="ref">{meta.unit}</td>
                   <td className="ref">{meta.ref}</td>
                   {cols.map((p, ci) => {
-                    const r = byPanel[ci].get(name);
-                    if (!r) {
+                    const pick = byPanel[ci].get(name);
+                    if (!pick) {
                       return (
                         <td key={p.id} className={ci === 0 ? "latest-col latest-cell" : undefined}>
                           —
@@ -126,13 +129,15 @@ export function BloodworkMatrix({ panels }: { panels: MatrixPanel[] }) {
                       );
                     }
 
+                    const r = pick.item;
+                    const note = assayNote(r.biomarkerName, pick.alternates);
                     const oor = outOfRange(r.flag);
 
                     // "Improved vs prior" only applies to the newest column and
                     // needs a numeric prior reading for the same biomarker.
                     let improved: "up" | "down" | null = null;
                     if (ci === 0) {
-                      const prior = byPanel[1]?.get(name);
+                      const prior = byPanel[1]?.get(name)?.item;
                       const now = parseNumeric(r.value);
                       const pn = prior ? parseNumeric(prior.value) : null;
                       if (now != null && pn != null) {
@@ -151,14 +156,24 @@ export function BloodworkMatrix({ panels }: { panels: MatrixPanel[] }) {
                       .filter(Boolean)
                       .join(" ");
 
+                    // An hs value is dotted with a hover note; screen readers get the note inline.
+                    const valueText = note ? (
+                      <span title={note} className="cursor-help underline decoration-dotted underline-offset-2">
+                        {r.value}
+                        <span className="sr-only">, {note}</span>
+                      </span>
+                    ) : (
+                      r.value
+                    );
+
                     // Out-of-range values wrap in a coloured span + a (H)/(L) flag.
                     const valueNode = oor ? (
                       <>
-                        <span className={oor === "high" ? "bw-hi" : "bw-lo"}>{r.value}</span>{" "}
+                        <span className={oor === "high" ? "bw-hi" : "bw-lo"}>{valueText}</span>{" "}
                         <span className="bw-flag">({oor === "high" ? "H" : "L"})</span>
                       </>
                     ) : (
-                      r.value
+                      valueText
                     );
 
                     return (
@@ -180,6 +195,7 @@ export function BloodworkMatrix({ panels }: { panels: MatrixPanel[] }) {
         {cols
           .map((p, i) => `${i === 0 ? "Latest" : i === 1 ? "prior" : "base"} ${captionDate(p.collectedDate)}`)
           .join(" · ")}
+        {anyNote && " · CRP: dotted = hs-CRP (high-sensitivity assay), plain = standard CRP"}
       </p>
     </section>
   );

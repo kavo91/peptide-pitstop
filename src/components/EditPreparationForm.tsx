@@ -7,6 +7,7 @@ import Decimal from "decimal.js";
 import { computeConcentrationMcgPerMl } from "@/lib/dosing/engine";
 import { recomputeReconEdit } from "@/lib/dosing/recompute";
 import { editPreparation } from "@/app/actions/reconstitution";
+import { SAVE_FAILED_MESSAGE } from "@/lib/save-failure";
 
 type PrepType = "reconstituted" | "premixed";
 
@@ -96,23 +97,28 @@ export function EditPreparationForm({ prep, doseVolumesMl, doseCount }: Props) {
   async function confirm() {
     setBusy(true);
     setError(null);
-    const res = await editPreparation({
-      prepId: prep.id,
-      prepType,
-      totalMg: prepType === "reconstituted" ? totalMg : undefined,
-      bacWaterMl: prepType === "reconstituted" ? bacWaterMl : undefined,
-      concentrationMcgPerMl: prepType === "premixed" ? concentration?.toString() : undefined,
-      vialVolumeMl: prepType === "premixed" ? vialVolumeMl : undefined,
-      beyondUseDateISO: beyondUseDate ? new Date(beyondUseDate + "T00:00:00").toISOString() : null,
-      notes: notes || null,
-    });
-    setBusy(false);
-    if (res.ok) {
-      setDone(true);
-      window.location.href = "/inventory";
-    } else {
-      setError(res.error ?? "Could not save the edit.");
-      setReviewing(false);
+    try {
+      const res = await editPreparation({
+        prepId: prep.id,
+        prepType,
+        totalMg: prepType === "reconstituted" ? totalMg : undefined,
+        bacWaterMl: prepType === "reconstituted" ? bacWaterMl : undefined,
+        concentrationMcgPerMl: prepType === "premixed" ? concentration?.toString() : undefined,
+        vialVolumeMl: prepType === "premixed" ? vialVolumeMl : undefined,
+        beyondUseDateISO: beyondUseDate ? new Date(beyondUseDate + "T00:00:00").toISOString() : null,
+        notes: notes || null,
+      });
+      if (res.ok) {
+        setDone(true);
+        window.location.href = "/inventory";
+      } else {
+        setError(res.error ?? "Could not save the edit.");
+        setReviewing(false);
+      }
+    } catch {
+      setError(SAVE_FAILED_MESSAGE);
+    } finally {
+      setBusy(false);
     }
   }
 

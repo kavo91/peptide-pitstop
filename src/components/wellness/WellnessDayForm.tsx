@@ -14,6 +14,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createJournalEntry, updateJournalEntry } from "@/app/actions/journal";
+import { SAVE_FAILED_MESSAGE } from "@/lib/save-failure";
 import type { ManualDay } from "@/lib/wellness-log";
 import { DEFAULT_SYMPTOMS, type Severity, type SideEffectEntry } from "@/lib/side-effects";
 
@@ -228,16 +229,21 @@ export function WellnessDayForm({
       sideEffects: sideEffects.length ? sideEffects : undefined,
       notes: notes || undefined,
     };
-    const res = existing?.id
-      ? await updateJournalEntry({ id: existing.id, ...input })
-      : await createJournalEntry(input);
-    setBusy(false);
-    if (!res.ok) {
-      setError(res.error ?? "Could not save the entry.");
-      return;
+    try {
+      const res = existing?.id
+        ? await updateJournalEntry({ id: existing.id, ...input })
+        : await createJournalEntry(input);
+      if (!res.ok) {
+        setError(res.error ?? "Could not save the entry.");
+        return;
+      }
+      router.refresh();
+      onSaved?.();
+    } catch {
+      setError(SAVE_FAILED_MESSAGE);
+    } finally {
+      setBusy(false);
     }
-    router.refresh();
-    onSaved?.();
   }
 
   return (

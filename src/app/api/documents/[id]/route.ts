@@ -6,9 +6,11 @@ import { openDocumentStream } from "@/lib/documents";
 /**
  * GET /api/documents/{id}
  *
- * Streams a stored report PDF to its owner. Session cookie → 401 when absent;
- * the row is looked up by `{ id, userId }` so another user's id is a 404, never
- * a leak. Served inline with a filename derived from the row's `kind` (the
+ * Streams a stored report PDF to its owner. A request without a valid session
+ * never reaches this handler — the middleware redirects it to /login — so the
+ * 401 here covers a session whose user is gone or was signed out everywhere
+ * (token version bumped). The row is looked up by `{ id, userId }` so another
+ * user's id is a 404, never a leak. Served inline with a filename derived from the row's `kind` (the
  * client filename was never kept) and `private, no-store` — health data must
  * not land in a shared cache.
  */

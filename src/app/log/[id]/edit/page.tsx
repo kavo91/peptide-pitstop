@@ -13,6 +13,7 @@ import type { DoseUnit } from "@/lib/dosing/types";
 import { EditDoseForm } from "@/components/EditDoseForm";
 import { OralEditDoseForm } from "@/components/OralEditDoseForm";
 import { coerceDeviceType } from "@/lib/device-type";
+import { prepFillMl } from "@/lib/dosing/prep-fill";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +22,6 @@ function toLocalInput(d: Date): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
-/** Original fill of the prep — clamp cap for vial reconciliation (mirrors doses.ts prepFillMl). */
-function prepFillMl(prep: { prepType: string; bacWaterMl: Decimal | null; totalMg: Decimal; concentrationMcgPerMl: Decimal }): Decimal {
-  if (prep.prepType === "reconstituted" && prep.bacWaterMl) return new Decimal(prep.bacWaterMl.toString());
-  const conc = new Decimal(prep.concentrationMcgPerMl.toString());
-  return conc.gt(0) ? new Decimal(prep.totalMg.toString()).times(1000).div(conc) : new Decimal(0);
-}
 
 /**
  * Recover the amount the user originally entered, in its input unit, from the

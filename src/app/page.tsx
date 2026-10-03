@@ -21,9 +21,10 @@ import { getNextDose } from "@/lib/next-dose";
 import { getReorderStatus } from "@/lib/reorder";
 import { getAnalyticsData } from "@/lib/analytics";
 import { getWearableWindow } from "@/lib/wearable";
-import { daysBetween, startOfDay } from "@/lib/schedule/schedule";
+import { daysBetween, startOfDay, dateOnlyDay, dateOnlyFloor } from "@/lib/schedule/schedule";
 import { parseSchedule, cyclePosition } from "@/lib/schedule/entries";
 import { scheduleTokenInfo } from "@/lib/schedule/token";
+import { homeStartBound } from "@/lib/protocol-day-bounds";
 import { MetricTile } from "@/components/dashboard/MetricTile";
 import { ProtocolTimingTile } from "@/components/dashboard/ProtocolTimingTile";
 import { AdherenceTacho } from "@/components/dashboard/AdherenceTacho";
@@ -208,12 +209,20 @@ export default async function DashboardPage() {
   // start date was set ahead, which otherwise made daysBetween negative and
   // wrongly showed "No active protocol"); and COMPLETED protocols whose endDate
   // has already passed (endDate before today). A null endDate = open-ended.
+  // Protocol start/end dates are date-only: 00:00 UTC of the picked day (cycle
+  // actions before v1.25.9 wrote a server-local midnight). Both bounds compare
+  // by DAY and accept both forms: the end bound is the earlier form of today
+  // (dateOnlyFloor), the start bound the earlier form of tomorrow
+  // (homeStartBound). Comparing the start as an instant against `now` hid a
+  // protocol starting today until 10:00 Brisbane (00:00Z).
+  const viewDay = startOfDay(viewDate);
+  const endsOnOrAfter = dateOnlyFloor(viewDay);
   const activeProtocols = await prisma.protocol.findMany({
     where: {
       userId: user.id,
       status: "active",
-      startDate: { not: null, lte: viewDate },
-      OR: [{ endDate: null }, { endDate: { gte: startOfDay(viewDate) } }],
+      startDate: { not: null, ...homeStartBound(viewDate) },
+      OR: [{ endDate: null }, { endDate: { gte: endsOnOrAfter } }],
     },
     orderBy: { startDate: "desc" },
     include: { peptide: { select: { name: true } } },
@@ -229,8 +238,8 @@ export default async function DashboardPage() {
     where: {
       userId: user.id,
       status: "active",
-      OR: [{ startDate: null }, { startDate: { lte: viewDate } }],
-      AND: [{ OR: [{ endDate: null }, { endDate: { gte: startOfDay(viewDate) } }] }],
+      OR: [{ startDate: null }, { startDate: homeStartBound(viewDate) }],
+      AND: [{ OR: [{ endDate: null }, { endDate: { gte: endsOnOrAfter } }] }],
     },
     orderBy: [{ startDate: "asc" }, { name: "asc" }],
     include: { peptide: { select: { name: true } } },
@@ -257,7 +266,7 @@ export default async function DashboardPage() {
       }
     } else {
       // Non-cycle protocol: linear day count from startDate.
-      const n = daysBetween(startOfDay(activeProtocol.startDate), startOfDay(viewDate)) + 1;
+      const n = daysBetween(dateOnlyDay(activeProtocol.startDate), startOfDay(viewDate)) + 1;
       if (n >= 1) {
         cycleDayLabel = `Day ${n}`;
         cycleDaySub = "Protocol day";

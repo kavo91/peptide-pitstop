@@ -8,10 +8,13 @@
  * The app uses three deliberate DateTime conventions, each internally
  * consistent across every stored row:
  *
- *   1. DATE-ONLY  → UTC midnight. `Vial.expiry`, `Protocol.startDate/endDate`,
- *      `LabPanel.collectedDate`, `JournalEntry.date`, `Prescription.*`.
- *      Written as `new Date("YYYY-MM-DD")`, rendered as
+ *   1. DATE-ONLY  → UTC midnight. `Vial.expiry`, `Protocol.startDate/endDate/
+ *      cycleAnchor`, `LabPanel.collectedDate`, `JournalEntry.date`,
+ *      `Prescription.*`. Written as `new Date("YYYY-MM-DD")`, rendered as
  *      `.toISOString().slice(0, 10)`. Both halves are UTC, so they agree.
+ *      EXCEPTION — the three Protocol dates: the cycle actions wrote a
+ *      server-local midnight before v1.25.9, so they are read with
+ *      `dateOnlyDay` / `dateOnlyKey` (lib/schedule/schedule.ts), never sliced.
  *   2. LOCAL MIDNIGHT → `WearableDaily.date` only, documented in the schema.
  *   3. INSTANT → `DoseLog.takenAt`, `Preparation.reconstitutedAt`, `createdAt`,
  *      `PlannedDose.scheduledAt`. Rendered in local time.

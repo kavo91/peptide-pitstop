@@ -22,7 +22,7 @@ describe("bodycomp lab alias matcher", () => {
       AST: "AST",
       HbA1c: "HbA1c",
       TSH: "TSH",
-      Testosterone: "Total testosterone",
+      "Testosterone (total)": "Total testosterone",
       "CRP (hs)": "hsCRP",
       Ferritin: "Ferritin",
       "Vitamin D (25-OH)": "Vitamin D",

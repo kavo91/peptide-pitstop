@@ -3,6 +3,7 @@
 import { Syringe } from "lucide-react";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Decimal from "decimal.js";
 import { computeDraw } from "@/lib/dosing/engine";
 import { splitProspectiveDose, weakestBlendSource, roundSplitForDisplay, type BlendComponent } from "@/lib/blends-core";
@@ -119,6 +120,7 @@ export function AdHocLogForm({
   const [error, setError] = useState<string | null>(null);
   const [rebase, setRebase] = useState<RebaseSuggestion | undefined>();
   const [advance, setAdvance] = useState<TitrationAdvanceSuggestion | undefined>();
+  const router = useRouter();
 
   const opt = options.find((o) => o.preparation.id === prepId);
   const availableSyringes = syringesForRoute(opt?.route);
@@ -316,8 +318,13 @@ export function AdHocLogForm({
     setBusy(false);
     if (res.ok) {
       setDone(true);
+      // Re-render the server tree so the vial list and remainingMl reflect the
+      // new dose — a second dose in one sitting otherwise sees stale numbers
+      // (same rule as LogDoseForm / OralLogForm). A pending rebase or
+      // phase-advance prompt refreshes itself once the user resolves it.
       if (res.rebase) setRebase(res.rebase);
       if (res.advance) setAdvance(res.advance);
+      if (!res.rebase && !res.advance) router.refresh();
     }
     else setError(res.error ?? "Could not log dose");
   }

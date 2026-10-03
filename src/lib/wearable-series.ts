@@ -58,6 +58,8 @@ type Decimalish = number | string | { toString(): string } | null | undefined;
 
 export interface SleepPoint {
   date: string;
+  /** Stored nightly total (Garmin's own figure); null when the row has none. */
+  total?: number | null;
   deep: number | null;
   light: number | null;
   rem: number | null;
@@ -149,6 +151,7 @@ export function buildWearableSeries(rows: WearableDailyLike[]): WearableSeries {
 
   const sleep: SleepPoint[] = sorted.map((r) => ({
     date: dayKey(r.date),
+    total: r.sleepSeconds ?? null,
     deep: r.sleepDeepSeconds ?? null,
     light: r.sleepLightSeconds ?? null,
     rem: r.sleepRemSeconds ?? null,

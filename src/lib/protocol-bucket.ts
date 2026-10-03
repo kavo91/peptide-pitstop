@@ -1,4 +1,4 @@
-import { startOfDay } from "@/lib/schedule/schedule";
+import { dateOnlyDay } from "@/lib/schedule/schedule";
 
 /** Display buckets for the protocols page.
  *
@@ -20,10 +20,10 @@ export function bucketOf(p: BucketInput, today: Date): ProtocolBucket {
   if (p.status === "completed") return "completed";
   if (p.status === "paused") return "paused";
 
-  const start = p.startDate ? startOfDay(new Date(p.startDate)) : null;
+  const start = p.startDate ? dateOnlyDay(new Date(p.startDate)) : null;
   if (start && start.getTime() > today.getTime()) return "scheduled";
 
-  const end = p.endDate ? startOfDay(new Date(p.endDate)) : null;
+  const end = p.endDate ? dateOnlyDay(new Date(p.endDate)) : null;
   if (end && end.getTime() < today.getTime()) return "ended";
 
   return "active";

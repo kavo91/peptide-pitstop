@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { DoseStatus, TimelineEntry } from "@/lib/doses-timeline-core";
 import { LEGEND_ORDER, STATUS_DESCRIPTION, STATUS_LABEL } from "@/lib/timeline-status";
+import { weekCellEntries } from "@/lib/doses-week";
 
 const DOW = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -48,19 +49,20 @@ export function DosesWeek({ days, entries, todayKey, nav }: { days: string[]; en
           <div key={pid} className="contents">
             <div className="flex items-center text-left text-[11px] font-medium">{name}</div>
             {days.map((d) => {
-              const e = entries.find((x) => x.peptideId === pid && x.date === d);
+              const cell = weekCellEntries(entries, pid, d);
               return (
-                <div key={d} className={`flex h-9 items-center justify-center rounded-control ${d === todayKey ? "bg-accent/10 ring-1 ring-inset ring-accent/40" : "bg-line/[0.05]"}`}>
-                  {e && (
+                <div key={d} className={`flex h-9 items-center justify-center gap-1 rounded-control ${d === todayKey ? "bg-accent/10 ring-1 ring-inset ring-accent/40" : "bg-line/[0.05]"}`}>
+                  {cell.map((e, i) => (
                     <span
+                      key={i}
                       role="img"
-                      aria-label={`${name}: ${STATUS_LABEL[e.status]} — ${humanDate(d)}`}
-                      title={`${STATUS_LABEL[e.status]} · ${name}`}
+                      aria-label={`${name}: ${STATUS_LABEL[e.status]} — ${humanDate(d)}${e.time ? ` ${e.time}` : ""}`}
+                      title={`${STATUS_LABEL[e.status]} · ${name}${e.time ? ` · ${e.time}` : ""}`}
                       className={`inline-flex items-center justify-center font-bold leading-none text-[13px] ${STATUS_TEXT_CLASS[e.status]}`}
                     >
                       {STATUS_GLYPH[e.status]}
                     </span>
-                  )}
+                  ))}
                 </div>
               );
             })}

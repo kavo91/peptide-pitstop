@@ -9,7 +9,7 @@
  *   falling back to DAILY.
  */
 
-import { startOfDay, addDays } from "../schedule/schedule";
+import { startOfDay, dateOnlyDay, addDays } from "../schedule/schedule";
 import { parseSchedule, slotsOn, slotsInRange } from "../schedule/entries";
 import { resolveTitration } from "../titration/resolve";
 import { buildResolveInput, type DeliveredLogInput } from "../titration/from-protocol";
@@ -137,9 +137,9 @@ export function materializePlannedDoses(args: {
    */
   const isStale = (p: ProtocolInput, scheduledAt: Date): boolean => {
     const rowDay = startOfDay(scheduledAt);
-    if (p.startDate && p.endDate && startOfDay(p.startDate) > startOfDay(p.endDate)) return false;
-    if (p.startDate && rowDay < startOfDay(p.startDate)) return true;
-    if (p.endDate && rowDay > startOfDay(p.endDate)) return true;
+    if (p.startDate && p.endDate && dateOnlyDay(p.startDate) > dateOnlyDay(p.endDate)) return false;
+    if (p.startDate && rowDay < dateOnlyDay(p.startDate)) return true;
+    if (p.endDate && rowDay > dateOnlyDay(p.endDate)) return true;
     return false;
   };
 

@@ -26,6 +26,8 @@ import { buildForecastPlan, conv1ToLocalDay } from "@/lib/forecast-slots";
 import { forecastCoverage, type ForecastContainer } from "@/lib/reorder-forecast";
 import type { DoseUnit } from "@/lib/dosing/types";
 import { coerceDeviceType, type DeviceType } from "@/lib/device-type";
+import { forecastSyringe } from "@/lib/forecast-syringe";
+import { prepFillMl } from "@/lib/dosing/prep-fill";
 
 // Re-export so existing importers (`@/lib/inventory`) keep working after the
 // move to the pure schedule/frequency module.
@@ -57,6 +59,8 @@ export interface VialView {
   prepType: "reconstituted" | "premixed" | null;
   concentrationMcgPerMl: string | null;
   remainingMl: string | null;
+  /** The prep's original fill in mL (`prepFillMl`: BAC water, else prepared mass ÷ conc). Null when unprepared. */
+  fillMl: string | null;
   beyondUseDate: string | null;
   beyondUsePassed: boolean;
   /** ok | approaching (within 3 days) | passed | unknown (no BUD recorded). */
@@ -184,7 +188,10 @@ export async function getInventory(userId: string, now = new Date()): Promise<Vi
 
     // No slot for `now` (e.g. an off-schedule day). Fall back to the protocol
     // target — but a per_week target MUST still be divided to per-injection so
-    // the volume math never sees a raw weekly value (spec §6).
+    // the volume math never sees a raw weekly value (spec §6). When the weekly
+    // frequency cannot be resolved there is no safe per-dose value: return null
+    // and skip the volume maths and the recon preview, like every sibling of
+    // `resolveCurrentDose` does.
     if (proto.targetDose == null) return null;
     const fbUnit = (proto.doseInputUnit as DoseUnit) ?? "mcg";
     const per = perInjectionDose({
@@ -193,7 +200,7 @@ export async function getInventory(userId: string, now = new Date()): Promise<Vi
       unit: fbUnit,
       injectionsPerWeek: dosesPerWeek(proto.scheduleRule),
     });
-    return per ?? { value: proto.targetDose.toString(), unit: fbUnit };
+    return per;
   }
 
   return vials.map((v) => {
@@ -205,7 +212,10 @@ export async function getInventory(userId: string, now = new Date()): Promise<Vi
     let daysLeft: number | null = null;
 
     if (prep && dose) {
-      const syr = toSyringeDTO(proto?.defaultSyringeId);
+      // The protocol's REAL device — the one the logger draws with and the
+      // reorder tile forecasts with (R14). A pump is mL-graduated: rounding its
+      // dose on a U-100 barrel printed a different count from the tile.
+      const device = forecastSyringe(proto?.defaultSyringeId ? syringeById.get(proto.defaultSyringeId) : null);
       try {
         const { volumeMl } = canonicaliseDose({
           dose: { value: dose.value, unit: dose.unit },
@@ -213,15 +223,7 @@ export async function getInventory(userId: string, now = new Date()): Promise<Vi
             prepType: prep.prepType as "reconstituted" | "premixed",
             concentrationMcgPerMl: new Decimal(prep.concentrationMcgPerMl.toString()),
           },
-          // Only matters for unit-input doses; default U-100 otherwise.
-          syringe: {
-            name: "",
-            graduationType: "units",
-            unitsPerMl: syr?.unitsPerMl ?? 100,
-            capacityMl: 1,
-            capacityUnits: 100,
-            increment: 1,
-          },
+          syringe: device,
         });
         if (volumeMl.gt(0)) {
           // Count what the LOGGER will actually draw — the syringe-rounded
@@ -234,14 +236,7 @@ export async function getInventory(userId: string, now = new Date()): Promise<Vi
               prepType: prep.prepType as "reconstituted" | "premixed",
               concentrationMcgPerMl: new Decimal(prep.concentrationMcgPerMl.toString()),
             },
-            syringe: {
-              name: "",
-              graduationType: "units",
-              unitsPerMl: syr?.unitsPerMl ?? 100,
-              capacityMl: 1,
-              capacityUnits: 100,
-              increment: 1,
-            },
+            syringe: device,
           }).deliveredVolumeMl;
           remainingDoses = drawn.gt(0)
             ? dosesPerVial({
@@ -269,14 +264,7 @@ export async function getInventory(userId: string, now = new Date()): Promise<Vi
             const f = forecastCoverage({
               slots: plan.slots,
               containers: [container],
-              syringe: {
-                name: "",
-                graduationType: "units",
-                unitsPerMl: syr?.unitsPerMl ?? 100,
-                capacityMl: 1,
-                capacityUnits: 100,
-                increment: 1,
-              },
+              syringe: device,
               scheduleEvaluable: plan.scheduleEvaluable,
               stopReason: plan.stopReason,
               courseEndDate: plan.courseEndDate,
@@ -316,6 +304,7 @@ export async function getInventory(userId: string, now = new Date()): Promise<Vi
       prepType: prep ? (prep.prepType as "reconstituted" | "premixed") : null,
       concentrationMcgPerMl: prep ? prep.concentrationMcgPerMl.toString() : null,
       remainingMl: prep ? prep.remainingMl.toString() : null,
+      fillMl: prep ? prepFillMl(prep).toString() : null,
       beyondUseDate: toDateInput(bud),
       beyondUsePassed: budView.state === "passed",
       budState: budView.state,

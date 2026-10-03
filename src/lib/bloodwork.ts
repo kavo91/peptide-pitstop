@@ -53,42 +53,126 @@ export function classifyFlag(
   return "normal";
 }
 
+/**
+ * Display-only grouping: standard CRP and hs-CRP show as
+ * ONE "CRP" row in the matrix, the trend cards and the panel deltas. The data keeps
+ * the two assays as separate biomarkers; only these helpers combine them. Where a
+ * panel holds both, the hs result is shown and the standard one goes in the note.
+ */
+export const CRP_GROUP = "CRP";
+const HS_CRP = "CRP (hs)";
+export const HS_CRP_NOTE = "hs-CRP — high-sensitivity assay";
+
+/** Readable label for an assay listed in a hover note. */
+const ASSAY_LABEL: ReadonlyMap<string, string> = new Map([
+  [CRP_GROUP, "standard CRP"],
+  [HS_CRP, "hs-CRP"],
+]);
+
+/** The bloodwork row a biomarker displays under. */
+export function displayGroupName(biomarkerName: string): string {
+  return biomarkerName === CRP_GROUP || biomarkerName === HS_CRP ? CRP_GROUP : biomarkerName;
+}
+
+/** Lower wins within a display group: hs-CRP beats standard CRP. */
+function assayRank(biomarkerName: string): number {
+  return biomarkerName === HS_CRP ? 0 : 1;
+}
+
+export interface DisplayPick<T> {
+  /** The result the row shows. */
+  item: T;
+  /** Other results of the same panel in the same display group. */
+  alternates: T[];
+}
+
+/**
+ * One panel's results → one pick per display group, in first-seen order. The
+ * preferred assay wins (ties keep the first); the rest become `alternates`.
+ */
+export function pickPerDisplayGroup<T>(items: readonly T[], nameOf: (t: T) => string): Map<string, DisplayPick<T>> {
+  const out = new Map<string, DisplayPick<T>>();
+  for (const it of items) {
+    const group = displayGroupName(nameOf(it));
+    const cur = out.get(group);
+    if (!cur) out.set(group, { item: it, alternates: [] });
+    else if (assayRank(nameOf(it)) < assayRank(nameOf(cur.item))) {
+      out.set(group, { item: it, alternates: [cur.item, ...cur.alternates] });
+    } else cur.alternates.push(it);
+  }
+  return out;
+}
+
+export interface AssayResult {
+  biomarkerName: string;
+  value: string;
+  unit?: string | null;
+}
+
+/**
+ * Hover note for a displayed result: names the hs assay, and lists any other
+ * assay of the same row in that panel (e.g. "· standard CRP: <5 mg/L"). Null
+ * when there is nothing to say.
+ */
+export function assayNote(biomarkerName: string, alternates: readonly AssayResult[]): string | null {
+  const parts: string[] = [];
+  if (biomarkerName === HS_CRP) parts.push(HS_CRP_NOTE);
+  for (const a of alternates) {
+    if (a.biomarkerName === biomarkerName) continue;
+    parts.push(`${ASSAY_LABEL.get(a.biomarkerName) ?? a.biomarkerName}: ${a.value}${a.unit ? ` ${a.unit}` : ""}`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 export interface ResultForTrend {
   biomarkerName: string;
   collectedDate: Date;
   value: string;
   flag?: Flag | string | null;
+  /** The panel this result came from: one point per panel per row. */
+  panelId: string;
+  unit?: string | null;
 }
 
 export interface TrendPoint {
   date: Date;
   value: number;
   flag: Flag | null;
+  /** Hover note (hs-CRP assay), or null. */
+  note: string | null;
 }
 
 export interface BiomarkerTrend {
+  /** The display row name (standard CRP and hs-CRP share "CRP"). */
   biomarkerName: string;
   points: TrendPoint[];
 }
 
 /**
- * Group results per biomarker into numeric {date, value} series for charting.
- * Non-numeric values are skipped; biomarkers left with no numeric points are
- * dropped. Points are sorted oldest → newest; biomarkers sorted by name.
+ * Group results per display row into numeric {date, value} series for charting.
+ * Non-numeric values are skipped; rows left with no numeric points are dropped.
+ * One point per panel per row (hs-CRP preferred over standard CRP). Points are
+ * sorted oldest → newest; rows sorted by name.
  */
 export function trendSeries(results: ResultForTrend[]): BiomarkerTrend[] {
-  const byName = new Map<string, TrendPoint[]>();
-
+  const byPanel = new Map<string, ResultForTrend[]>();
   for (const r of results) {
-    const value = parseNumeric(r.value);
-    if (value == null) continue; // skip non-numeric (e.g. "Positive")
-    const points = byName.get(r.biomarkerName) ?? [];
-    points.push({
-      date: r.collectedDate,
-      value,
-      flag: (r.flag as Flag | undefined) ?? null,
-    });
-    byName.set(r.biomarkerName, points);
+    if (parseNumeric(r.value) == null) continue; // skip non-numeric (e.g. "Positive")
+    byPanel.set(r.panelId, [...(byPanel.get(r.panelId) ?? []), r]);
+  }
+
+  const byName = new Map<string, TrendPoint[]>();
+  for (const panelResults of byPanel.values()) {
+    for (const [group, { item, alternates }] of pickPerDisplayGroup(panelResults, (r) => r.biomarkerName)) {
+      const points = byName.get(group) ?? [];
+      points.push({
+        date: item.collectedDate,
+        value: parseNumeric(item.value)!,
+        flag: (item.flag as Flag | undefined) ?? null,
+        note: assayNote(item.biomarkerName, alternates),
+      });
+      byName.set(group, points);
+    }
   }
 
   return [...byName.entries()]
@@ -137,8 +221,8 @@ function distanceOutside(n: number, low?: number | null, high?: number | null): 
  *  - `inRange` = of those, how many carry a flag of "normal" / null (i.e. not
  *                low / high / borderline). Flags are computed at write-time by
  *                {@link classifyFlag}; we trust them here rather than re-deriving.
- *  - `improving` = of the numeric latest results that also appear (by name) in
- *                the prior panel with a numeric value, how many strictly reduced
+ *  - `improving` = of the numeric latest results that also appear (by display
+ *                row — see {@link displayGroupName}) in the prior panel with a numeric value, how many strictly reduced
  *                their distance outside the reference interval — i.e. moved
  *                toward (or further into) the in-range zone. A reading already
  *                in range that stays in range does NOT count as "improving"
@@ -158,21 +242,21 @@ export function panelSummary(
   let inRange = 0;
   let improving = 0;
 
-  // Index the prior panel by biomarker name for O(1) pairing.
-  const priorByName = new Map<string, PanelSummaryResult>();
-  for (const r of prior ?? []) {
-    if (!priorByName.has(r.biomarkerName)) priorByName.set(r.biomarkerName, r);
-  }
+  // One numeric result per display row on each side (hs-CRP and standard CRP pair
+  // as "CRP"). Non-numeric values drop out before the pick, as in trendSeries, so
+  // the summary counts the same reading the trend card plots.
+  const nameOf = (r: PanelSummaryResult) => r.biomarkerName;
+  const numeric = (rs: PanelSummaryResult[]) => rs.filter((r) => parseNumeric(r.value) != null);
+  const priorByRow = pickPerDisplayGroup(numeric(prior ?? []), nameOf);
 
-  for (const r of latest) {
-    const n = parseNumeric(r.value);
-    if (n == null) continue; // non-numeric → not comparable
+  for (const [row, { item: r }] of pickPerDisplayGroup(numeric(latest), nameOf)) {
+    const n = parseNumeric(r.value)!;
     total += 1;
 
     const flag = r.flag ?? null;
     if (flag == null || flag === "normal") inRange += 1;
 
-    const p = priorByName.get(r.biomarkerName);
+    const p = priorByRow.get(row)?.item;
     if (!p) continue;
     const pn = parseNumeric(p.value);
     if (pn == null) continue;

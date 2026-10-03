@@ -85,15 +85,17 @@ even if every test passes:
 
 | Convention | Storage | Fields |
 |---|---|---|
-| **Date-only** | UTC midnight | `Vial.expiry`, `Protocol.startDate`/`endDate`, `LabPanel.collectedDate`, `JournalEntry.date`, `Prescription.dateWritten`/`expiration`/`nextRefill`, `Preparation.beyondUseDate` |
+| **Date-only** | UTC midnight | `Vial.expiry`, `Protocol.startDate`/`endDate`/`cycleAnchor`, `LabPanel.collectedDate`, `JournalEntry.date`, `Prescription.dateWritten`/`expiration`/`nextRefill`, `Preparation.beyondUseDate` |
 | **Local midnight** | local midnight of the wellness day | `WearableDaily.date` |
 | **Instant** | true instant | `DoseLog.takenAt`, `PlannedDose.scheduledAt`, `Preparation.reconstitutedAt`, all `createdAt` |
 
 Render date-only with `.toISOString().slice(0, 10)` and instants in local time.
-Getting this backwards is silent: it looks right in UTC and in any
-positive-offset zone at the right hour, and wrong everywhere else.
-`Preparation.beyondUseDate` had drifted into holding all three at once — see
-`src/lib/bud.ts`.
+Exception: the three `Protocol` dates are read with `dateOnlyDay` / `dateOnlyKey`
+(`src/lib/schedule/schedule.ts`), never sliced — the cycle actions wrote a
+server-local midnight into them before v1.25.9, and the helpers read both forms.
+Getting this backwards is silent: it looks right in UTC and in any positive-offset
+zone at the right hour, and wrong everywhere else. `Preparation.beyondUseDate`
+had drifted into holding all three at once — see `src/lib/bud.ts`.
 
 Check a field's convention against the data, not the code:
 

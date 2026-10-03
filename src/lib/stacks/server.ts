@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { PEPTIDE_LIBRARY } from "@/lib/peptide-library";
 import { perInjectionMcg, stackComponentResolution, type StackComponentResolution } from "@/lib/stacks/compute";
 import { courseTips } from "@/lib/stacks/lineage";
+import { dateOnlyKey } from "@/lib/schedule/schedule";
 
 /** Name + aliases (lower-cased) for a peptide. Tolerates both JSON-array and
  *  comma-separated alias storage (the codebase has both). */
@@ -149,7 +150,7 @@ export async function getStacks(userId: string): Promise<StackView[]> {
       components,
       prescription,
       scheduleRule: first?.scheduleRule ?? null,
-      startDate: first?.startDate ? first.startDate.toISOString().slice(0, 10) : null,
+      startDate: first?.startDate ? dateOnlyKey(first.startDate) : null,
     });
   }
   return out;

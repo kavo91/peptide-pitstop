@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/owner";
-import { encryptField, decryptField } from "@/lib/crypto/fieldEncryption";
+import { encryptField } from "@/lib/crypto/fieldEncryption";
+import { decNum } from "@/lib/bodycomp-data";
 import { dayKeyInTz, isValidTimeZone } from "@/lib/tz-day";
 import { deleteDocumentFile } from "@/lib/documents";
 import {
@@ -16,12 +17,11 @@ import {
 } from "@/lib/body-comp-core";
 
 // ---------------------------------------------------------------------------
-// Local encrypt/decrypt helpers, byte-equivalent to encNum/decNum in
-// `src/lib/bodycomp-data.ts`. Not imported and not exported: a "use server"
-// module may only export async functions.
+// Encrypt helper (not exported: a "use server" module may only export async
+// functions). Decrypt uses the shared fail-soft `decNum` from bodycomp-data: a
+// corrupt cell gives null instead of throwing the RMR form's scan prefill.
 // ---------------------------------------------------------------------------
 const encNum = (n: number | null | undefined): string | null => n == null || !Number.isFinite(n) ? null : encryptField(String(n));
-const decNum = (s: string | null | undefined): number | null => { const v = decryptField(s); if (v == null) return null; const n = Number(v); return Number.isFinite(n) ? n : null; };
 
 // ---------------------------------------------------------------------------
 // Inputs (strings straight from form fields; parsed + validated server-side)

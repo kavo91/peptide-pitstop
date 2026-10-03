@@ -15,6 +15,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { encryptField } from "../src/lib/crypto/fieldEncryption";
+import { canonicalBiomarkerName, canonicalUnit } from "../src/lib/biomarker-aliases";
 import { assertSeedAllowed } from "../src/lib/seed-guard";
 
 const prisma = new PrismaClient();
@@ -250,14 +251,17 @@ async function main() {
   const panel = await prisma.labPanel.create({
     data: { userId: user.id, collectedDate: new Date(Date.now() - 20 * DAY), labSource: "Example Lab" },
   });
-  for (const [name, unit, value, lo, hi, flag] of results) {
+  // Report spellings fold onto the canonical names and units, as lab entry does.
+  for (const [reportName, reportUnit, value, lo, hi, flag] of results) {
+    const name = canonicalBiomarkerName(reportName);
+    const unit = canonicalUnit(reportUnit);
     const biomarker = await prisma.biomarker.upsert({
-      where: { name }, update: {}, create: { name, defaultUnit: unit || null },
+      where: { name }, update: {}, create: { name, defaultUnit: unit },
     });
     await prisma.labResult.create({
       data: {
         labPanelId: panel.id, biomarkerId: biomarker.id,
-        value: enc(value)!, unit: unit || null,
+        value: enc(value)!, unit,
         referenceLow: lo, referenceHigh: hi, flag,
       },
     });
