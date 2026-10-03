@@ -10,7 +10,7 @@
  * same boundary concern the audit raised for getStacks).
  */
 import { prisma } from "@/lib/db";
-import { startOfDay, addDays, WEEKDAYS } from "./schedule";
+import { startOfDay, dateOnlyDay, addDays, WEEKDAYS } from "./schedule";
 import { parseSchedule, weeklyDays, entryDueOn } from "./entries";
 import { rebaseWeek } from "./rebase";
 
@@ -60,7 +60,7 @@ export async function computeRebaseSuggestion(args: {
   if (interval?.dayPattern.kind === "interval" && mode === "rolling" && proto.startDate) {
     const everyDays = interval.dayPattern.everyDays;
     const actual = startOfDay(takenAt);
-    if (everyDays <= 0 || actual < startOfDay(proto.startDate)) return undefined;
+    if (everyDays <= 0 || actual < dateOnlyDay(proto.startDate)) return undefined;
     if (entryDueOn(interval, actual, proto.startDate)) return undefined; // on-grid — nothing to roll
     // The most recent grid day this catch-up satisfies (for the prompt copy).
     let planned = actual;
@@ -72,7 +72,7 @@ export async function computeRebaseSuggestion(args: {
       }
     }
     const nextDates = [addDays(actual, everyDays), addDays(actual, 2 * everyDays)].filter(
-      (d) => !proto.endDate || d <= startOfDay(proto.endDate),
+      (d) => !proto.endDate || d <= dateOnlyDay(proto.endDate),
     );
     if (nextDates.length === 0) return undefined; // roll would push everything past the end date
     return {

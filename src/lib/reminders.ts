@@ -386,11 +386,25 @@ export async function sendDueReminders(
   }
 
   const day = dayKey(startOfDay(now));
+  // An event stays in-window for ~4 ticks while its dose is unlogged. Re-trying
+  // the claim insert on each of them made Prisma log a P2002 ("Unique constraint
+  // failed (userId, dayKey, key)") every tick — Prisma logs it BEFORE throwing,
+  // so no catch can silence it. Skip keys already claimed today; the unique
+  // insert below stays the lock for a genuinely concurrent tick. A released
+  // claim (deleted below) is absent here, so its retry still happens.
+  const claimed = new Set(
+    (
+      await prisma.reminderSend.findMany({ where: { userId, dayKey: day }, select: { key: true } })
+    ).map((r) => r.key),
+  );
   let sent = 0;
   for (const event of events) {
+    if (claimed.has(event.key)) continue;
     // Atomic exactly-once claim: the unique (userId, dayKey, key) insert wins
     // or throws. Any failure (duplicate, DB down) skips the send — erring on
-    // "never double" — so no push can ever fire twice for one event.
+    // "never double" — so no push can ever fire twice for one event. A
+    // duplicate (P2002) is a lost race, so it stays quiet; anything else is a
+    // real fault and is logged (it used to be swallowed — a silent missed push).
     //
     // The channel is recorded AFTER the send (below), never guessed here. It
     // used to be written as `webPush ? "webpush" : "ha"` at claim time, so an
@@ -402,7 +416,10 @@ export async function sendDueReminders(
       claim = await prisma.reminderSend.create({
         data: { userId, dayKey: day, key: event.key, channel: "pending" },
       });
-    } catch {
+    } catch (err) {
+      if ((err as { code?: string } | null)?.code !== "P2002") {
+        console.error(`[reminders] could not claim "${event.key}" — not sent:`, err);
+      }
       continue;
     }
 

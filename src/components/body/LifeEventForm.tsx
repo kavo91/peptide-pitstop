@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { createLifeEvent, type LifeEventKind } from "@/app/actions/lifeevents";
+import { SAVE_FAILED_MESSAGE } from "@/lib/save-failure";
 import { BODY_COPY } from "@/lib/bodycomp-copy";
 
 const KINDS: { value: LifeEventKind; label: string }[] = [
@@ -36,18 +37,23 @@ export function LifeEventForm() {
     setBusy(true);
     setError(null);
     setSaved(false);
-    const res = await createLifeEvent({ kind, startDay, endDay: endDay || startDay, label, notes });
-    setBusy(false);
-    if (!res.ok) {
-      setError(res.error ?? "Could not save the window.");
-      return;
+    try {
+      const res = await createLifeEvent({ kind, startDay, endDay: endDay || startDay, label, notes });
+      if (!res.ok) {
+        setError(res.error ?? "Could not save the window.");
+        return;
+      }
+      setStartDay("");
+      setEndDay("");
+      setLabel("");
+      setNotes("");
+      setSaved(true);
+      router.refresh();
+    } catch {
+      setError(SAVE_FAILED_MESSAGE);
+    } finally {
+      setBusy(false);
     }
-    setStartDay("");
-    setEndDay("");
-    setLabel("");
-    setNotes("");
-    setSaved(true);
-    router.refresh();
   }
 
   return (

@@ -10,6 +10,7 @@ import {
   updateProtocolStep,
   moveProtocolStep,
 } from "@/app/actions/protocols";
+import { SAVE_FAILED_MESSAGE } from "@/lib/save-failure";
 import { NEGATIVE_DURATION_ERROR, isNegativeDuration } from "@/lib/titration/step-duration";
 import { RampGenerator } from "@/components/RampGenerator";
 import { TitrationCalcChart } from "@/components/TitrationCalcChart";
@@ -54,18 +55,23 @@ function StepRow({
     if (isNegativeDuration(durationDays)) { onError(NEGATIVE_DURATION_ERROR); return; }
     onBusy(true);
     onError(null);
-    const res = await updateProtocolStep({
-      stepId: step.id,
-      dose,
-      doseInputUnit: unit,
-      durationDays,
-    });
-    onBusy(false);
-    if (res.ok) {
-      setEditing(false);
-      router.refresh();
-    } else {
-      onError(res.error ?? "Could not save step.");
+    try {
+      const res = await updateProtocolStep({
+        stepId: step.id,
+        dose,
+        doseInputUnit: unit,
+        durationDays,
+      });
+      if (res.ok) {
+        setEditing(false);
+        router.refresh();
+      } else {
+        onError(res.error ?? "Could not save step.");
+      }
+    } catch {
+      onError(SAVE_FAILED_MESSAGE);
+    } finally {
+      onBusy(false);
     }
   }
 
@@ -204,10 +210,15 @@ export function StepsEditor({
     if (isNegativeDuration(durationDays)) { setError(NEGATIVE_DURATION_ERROR); return; }
     setBusy(true);
     setError(null);
-    const res = await addProtocolStep({ protocolId, dose, doseInputUnit: unit, durationDays });
-    setBusy(false);
-    if (!res.ok) { setError(res.error); return; }
-    router.refresh();
+    try {
+      const res = await addProtocolStep({ protocolId, dose, doseInputUnit: unit, durationDays });
+      if (!res.ok) { setError(res.error); return; }
+      router.refresh();
+    } catch {
+      setError(SAVE_FAILED_MESSAGE);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

@@ -1,9 +1,10 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { startOfDay, addDays } from "@/lib/schedule/schedule";
+import { startOfDay, dateOnlyFloor, addDays } from "@/lib/schedule/schedule";
 import { timeInTz } from "@/lib/tz-day";
 import { resolveTitration } from "@/lib/titration/resolve";
 import { buildResolveInput } from "@/lib/titration/from-protocol";
+import { startsOnOrBefore } from "./protocol-day-bounds";
 import { supersededFrom, type LoggedDose, type TimelineEntry } from "./doses-timeline-core";
 import { buildTimelineEntries, clipSlotsToRange, dropOpenSlotsIfClosed, type ResolvedOcc } from "./timeline-status";
 import { monthMetricsByDay } from "./month-metrics";
@@ -24,8 +25,8 @@ async function buildResolvedOccurrences(userId: string, rangeStart: Date, rangeE
         { status: "active" },
         {
           status: "completed",
-          OR: [{ endDate: null }, { endDate: { gte: startOfDay(rangeStart) } }],
-          AND: [{ OR: [{ startDate: null }, { startDate: { lte: startOfDay(rangeEnd) } }] }],
+          OR: [{ endDate: null }, { endDate: { gte: dateOnlyFloor(rangeStart) } }],
+          AND: [{ OR: [{ startDate: null }, { startDate: startsOnOrBefore(rangeEnd) }] }],
         },
       ],
     },

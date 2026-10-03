@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/owner";
 import { encryptField } from "@/lib/crypto/fieldEncryption";
 import { ensureBiomarkers } from "@/lib/biomarker-library";
+import { canonicalBiomarkerName, canonicalUnit, collisionMessage, findCanonicalCollisions } from "@/lib/biomarker-aliases";
 import { classifyFlag } from "@/lib/bloodwork";
 
 export interface LabResultInput {
@@ -53,10 +54,13 @@ function decToNum(d: { toString(): string } | null | undefined): number | null {
 
 /**
  * Create a lab panel (one blood draw) and its results. Identity comes from the
- * session. Seeds the shared biomarker catalog, resolves each result's biomarker
- * by name (creating bare rows for any custom names), computes a flag from the
- * biomarker's optimal range + the entered reference interval, encrypts the value
- * and notes, and writes panel + results + audit in one transaction.
+ * session. Seeds the shared biomarker catalog, folds each name and unit onto its
+ * canonical spelling (so a new report's spelling lands on the existing row),
+ * resolves each result's biomarker by name (creating bare rows for any custom
+ * names), computes a flag from the biomarker's optimal range + the entered
+ * reference interval, encrypts the value and notes, and writes panel + results +
+ * audit in one transaction. Rejects a submission where two rows name the same
+ * biomarker.
  */
 export async function createLabPanel(input: CreateLabPanelInput): Promise<CreateLabPanelResult> {
   const user = await getCurrentUser();
@@ -67,13 +71,18 @@ export async function createLabPanel(input: CreateLabPanelInput): Promise<Create
   );
   if (rawResults.length === 0) return { ok: false, error: "Add at least one result." };
 
+  // Two rows for one biomarker would put two results for it in this panel.
+  const collisions = findCanonicalCollisions(rawResults.map((r) => r.biomarkerName));
+  if (collisions.length > 0) return { ok: false, error: collisionMessage(collisions) };
+  const results = rawResults.map((r) => ({ ...r, biomarkerName: canonicalBiomarkerName(r.biomarkerName) }));
+
   const collectedDate = new Date(input.collectedDate);
   if (Number.isNaN(collectedDate.getTime())) return { ok: false, error: "Invalid collection date." };
 
   // Seed/refresh the shared biomarker catalog (idempotent), then resolve names.
   await ensureBiomarkers(prisma);
 
-  const names = [...new Set(rawResults.map((r) => r.biomarkerName.trim()))];
+  const names = results.map((r) => r.biomarkerName);
   const found = await prisma.biomarker.findMany({ where: { name: { in: names } } });
   const byName = new Map(found.map((b) => [b.name, b]));
 
@@ -85,8 +94,8 @@ export async function createLabPanel(input: CreateLabPanelInput): Promise<Create
     }
   }
 
-  const resultRows = rawResults.map((r) => {
-    const bm = byName.get(r.biomarkerName.trim())!;
+  const resultRows = results.map((r) => {
+    const bm = byName.get(r.biomarkerName)!;
     const referenceLow = refDecimal(r.referenceLow);
     const referenceHigh = refDecimal(r.referenceHigh);
     const flag = classifyFlag(
@@ -99,7 +108,7 @@ export async function createLabPanel(input: CreateLabPanelInput): Promise<Create
     return {
       biomarkerId: bm.id,
       value: encryptField(r.value.trim())!,
-      unit: r.unit?.trim() || bm.defaultUnit || null,
+      unit: canonicalUnit(r.unit) ?? canonicalUnit(bm.defaultUnit),
       referenceLow,
       referenceHigh,
       flag,

@@ -93,7 +93,9 @@ export function mergeWellnessLog(manual: ManualDay[], series: WearableSeries): W
     const activity = activityByDate.get(date);
 
     const garmin: WellnessLogGarmin = {
-      sleepSeconds: sleep ? sumStages(sleep.deep, sleep.light, sleep.rem, sleep.awake) : null,
+      // Stored total first, stage sum as fallback — the same rule /doses uses
+      // (month-metrics.ts), so the two pages print one number.
+      sleepSeconds: sleep ? (sleep.total ?? sumStages(sleep.deep, sleep.light, sleep.rem, sleep.awake)) : null,
       sleepScore: sleep?.score ?? null,
       weightKg: weight?.weightKg ?? null,
       steps: activity?.steps ?? null,

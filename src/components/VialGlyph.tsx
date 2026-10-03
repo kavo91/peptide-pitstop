@@ -26,15 +26,8 @@ export function vialState(v: VialView): VialState {
   return "ok";
 }
 
-/** Remaining fraction 0–1: remainingMl / initial mL (= label mg·1000 / conc). */
-export function vialFill(v: VialView): number {
-  const conc = Number(v.concentrationMcgPerMl);
-  const rem = Number(v.remainingMl);
-  if (!conc || !Number.isFinite(conc) || !Number.isFinite(rem) || rem <= 0) return 0;
-  const initialMl = (Number(v.labelStrengthMg) * 1000) / conc;
-  if (!initialMl || !Number.isFinite(initialMl)) return 0;
-  return Math.max(0, Math.min(1, rem / initialMl));
-}
+// Pure maths lives in lib/vial-fill.ts so it is testable without JSX.
+export { vialFill } from "@/lib/vial-fill";
 
 export function VialGlyph({
   state,

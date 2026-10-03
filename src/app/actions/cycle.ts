@@ -3,8 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/owner";
-import { startOfDay } from "@/lib/schedule/schedule";
-import { cyclePlanEnd } from "@/lib/cycle/state";
+import { planEndCycle, planNextCycle } from "@/lib/cycle/actions-plan";
 
 /**
  * The two actions the cycle banner offers. Both are deliberately small and
@@ -30,11 +29,7 @@ export async function endCycle(protocolId: string) {
   });
   if (!protocol) return { ok: false as const, error: "Protocol not found." };
 
-  const plannedEnd = cyclePlanEnd(protocol.cycleAnchor ?? protocol.startDate, protocol.cycleOnWeeks);
-  // Never PUSH an existing end date later — a user who already chose to finish
-  // early meant it. Only fill a null, or pull an unset/later bound back in.
-  const endDate =
-    plannedEnd && (protocol.endDate === null || protocol.endDate > plannedEnd) ? plannedEnd : protocol.endDate;
+  const { endDate, audit } = planEndCycle(protocol);
 
   await prisma.protocol.updateMany({
     where: { id: protocolId, userId: user.id },
@@ -48,7 +43,7 @@ export async function endCycle(protocolId: string) {
       entityId: protocolId,
       field: "cycle",
       oldValue: "active",
-      newValue: `cycle ended${endDate ? ` (endDate ${endDate.toISOString().slice(0, 10)})` : ""}`,
+      newValue: audit,
     },
   });
 
@@ -63,8 +58,9 @@ export async function endCycle(protocolId: string) {
  *
  * The anchor moves rather than `startDate` so "when did I first start this
  * peptide" stays intact — the whole reason cycleAnchor exists as its own
- * column. Clears a stale `endDate` that would otherwise stop the schedule
- * resolver from generating doses for the new cycle.
+ * column. Replaces a stale `endDate` (which would otherwise stop the schedule
+ * resolver from generating doses for the new cycle) with the new cycle's
+ * planned stop. The date maths live in lib/cycle/actions-plan.ts.
  */
 export async function startNextCycle(protocolId: string) {
   const user = await getCurrentUser();
@@ -79,19 +75,11 @@ export async function startNextCycle(protocolId: string) {
     return { ok: false as const, error: "This protocol has no cycle plan — set one on the protocol first." };
   }
 
-  const today = startOfDay(new Date());
-  const newEnd = cyclePlanEnd(today, protocol.cycleOnWeeks);
+  const next = planNextCycle({ startDate: protocol.startDate, cycleOnWeeks: protocol.cycleOnWeeks }, new Date());
 
   await prisma.protocol.updateMany({
     where: { id: protocolId, userId: user.id },
-    data: {
-      cycleAnchor: today,
-      status: "active",
-      endDate: newEnd,
-      // A protocol that never had a startDate gets one now, so day-N counters
-      // and the titration resolver have an anchor for this cycle.
-      ...(protocol.startDate ? {} : { startDate: today }),
-    },
+    data: next.data,
   });
 
   await prisma.auditLog.create({
@@ -101,7 +89,7 @@ export async function startNextCycle(protocolId: string) {
       entityId: protocolId,
       field: "cycle",
       oldValue: "off",
-      newValue: `next cycle started ${today.toISOString().slice(0, 10)}`,
+      newValue: next.audit,
     },
   });
 

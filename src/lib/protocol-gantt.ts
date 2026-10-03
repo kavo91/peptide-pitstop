@@ -16,13 +16,13 @@
  *                next cycle" (see app/actions/cycle.ts), so everything beyond
  *                the committed end renders as projection, never as fact.
  *
- * Date convention: inputs are the stored Prisma dates; this file normalises
- * them with startOfDay() exactly like lib/cycle/state and lib/protocol-bucket
- * do (the server runs in the home TZ, where Convention-1 UTC-midnight columns
- * land on the same calendar day). Mixing in getUTC* reads here would let this
- * surface disagree with the cycle chip beside it.
+ * Date convention: inputs are the stored Prisma dates (or their ISO strings);
+ * this file reads them with dateOnlyDay() exactly like lib/cycle/state and
+ * lib/protocol-bucket do, so a Convention-1 UTC-midnight column lands on its
+ * own calendar day in any server zone. Reading them any other way here would
+ * let this surface disagree with the cycle chip beside it.
  */
-import { startOfDay, addDays, daysBetween } from "./schedule/schedule";
+import { startOfDay, dateOnlyDay, addDays, daysBetween } from "./schedule/schedule";
 
 export type GanttSegmentKind = "on" | "off" | "projected";
 
@@ -74,7 +74,7 @@ export const GANTT_FORWARD_DAYS = 112;
 const planned = (weeks: number | null | undefined): weeks is number =>
   typeof weeks === "number" && Number.isFinite(weeks) && weeks > 0;
 
-const toDay = (d: Date | string | null): Date | null => (d ? startOfDay(new Date(d)) : null);
+const toDay = (d: Date | string | null): Date | null => (d ? dateOnlyDay(new Date(d)) : null);
 
 /**
  * The viewing window around `today`, snapped outward to whole Sunday→Saturday
@@ -171,7 +171,9 @@ export function ganttRow(p: GanttProtocolInput, window: GanttWindow, today: Date
   }
 
   const days: { day: Date; kind: GanttSegmentKind }[] = [];
-  for (let d = from; d <= to; d = addDays(d, 1)) {
+  // startOfDay re-snaps after a DST start at midnight (America/Santiago), so the
+  // last day still passes `<= to`.
+  for (let d = from; d <= to; d = startOfDay(addDays(d, 1))) {
     let kind = rawKindAt({ day: d, anchor, onWeeks: p.cycleOnWeeks, offWeeks: p.cycleOffWeeks });
     if (kind === null) break; // terminal plan exhausted
     // Beyond the committed end of a repeating course, an on-day is projection:

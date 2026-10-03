@@ -4,6 +4,7 @@ import { Save } from "lucide-react";
 
 import { useEffect, useState } from "react";
 import { createJournalEntry } from "@/app/actions/journal";
+import { SAVE_FAILED_MESSAGE } from "@/lib/save-failure";
 import { type SideEffectEntry } from "@/lib/side-effects";
 
 /** Split a free-text side-effects field into structured entries (no severity). */
@@ -92,21 +93,26 @@ export function JournalForm() {
     setBusy(true);
     setError(null);
     const effects = parseFreeTextSideEffects(sideEffects);
-    const res = await createJournalEntry({
-      dateISO: date, // "yyyy-MM-dd" → stored at UTC midnight
-      weight: weight || undefined,
-      weightUnit,
-      mood: mood || undefined,
-      energy: energy || undefined,
-      sleep: sleep || undefined,
-      sideEffects: effects.length ? effects : undefined,
-      notes: notes || undefined,
-    });
-    setBusy(false);
-    if (res.ok) {
-      window.location.href = "/journal";
-    } else {
-      setError(res.error ?? "Could not save the entry.");
+    try {
+      const res = await createJournalEntry({
+        dateISO: date, // "yyyy-MM-dd" → stored at UTC midnight
+        weight: weight || undefined,
+        weightUnit,
+        mood: mood || undefined,
+        energy: energy || undefined,
+        sleep: sleep || undefined,
+        sideEffects: effects.length ? effects : undefined,
+        notes: notes || undefined,
+      });
+      if (res.ok) {
+        window.location.href = "/journal";
+      } else {
+        setError(res.error ?? "Could not save the entry.");
+      }
+    } catch {
+      setError(SAVE_FAILED_MESSAGE);
+    } finally {
+      setBusy(false);
     }
   }
 

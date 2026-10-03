@@ -64,6 +64,69 @@ export function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
+/**
+ * A date-only protocol field (`startDate`, `endDate`, `cycleAnchor`) as a
+ * server-local day. Those columns hold 00:00 UTC of the picked calendar day
+ * (convention 1, see lib/bud.ts). `startOfDay` reads that instant in the
+ * server's zone, which WEST of UTC is the evening before — the end day lost its
+ * slots and a slot appeared the day before the start. This reads the UTC
+ * calendar day instead.
+ *
+ * Representation-safe: anything that is not exactly 00:00:00.000Z (a computed
+ * local-midnight day handed through the same parameter) goes through
+ * `startOfDay` unchanged. So the result equals `startOfDay` for every input in
+ * every zone at or east of UTC (Brisbane included), it is idempotent, and it
+ * differs only for a 00:00Z value west of UTC.
+ */
+export function dateOnlyDay(date: Date): Date {
+  if (
+    date.getUTCHours() === 0 &&
+    date.getUTCMinutes() === 0 &&
+    date.getUTCSeconds() === 0 &&
+    date.getUTCMilliseconds() === 0
+  ) {
+    return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  }
+  return startOfDay(date);
+}
+
+/** `dateOnlyDay` as a local "YYYY-MM-DD" key. */
+export function dateOnlyKey(date: Date): string {
+  const d = dateOnlyDay(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * The stored form of a server-local day: 00:00 UTC of its calendar date —
+ * what the date inputs write.
+ */
+export function dateOnlyValue(day: Date): Date {
+  return new Date(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate()));
+}
+
+/**
+ * Query bound for "a date-only protocol field falls on or after `day`"
+ * (`{ gte: dateOnlyFloor(day) }`). Before v1.25.9 the cycle actions
+ * (startNextCycle, endCycle) stored a server-local midnight, so the bound is the
+ * earlier of the two forms of `day`: both forms of `day` pass, both forms of the
+ * day before fail. At or east of UTC the earlier one is the local midnight, i.e.
+ * exactly the old `startOfDay(day)` bound.
+ */
+export function dateOnlyFloor(day: Date): Date {
+  const local = startOfDay(day);
+  const value = dateOnlyValue(local);
+  return value < local ? value : local;
+}
+
+/**
+ * Exclusive query bound for "a date-only protocol field falls on or before
+ * `day`" (`{ lt: dateOnlyCeil(day) }`): the earlier form of the NEXT day, so
+ * both forms of `day` pass and both forms of the day after fail.
+ */
+export function dateOnlyCeil(day: Date): Date {
+  return dateOnlyFloor(addDays(startOfDay(day), 1));
+}
+
 export function daysBetween(a: Date, b: Date): number {
   const ms = startOfDay(b).getTime() - startOfDay(a).getTime();
   return Math.round(ms / 86_400_000);
@@ -91,7 +154,10 @@ export function occurrencesInRange(args: {
     if (isDueOn({ rule: args.rule, date: day, startDate: args.startDate, endDate: args.endDate })) {
       out.push(day); // local-midnight, consistent with startOfDay and the local KEY() consumer
     }
-    day = addDays(day, 1);
+    // Re-snap to midnight: where DST starts AT midnight (America/Santiago) that
+    // day's "midnight" is 01:00, and carrying 01:00 forward would make the last
+    // day fail `<= end`.
+    day = startOfDay(addDays(day, 1));
   }
   return out;
 }
@@ -108,8 +174,8 @@ export function isDueOn(args: {
 }): boolean {
   const { rule, date, startDate, endDate } = args;
   const day = startOfDay(date);
-  if (startDate && day < startOfDay(startDate)) return false;
-  if (endDate && day > startOfDay(endDate)) return false;
+  if (startDate && day < dateOnlyDay(startDate)) return false;
+  if (endDate && day > dateOnlyDay(endDate)) return false;
 
   const parsed = parseRule(rule);
   if (parsed.freq === "DAILY") return true;
@@ -117,7 +183,7 @@ export function isDueOn(args: {
     if (parsed.byDay && parsed.byDay.length > 0) return parsed.byDay.includes(weekdayCode(day));
     // No explicit days: a WEEKLY rule means once a week, anchored to the start
     // weekday (NOT every day — that would diverge from the depletion forecast).
-    if (startDate) return weekdayCode(day) === weekdayCode(startOfDay(startDate));
+    if (startDate) return weekdayCode(day) === weekdayCode(dateOnlyDay(startDate));
     return false; // weekly with no anchor day is indeterminate → not due
   }
   return false;
@@ -145,7 +211,7 @@ export function activeStep(args: {
   const steps = [...args.steps].sort((a, b) => a.stepIndex - b.stepIndex);
   if (steps.length === 0) return null;
 
-  const elapsed = daysBetween(startDate, date);
+  const elapsed = daysBetween(dateOnlyDay(startDate), date);
   if (elapsed < 0) return null;
 
   let cursor = 0;

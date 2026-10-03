@@ -1,10 +1,12 @@
+import { Fragment } from "react";
 import type { Flag } from "@/lib/bloodwork";
 
 export interface BiomarkerTrendProps {
   name: string;
   unit?: string | null;
   /** Sorted oldest → newest. */
-  points: { date: Date; value: number; flag: Flag | null }[];
+  /** `note` (e.g. the hs-CRP assay) shows on hover over the point. */
+  points: { date: Date; value: number; flag: Flag | null; note?: string | null }[];
   referenceLow?: number | null;
   referenceHigh?: number | null;
   optimalLow?: number | null;
@@ -57,7 +59,7 @@ export function BiomarkerTrend({
       <div className="rounded-card bg-surface p-4 shadow-sm ring-1 ring-line/10">
         <div className="mb-1 flex items-baseline justify-between gap-2">
           <p className="text-sm font-semibold text-ink">{name}</p>
-          <p className="text-sm tabular-nums" style={{ color: flagColor(latest.flag) }}>
+          <p className="text-sm tabular-nums" style={{ color: flagColor(latest.flag) }} title={latest.note ?? undefined}>
             {latest.value}
             {unit ? <span className="ml-1 text-xs text-muted">{unit}</span> : null}
           </p>
@@ -103,7 +105,7 @@ export function BiomarkerTrend({
   const xOf = (t: number) =>
     minT === maxT ? centerX : plotLeft + ((t - minT) / (maxT - minT)) * (plotRight - plotLeft);
 
-  const coords = points.map((p) => ({ x: xOf(p.date.getTime()), y: yOf(p.value), flag: p.flag }));
+  const coords = points.map((p) => ({ x: xOf(p.date.getTime()), y: yOf(p.value), flag: p.flag, note: p.note ?? null }));
   const linePath = coords.map((c, i) => `${i === 0 ? "M" : "L"}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(" ");
 
   const hasRefBand = referenceLow != null && referenceHigh != null;
@@ -119,7 +121,7 @@ export function BiomarkerTrend({
     <div className="rounded-card bg-surface p-4 shadow-sm ring-1 ring-line/10">
       <div className="mb-1 flex items-baseline justify-between gap-2">
         <p className="text-sm font-semibold text-ink">{name}</p>
-        <p className="text-sm tabular-nums" style={{ color: flagColor(latest.flag) }}>
+        <p className="text-sm tabular-nums" style={{ color: flagColor(latest.flag) }} title={latest.note ?? undefined}>
           {latest.value}
           {unit ? <span className="ml-1 text-xs text-muted">{unit}</span> : null}
         </p>
@@ -179,8 +181,16 @@ export function BiomarkerTrend({
         )}
 
         {/* Points — colour-coded by flag */}
+        {/* A noted point (hs-CRP) gets a wider invisible hover target carrying the note. */}
         {coords.map((c, i) => (
-          <circle key={`pt-${safeId}-${i}`} cx={c.x} cy={c.y} r="3.5" fill={flagColor(c.flag)} stroke="rgb(var(--surface))" strokeWidth="1" />
+          <Fragment key={`pt-${safeId}-${i}`}>
+            <circle cx={c.x} cy={c.y} r="3.5" fill={flagColor(c.flag)} stroke="rgb(var(--surface))" strokeWidth="1" />
+            {c.note && (
+              <circle cx={c.x} cy={c.y} r="12" fill="transparent" className="cursor-help">
+                <title>{c.note}</title>
+              </circle>
+            )}
+          </Fragment>
         ))}
 
         {/* Y-axis bound labels */}

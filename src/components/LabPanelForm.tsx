@@ -5,6 +5,7 @@ import { Save } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createLabPanel, type LabResultInput } from "@/app/actions/bloodwork";
+import { SAVE_FAILED_MESSAGE } from "@/lib/save-failure";
 
 export interface BiomarkerOption {
   name: string;
@@ -89,22 +90,27 @@ export function LabPanelForm({ biomarkers }: { biomarkers: BiomarkerOption[] }) 
       return;
     }
 
-    const res = await createLabPanel({
-      collectedDate,
-      labSource: labSource.trim() || undefined,
-      notes: notes.trim() || undefined,
-      results,
-    });
+    try {
+      const res = await createLabPanel({
+        collectedDate,
+        labSource: labSource.trim() || undefined,
+        notes: notes.trim() || undefined,
+        results,
+      });
 
-    setBusy(false);
-    if (res.ok) {
-      setDone(true);
-      setLabSource("");
-      setNotes("");
-      setRows([blankRow(biomarkers)]);
-      router.refresh();
-    } else {
-      setError(res.error ?? "Could not save the lab panel.");
+      if (res.ok) {
+        setDone(true);
+        setLabSource("");
+        setNotes("");
+        setRows([blankRow(biomarkers)]);
+        router.refresh();
+      } else {
+        setError(res.error ?? "Could not save the lab panel.");
+      }
+    } catch {
+      setError(SAVE_FAILED_MESSAGE);
+    } finally {
+      setBusy(false);
     }
   }
 

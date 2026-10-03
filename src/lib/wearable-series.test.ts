@@ -61,6 +61,7 @@ describe("buildWearableSeries", () => {
     expect(s.sleep.map((p) => p.date)).toEqual(["2026-06-18", "2026-06-20"]);
     expect(s.sleep[1]).toEqual({
       date: "2026-06-20",
+      total: null, // no stored nightly total on this fixture row
       deep: 6000,
       light: 15000,
       rem: 5000,

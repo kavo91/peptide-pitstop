@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import Decimal from "decimal.js";
 import { prisma } from "@/lib/db";
-import { startOfDay } from "@/lib/schedule/schedule";
+import { startOfDay, dateOnlyDay } from "@/lib/schedule/schedule";
 import { buildForecastPlan, conv1ToLocalDay } from "@/lib/forecast-slots";
 import { resolveBudDays, beyondUseDateFrom } from "@/lib/bud";
 import {
@@ -12,21 +12,12 @@ import {
   type ForecastContainer,
   type ReorderStatus,
 } from "@/lib/reorder-forecast";
-import type { Syringe } from "@/lib/dosing/types";
+import { forecastSyringe } from "@/lib/forecast-syringe";
 
 
 const DEFAULT_LEAD_DAYS = 14;
 const DEFAULT_BUFFER_DAYS = 3;
 
-/** Fallback syringe when a protocol names none. U-100 is the app-wide default. */
-const DEFAULT_SYRINGE: Syringe = {
-  name: "U-100 1mL",
-  graduationType: "units",
-  unitsPerMl: 100,
-  capacityMl: 1,
-  capacityUnits: 100,
-  increment: 1,
-};
 
 export type { ReorderStatus, CoverageBasis };
 
@@ -162,17 +153,7 @@ async function loadReorderStatus(userId: string, now = new Date()): Promise<Pept
       ? (proto.prescription?.leadTimeDays ?? userLead)
       : (leadByPeptide.get(proto.peptideId) ?? userLead);
 
-    const syr = proto.defaultSyringeId ? syringeById.get(proto.defaultSyringeId) : null;
-    const syringe: Syringe = syr
-      ? {
-          name: syr.name,
-          graduationType: syr.graduationType as "units" | "ml",
-          unitsPerMl: syr.unitsPerMl,
-          capacityMl: Number(syr.capacityMl.toString()),
-          capacityUnits: syr.capacityUnits,
-          increment: Number(syr.increment.toString()),
-        }
-      : DEFAULT_SYRINGE;
+    const syringe = forecastSyringe(proto.defaultSyringeId ? syringeById.get(proto.defaultSyringeId) : null);
 
     const r = forecastCoverage({
       slots: plan.slots,
@@ -201,7 +182,7 @@ async function loadReorderStatus(userId: string, now = new Date()): Promise<Pept
       // The PROTOCOL has not started — not merely "the next slot is tomorrow".
       // Keying this off the first future slot marked every weekday-only or
       // already-dosed-today protocol as not started.
-      notStarted: proto.startDate != null && startOfDay(proto.startDate) > today,
+      notStarted: proto.startDate != null && dateOnlyDay(proto.startDate) > today,
       firstDoseDate: plan.slots.length > 0 ? dayKey(plan.slots[0].date) : null,
       leadTimeDays: r.leadTimeDays,
     });

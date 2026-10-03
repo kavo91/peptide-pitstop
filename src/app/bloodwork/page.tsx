@@ -9,7 +9,7 @@ import { getCurrentUser } from "@/lib/auth/owner";
 import { prisma } from "@/lib/db";
 import { decryptField } from "@/lib/crypto/fieldEncryption";
 import { BIOMARKER_LIBRARY } from "@/lib/biomarker-library";
-import { trendSeries, panelSummary, type ResultForTrend } from "@/lib/bloodwork";
+import { trendSeries, panelSummary, pickPerDisplayGroup, type ResultForTrend } from "@/lib/bloodwork";
 import { BackButton } from "@/components/BackButton";
 import { BloodworkAddPanel } from "@/components/BloodworkAddPanel";
 import { BiomarkerTrend } from "@/components/BiomarkerTrend";
@@ -69,13 +69,15 @@ export default async function BloodworkPage() {
     })),
   }));
 
-  // Per-biomarker numeric trend series.
+  // Per-row numeric trend series (standard CRP and hs-CRP share the "CRP" row).
   const allResults: ResultForTrend[] = decoded.flatMap((p) =>
     p.results.map((r) => ({
       biomarkerName: r.biomarkerName,
       collectedDate: p.collectedDate,
       value: r.value,
       flag: r.flag,
+      panelId: p.id,
+      unit: r.unit,
     })),
   );
   const trends = trendSeries(allResults);
@@ -90,13 +92,14 @@ export default async function BloodworkPage() {
   // "current" keeps every card (single-point charts included) — byte-identical.
   const visibleTrends = pit ? trends.filter((t) => t.points.length >= 2) : trends;
 
-  // Meta (units + optimal + latest reference interval) for each biomarker. Panels
-  // are date-desc, so the first occurrence of a name is its most recent reading.
+  // Meta (units + optimal + latest reference interval) for each display row. Panels
+  // are date-desc, so the first panel holding a row gives its most recent reading
+  // (hs-CRP over standard CRP, as the row itself shows).
   const metaByName = new Map<string, { unit: string | null; optimalLow: number | null; optimalHigh: number | null; refLow: number | null; refHigh: number | null }>();
   for (const p of panels) {
-    for (const r of p.results) {
-      if (metaByName.has(r.biomarker.name)) continue;
-      metaByName.set(r.biomarker.name, {
+    for (const [row, { item: r }] of pickPerDisplayGroup(p.results, (x) => x.biomarker.name)) {
+      if (metaByName.has(row)) continue;
+      metaByName.set(row, {
         unit: r.unit ?? r.biomarker.defaultUnit ?? null,
         optimalLow: numOrNull(r.biomarker.optimalLow),
         optimalHigh: numOrNull(r.biomarker.optimalHigh),

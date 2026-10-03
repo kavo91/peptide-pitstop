@@ -5,6 +5,7 @@ import { Save, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateProtocol } from "@/app/actions/protocols";
+import { SAVE_FAILED_MESSAGE } from "@/lib/save-failure";
 import { useSavedFlash } from "./useSavedFlash";
 
 /**
@@ -87,7 +88,7 @@ export function GanttRowEditor(p: Props) {
         setError(res.error ?? "Could not save.");
       }
     } catch {
-      setError("Could not save.");
+      setError(SAVE_FAILED_MESSAGE);
     } finally {
       setBusy(false);
     }

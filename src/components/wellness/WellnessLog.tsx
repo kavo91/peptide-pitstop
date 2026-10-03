@@ -6,7 +6,7 @@
  * when wearable data synced that day), each clearly sourced. CSS-var tokens only;
  * mobile grid that widens at lg — mirrors the journal entry cards it replaces.
  */
-import { activityDisplay, fmtActivityDistance, fmtActivityDuration } from "@/lib/garmin-activity";
+import { activityDisplay, fmtActivityDistance, fmtActivityDuration, fmtSleepDuration } from "@/lib/garmin-activity";
 import type { WellnessLogDay, ManualDay, WellnessLogGarmin } from "@/lib/wellness-log";
 import { DeleteJournalButton } from "@/components/DeleteJournalButton";
 
@@ -19,13 +19,6 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 export function fmtDayKey(key: string): string {
   const [y, m, d] = key.split("-").map((p) => Number(p));
   return `${d ?? ""} ${MONTHS[(m ?? 1) - 1] ?? ""} ${y ?? ""}`.trim();
-}
-
-/** Seconds → "7h 12m" (rounded to the nearest minute). */
-function fmtDuration(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.round((seconds % 3600) / 60);
-  return `${h}h ${m}m`;
 }
 
 function Tag({ label, tone }: { label: string; tone: "manual" | "garmin" }) {
@@ -81,7 +74,7 @@ function ManualBlock({ m }: { m: ManualDay }) {
 export function GarminBlock({ g }: { g: WellnessLogGarmin }) {
   const sleep =
     g.sleepSeconds != null || g.sleepScore != null
-      ? [g.sleepSeconds != null ? fmtDuration(g.sleepSeconds) : null, g.sleepScore != null ? `score ${g.sleepScore}` : null]
+      ? [g.sleepSeconds != null ? fmtSleepDuration(g.sleepSeconds) : null, g.sleepScore != null ? `score ${g.sleepScore}` : null]
           .filter(Boolean)
           .join(" · ")
       : null;

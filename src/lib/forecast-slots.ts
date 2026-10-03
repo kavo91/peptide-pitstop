@@ -15,7 +15,7 @@
  * cursor needs every log to know which titration step is live).
  */
 import { parseSchedule } from "./schedule/entries";
-import { startOfDay, addDays } from "./schedule/schedule";
+import { startOfDay, addDays, dateOnlyDay } from "./schedule/schedule";
 import { cycleState, cyclePlanEnd } from "./cycle/state";
 import { resolveTitration } from "./titration/resolve";
 import { buildResolveInput, type ProtocolForResolve, type DeliveredLogInput } from "./titration/from-protocol";
@@ -53,7 +53,13 @@ export interface ForecastPlan {
   projectionStartsOn: Date | null;
 }
 
-/** Convention-1 columns store UTC midnight of a calendar day (see lib/bud.ts). */
+/**
+ * Convention-1 columns store UTC midnight of a calendar day (see lib/bud.ts).
+ * Pure UTC parts, so a 00:00Z value reads as its own day in every zone. Used for
+ * vial expiry / beyond-use dates. Protocol dates use `dateOnlyDay`
+ * (lib/schedule/schedule.ts), which agrees on 00:00Z values but also reads a
+ * server-local midnight (cycle actions before v1.25.9) as its own day.
+ */
 export function conv1ToLocalDay(d: Date | null | undefined): Date | null {
   if (!d) return null;
   return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
@@ -72,7 +78,7 @@ export function buildForecastPlan(args: {
 
   const repeats = (protocol.cycleOffWeeks ?? 0) > 0;
   const anchor = protocol.cycleAnchor ?? protocol.startDate;
-  const protoEnd = conv1ToLocalDay(protocol.endDate);
+  const protoEnd = protocol.endDate ? dateOnlyDay(protocol.endDate) : null;
   const planEnd = cyclePlanEnd(anchor, protocol.cycleOnWeeks);
   const endsOnPlan =
     protoEnd != null && planEnd != null && protoEnd.getTime() === startOfDay(planEnd).getTime();

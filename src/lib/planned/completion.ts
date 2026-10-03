@@ -1,5 +1,5 @@
 import { parseSchedule, slotsInRange } from "@/lib/schedule/entries";
-import { addDays, startOfDay } from "@/lib/schedule/schedule";
+import { addDays, startOfDay, dateOnlyDay } from "@/lib/schedule/schedule";
 import { dayAnchor } from "@/lib/tz-day";
 
 export interface CompletionProtocolInput {
@@ -16,13 +16,13 @@ export function protocolShouldAutoComplete(protocol: CompletionProtocolInput, to
   if (!protocol.endDate) return false;
 
   const todayDay = startOfDay(today);
-  const endDay = startOfDay(protocol.endDate);
+  const endDay = dateOnlyDay(protocol.endDate);
   if (todayDay > endDay) return true;
   if (!protocol.scheduleRule) return todayDay >= endDay;
 
   const slots = slotsInRange(
     parseSchedule(protocol.scheduleRule),
-    protocol.startDate ?? endDay,
+    protocol.startDate ? dateOnlyDay(protocol.startDate) : endDay,
     endDay,
     protocol.startDate,
     protocol.endDate,

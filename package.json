@@ -1,6 +1,6 @@
 {
   "name": "peptide-tracker",
-  "version": "1.25.3",
+  "version": "1.25.9",
   "private": true,
   "license": "AGPL-3.0-only",
   "description": "Self-hosted peptide tracker — dose logging, reconstitution math, prescriptions, Home Assistant integration.",
@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:tz": "TZ=America/New_York vitest run -c vitest.tz.config.ts && TZ=America/Santiago vitest run -c vitest.tz.config.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed"

@@ -19,7 +19,7 @@
  * `transitionPreview` below are the one place that answers "when does the
  * pattern actually start", and every caller re-derives from it.
  */
-import { type WeekdayCode, startOfDay, addDays, daysBetween, weekdayCode } from "./schedule";
+import { type WeekdayCode, startOfDay, dateOnlyDay, addDays, daysBetween, weekdayCode } from "./schedule";
 
 /** Local "YYYY-MM-DD" → local midnight. Never `new Date(key)` (UTC parsing). */
 export function parseDayKey(key: string): Date {
@@ -64,7 +64,7 @@ export function snapStartToPattern(args: {
   const earliest = startOfDay(args.earliest);
   const notBeforeToday = startOfDay(args.todayLogged ? addDays(today, 1) : today);
   const notOnOrBeforeStart = args.protocolStartDate
-    ? addDays(startOfDay(args.protocolStartDate), 1)
+    ? addDays(dateOnlyDay(args.protocolStartDate), 1)
     : null;
 
   let day = earliest > notBeforeToday ? earliest : notBeforeToday;

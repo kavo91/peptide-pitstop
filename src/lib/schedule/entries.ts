@@ -3,7 +3,7 @@
  * entries; each entry pairs a day-pattern with optional clock times. The
  * schedule is the union of its entries.
  */
-import { type WeekdayCode, weekdayCode, startOfDay, daysBetween, addDays, parseRule, DAY_LABELS } from "./schedule";
+import { type WeekdayCode, weekdayCode, startOfDay, dateOnlyDay, daysBetween, addDays, parseRule, DAY_LABELS } from "./schedule";
 
 export type DayPattern =
   | { kind: "daily" }
@@ -36,7 +36,7 @@ export function entryDueOn(entry: ScheduleEntry, date: Date, startDate?: Date | 
       return p.byDays.length > 0 && p.byDays.includes(weekdayCode(day));
     case "interval": {
       if (!startDate || p.everyDays <= 0) return false;
-      const start = startOfDay(startDate);
+      const start = dateOnlyDay(startDate);
       if (day < start) return false;
       // Piecewise roll anchors: grid from the latest anchor on/before `day`
       // (anchors before startDate are ignored — they can't produce due days).
@@ -51,7 +51,7 @@ export function entryDueOn(entry: ScheduleEntry, date: Date, startDate?: Date | 
       if (!startDate) return false;
       const period = p.onDays + p.offDays;
       if (period <= 0) return false;
-      const elapsed = daysBetween(startOfDay(startDate), day);
+      const elapsed = daysBetween(dateOnlyDay(startDate), day);
       if (elapsed < 0) return false;
       return elapsed % period < p.onDays;
     }
@@ -77,8 +77,8 @@ const cmpTime = (a: string, b: string) => {
  */
 export function slotsOn(schedule: Schedule, date: Date, startDate?: Date | null, endDate?: Date | null): Slot[] {
   const day = startOfDay(date);
-  if (startDate && day < startOfDay(startDate)) return [];
-  if (endDate && day > startOfDay(endDate)) return [];
+  if (startDate && day < dateOnlyDay(startDate)) return [];
+  if (endDate && day > dateOnlyDay(endDate)) return [];
 
   let hasUntimed = false;
   const seen = new Set<string>();
@@ -131,7 +131,10 @@ export function slotsInRange(
     for (const slot of slotsOn(schedule, day, startDate, endDate)) {
       out.push({ date: day, time: slot.time });
     }
-    day = addDays(day, 1);
+    // Re-snap to midnight: where DST starts AT midnight (America/Santiago) that
+    // day's "midnight" is 01:00, and carrying 01:00 forward would make the last
+    // day fail `<= end`.
+    day = startOfDay(addDays(day, 1));
   }
   return out;
 }
@@ -291,7 +294,7 @@ export function cyclePosition(
   today: Date,
 ): CyclePosition | null {
   if (onDays <= 0 || offDays <= 0) return null;
-  const elapsed = daysBetween(startOfDay(startDate), startOfDay(today));
+  const elapsed = daysBetween(dateOnlyDay(startDate), startOfDay(today));
   if (elapsed < 0) return null;
   const period = onDays + offDays;
   const posInPeriod = elapsed % period;

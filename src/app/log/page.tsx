@@ -4,6 +4,7 @@ import { suggestNextSite } from "@/lib/sites";
 import { AdHocLogForm } from "@/components/AdHocLogForm";
 import { OralLogForm } from "@/components/OralLogForm";
 import { BackButton } from "@/components/BackButton";
+import { buildOralLogOptions } from "@/lib/log/oral-options";
 import { buildProtocolDoseOptions, type ProtocolForOptions } from "@/lib/log/protocol-options";
 import { activeDesign } from "@/lib/design";
 import { coerceDeviceType } from "@/lib/device-type";
@@ -174,21 +175,12 @@ export default async function LogPage() {
     include: {
       protocols: {
         where: { userId: user.id, status: "active" },
-        select: { id: true, doseInputUnit: true, targetDose: true },
+        // The dose itself is resolved from the fully loaded protocol below.
+        select: { id: true, doseInputUnit: true },
       },
     },
   });
-  const oralOptions = oralPeptides.map((p) => {
-    const proto = p.protocols.length === 1 ? p.protocols[0] : null;
-    const unit = (proto?.doseInputUnit === "mg" ? "mg" : "mcg") as "mcg" | "mg";
-    return {
-      peptideId: p.id,
-      peptideName: p.name,
-      protocolId: proto?.id,
-      initialDoseValue: proto?.targetDose != null ? proto.targetDose.toString() : "",
-      initialDoseUnit: unit,
-    };
-  });
+  const oralOptions = buildOralLogOptions(oralPeptides, protocolForOptions, now);
 
   // Read-only: which oral peptides already have a dose logged TODAY (pitstop
   // "Taken" chip). An oral DoseLog has no preparation and no direct peptideId —

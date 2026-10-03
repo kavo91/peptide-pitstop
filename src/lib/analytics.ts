@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { startOfDay, addDays } from "@/lib/schedule/schedule";
+import { startOfDay, dateOnlyFloor, addDays } from "@/lib/schedule/schedule";
+import { startsOnOrBefore, hasStartedBy } from "@/lib/protocol-day-bounds";
 import { adherenceOverWindow, heatmapBuckets, buildExposureRollup } from "@/lib/analytics-core";
 import { supersededFrom } from "@/lib/doses-timeline-core";
 import type { AdherenceResult, HeatmapBucket } from "@/lib/analytics-core";
@@ -159,8 +160,8 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
           { status: "active" },
           {
             status: "completed",
-            OR: [{ endDate: null }, { endDate: { gte: adherenceWindow.from } }],
-            AND: [{ OR: [{ startDate: null }, { startDate: { lte: plasmaTo } }] }],
+            OR: [{ endDate: null }, { endDate: { gte: dateOnlyFloor(adherenceWindow.from) } }],
+            AND: [{ OR: [{ startDate: null }, { startDate: startsOnOrBefore(plasmaTo) }] }],
           },
         ],
       },
@@ -195,11 +196,11 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
   // - Plasma FORECASTS should still include active future-start protocols so the
   //   legend and dashed curve show what is scheduled to begin inside the chart
   //   window. A null start date has no future anchor and is treated as current.
-  const adherenceProtocols = protocolRows.filter((p) => p.startDate == null || p.startDate <= now);
+  const adherenceProtocols = protocolRows.filter((p) => hasStartedBy(p.startDate, now));
   // Where each retired course hands over to its replacement (see supersededFrom).
   const supersededAt = supersededFrom(protocolRows);
   const plasmaProtocols = protocolRows.filter(
-    (p) => p.status === "active" || p.startDate == null || p.startDate <= now,
+    (p) => p.status === "active" || hasStartedBy(p.startDate, now),
   );
 
   // Active prep concentration (mcg/mL) per peptide. Multiple vials per peptide →

@@ -5,6 +5,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { addDays } from "@/lib/schedule/schedule";
+import { doseDayKey } from "@/lib/local-day";
 import {
   computeShiftPlan,
   dayKey,
@@ -84,10 +85,10 @@ export async function getShiftPanelData(userId: string, today: Date): Promise<Sh
       orderBy: { id: "asc" },
     }),
     // ONE query for every candidate's logged days — never one query per
-    // protocol. A null localDay (legacy row/client) falls back to the UTC date
-    // of takenAt, exactly as the protocol edit page does (HAZARD comment
-    // there: this must match, or a stale/legacy dose silently drops out of the
-    // titration-phase carry-forward math the two share).
+    // protocol. A null localDay (legacy row/client) falls back to the
+    // runtime-local day of takenAt via `doseDayKey`, the SAME helper the
+    // protocol edit page uses (they must match, or a legacy dose silently
+    // drops out of the titration-phase carry-forward math the two share).
     prisma.doseLog.findMany({
       where: { userId, protocolId: { not: null }, takenAt: { gte: addDays(today, -LOOKBACK_DAYS) } },
       select: { protocolId: true, localDay: true, takenAt: true },
@@ -102,7 +103,7 @@ export async function getShiftPanelData(userId: string, today: Date): Promise<Sh
   const loggedByProtocol = new Map<string, Set<string>>();
   for (const row of doseLogs) {
     if (!row.protocolId) continue;
-    const key = row.localDay ?? row.takenAt.toISOString().slice(0, 10);
+    const key = doseDayKey(row);
     const set = loggedByProtocol.get(row.protocolId) ?? new Set<string>();
     set.add(key);
     loggedByProtocol.set(row.protocolId, set);

@@ -42,3 +42,13 @@ export function deviceTimeZone(): string | null {
 export function toDeviceDatetimeLocal(d: Date): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
+
+/**
+ * The calendar day a logged dose belongs to: its frozen `localDay` when stamped,
+ * else (a legacy row) the RUNTIME-local day of `takenAt` — the same key
+ * today-overrides, doses-timeline and planned/materialize use. The UTC date put
+ * a dose taken 00:00–09:59 Brisbane on the previous day.
+ */
+export function doseDayKey(row: { localDay: string | null; takenAt: Date }): string {
+  return row.localDay ?? localDayOf(new Date(row.takenAt));
+}

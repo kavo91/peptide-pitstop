@@ -12,11 +12,13 @@ import { runPlannedDoseGeneration } from "@/lib/planned/run";
 import { computeAdvance } from "@/lib/titration/advance-suggest";
 import { dosesPerWeek } from "@/lib/schedule/frequency";
 import { dayKey } from "@/lib/today-overrides";
+import { dateOnlyKey } from "@/lib/schedule/schedule";
 import { hasActiveProtocolConflict } from "@/lib/protocol-uniqueness";
 import { assertNoScheduleRewrite, endDateOnClose, type ProtocolSnapshot } from "@/lib/protocol-revision";
 import { courseTips, supersededIds } from "@/lib/stacks/lineage";
 import { validateCyclePlan } from "@/lib/validation/cycle-plan";
 import { ANCHOR_HELD_WARNING, cycleAnchorFollow } from "@/lib/cycle/anchor";
+import { doseDayKey } from "@/lib/local-day";
 
 function optDecimal(v?: string | null): string | null {
   const s = (v ?? "").toString().trim();
@@ -32,9 +34,13 @@ function optInt(v?: string | null): number | null {
 }
 
 
-/** Date-only "YYYY-MM-DD" for snapshot comparison; null stays null. */
+/**
+ * Date-only "YYYY-MM-DD" for snapshot comparison; null stays null. Reads both
+ * stored forms (00:00Z, and the server-local midnight cycle actions wrote before
+ * v1.25.9) as their own day — matches the edit page's savedSnapshot.
+ */
 function dayOf(d: Date | null | undefined): string | null {
-  return d ? new Date(d).toISOString().slice(0, 10) : null;
+  return d ? dateOnlyKey(d) : null;
 }
 
 export interface ProtocolInput {
@@ -280,7 +286,7 @@ export async function saveProtocol(input: ProtocolInput) {
       const closeAt = endDateOnClose({
         wasStatus: before.status,
         nowStatus: data.status,
-        currentEndDate: data.endDate ? dayKey(data.endDate) : null,
+        currentEndDate: data.endDate ? dateOnlyKey(data.endDate) : null,
         todayKey: dayKey(new Date()),
       });
       if (closeAt) data.endDate = new Date(`${closeAt}T00:00:00.000Z`);
@@ -291,7 +297,8 @@ export async function saveProtocol(input: ProtocolInput) {
       // Stack alignment: a changed start/end date or status re-aligns siblings
       // (same contract as updateProtocol and updateStackSchedule).
       if (before.stackId) {
-        const dateEq = (a: Date | null, b: Date | null) => (a?.getTime() ?? null) === (b?.getTime() ?? null);
+        // By DAY: a form echo of a legacy local-midnight date is not a change.
+        const dateEq = (a: Date | null, b: Date | null) => dayOf(a) === dayOf(b);
         const changed: { startDate?: Date | null; endDate?: Date | null; status?: string } = {};
         if (!dateEq(before.startDate, data.startDate)) changed.startDate = data.startDate;
         if (!dateEq(before.endDate, data.endDate)) changed.endDate = data.endDate;
@@ -578,7 +585,7 @@ export async function updateProtocol(input: UpdateProtocolInput) {
   // does not rewrite past phases).
   if (input.startDateISO !== undefined) {
     const guardStart = input.startDateISO ? new Date(input.startDateISO) : null;
-    if ((guardStart?.getTime() ?? null) !== (target.startDate?.getTime() ?? null)) {
+    if (dayOf(guardStart) !== dayOf(target.startDate)) {
       const scope = await prisma.protocol.findMany({
         where: target.stackId ? { stackId: target.stackId, userId: user.id } : { id: input.id, userId: user.id },
         select: { id: true, courseId: true, status: true, startDate: true, _count: { select: { steps: true, doseLogs: true } } },
@@ -601,15 +608,15 @@ export async function updateProtocol(input: UpdateProtocolInput) {
     input.startDateISO === undefined ? target.startDate : input.startDateISO ? new Date(input.startDateISO) : null;
   const effEnd =
     input.endDateISO === undefined ? target.endDate : input.endDateISO ? new Date(input.endDateISO) : null;
-  if (effStart && effEnd && effStart > effEnd) {
+  if (effStart && effEnd && dateOnlyKey(effStart) > dateOnlyKey(effEnd)) {
     return input.startDateISO !== undefined
       ? {
           ok: false as const,
-          error: `Start date is after this protocol's end date (${effEnd.toISOString().slice(0, 10)}) — move or clear the end date first.`,
+          error: `Start date is after this protocol's end date (${dayOf(effEnd)}) — move or clear the end date first.`,
         }
       : {
           ok: false as const,
-          error: `End date is before this protocol's start date (${effStart.toISOString().slice(0, 10)}) — move the start date first.`,
+          error: `End date is before this protocol's start date (${dayOf(effStart)}) — move the start date first.`,
         };
   }
 
@@ -711,7 +718,7 @@ export async function updateProtocol(input: UpdateProtocolInput) {
     // the date must not overwrite siblings with the sender's stale copy.
     if (input.startDateISO !== undefined && target.stackId) {
       const newStart = input.startDateISO ? new Date(input.startDateISO) : null;
-      const changed = (newStart?.getTime() ?? null) !== (target.startDate?.getTime() ?? null);
+      const changed = dayOf(newStart) !== dayOf(target.startDate);
       if (changed) {
         await prisma.protocol.updateMany({
           // Tips only — a revised-out predecessor's frozen window must not move.
@@ -724,7 +731,7 @@ export async function updateProtocol(input: UpdateProtocolInput) {
     // combined protocol, so one course's stop is the stack's stop.
     if (input.endDateISO !== undefined && target.stackId) {
       const newEnd = input.endDateISO ? new Date(input.endDateISO) : null;
-      const changed = (newEnd?.getTime() ?? null) !== (target.endDate?.getTime() ?? null);
+      const changed = dayOf(newEnd) !== dayOf(target.endDate);
       if (changed) {
         await prisma.protocol.updateMany({
           // Tips only — a revised-out predecessor's frozen window must not move.
@@ -1012,7 +1019,8 @@ export async function reviseProtocol(input: ReviseProtocolInput) {
   if (!old) return { ok: false as const, error: "Protocol not found." };
   if (old.status !== "active") return { ok: false as const, error: "Only a live protocol can be revised." };
 
-  const startDate = input.startDate?.slice(0, 10) || new Date().toISOString().slice(0, 10);
+  // Fallback = the server's own day (the UTC slice was yesterday before 10:00 Brisbane).
+  const startDate = input.startDate?.slice(0, 10) || dateOnlyKey(new Date());
   const newStart = new Date(`${startDate}T00:00:00.000Z`);
 
   // A revision must start AFTER the course it replaces. The dialog is a bare date
@@ -1032,10 +1040,10 @@ export async function reviseProtocol(input: ReviseProtocolInput) {
   // same-day dedup that would make an overlap safe is implemented on the stack
   // logging path (logStack), not for a standalone protocol. Revisit only with
   // that dedup proven for both paths.
-  if (old.startDate && newStart.getTime() <= old.startDate.getTime()) {
+  if (old.startDate && dateOnlyKey(newStart) <= dateOnlyKey(old.startDate)) {
     return {
       ok: false as const,
-      error: `A revision must start after the protocol it replaces (${old.startDate.toISOString().slice(0, 10)}). Pick a later date.`,
+      error: `A revision must start after the protocol it replaces (${dayOf(old.startDate)}). Pick a later date.`,
     };
   }
 
@@ -1052,10 +1060,10 @@ export async function reviseProtocol(input: ReviseProtocolInput) {
   // Same house rule as the backdated-start guard above: refuse rather than
   // clamp. An end date on or before the new start can't mean what the caller
   // intended, and clamping it would silently corrupt the plan instead.
-  if (successorEndDate && successorEndDate.getTime() <= newStart.getTime()) {
+  if (successorEndDate && dateOnlyKey(successorEndDate) <= dateOnlyKey(newStart)) {
     return {
       ok: false as const,
-      error: `The course ends on ${successorEndDate.toISOString().slice(0, 10)}, before the revision would start. Pick an earlier start date or clear the end date.`,
+      error: `The course ends on ${dayOf(successorEndDate)}, before the revision would start. Pick an earlier start date or clear the end date.`,
     };
   }
 
@@ -1079,7 +1087,7 @@ export async function reviseProtocol(input: ReviseProtocolInput) {
   });
   const dayBefore = new Date(newStart.getTime() - 86_400_000);
   const lastDoseDay = lastDose
-    ? new Date(`${lastDose.localDay ?? new Date(lastDose.takenAt).toISOString().slice(0, 10)}T00:00:00.000Z`)
+    ? new Date(`${doseDayKey(lastDose)}T00:00:00.000Z`)
     : null;
   const endDate = lastDoseDay && lastDoseDay > dayBefore ? lastDoseDay : dayBefore;
 

@@ -86,6 +86,20 @@ describe("getShiftPanelData", () => {
     expect(new Set(p1.loggedDayKeys)).toEqual(new Set(["2026-08-10", "2026-09-03", "2026-09-01"]));
   });
 
+  // A legacy row (localDay null) buckets by the runtime-local
+  // day like every other surface, not the UTC date. 23:30Z is 09:30 next day in Brisbane.
+  it("a legacy row taken 23:30Z buckets to the next local day", async () => {
+    protocolFindMany.mockResolvedValue([protoRow({ id: "P1" })]);
+    doseLogFindMany.mockResolvedValue([
+      { protocolId: "P1", localDay: null, takenAt: new Date("2026-08-24T23:30:00.000Z") },
+    ]);
+
+    await getShiftPanelData(USER, TODAY);
+
+    const passed = computeShiftPlanMock.mock.calls[0][0].protocols as { id: string; loggedDayKeys: string[] }[];
+    expect(passed.find((p) => p.id === "P1")!.loggedDayKeys).toEqual(["2026-08-25"]);
+  });
+
   // cycleOffWeeks is load-bearing, not decoration: courseEnd() reads it to tell
   // a terminal cycle plan from a repeating one. Dropping it here would
   // silently reinstate the "repeating course ends within a week for ever" bug.

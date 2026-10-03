@@ -118,6 +118,15 @@ export function fmtActivityDuration(seconds: number): string {
   return `${s}s`;
 }
 
+/**
+ * Sleep seconds → "7h 12m". Always shows the hours part. Floors minutes like
+ * `fmtActivityDuration` — rounding printed "7h 60m" for 28771 s.
+ */
+export function fmtSleepDuration(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+}
+
 /** Distance metres → "5.0 km" (≥1 km) or "850 m" (<1 km). */
 export function fmtActivityDistance(metres: number): string {
   if (metres >= 1000) return `${(metres / 1000).toFixed(1)} km`;

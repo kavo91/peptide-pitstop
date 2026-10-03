@@ -9,7 +9,7 @@ import { PitstopHeading } from "@/components/PitstopHeading";
 import { PAGE_MAIN } from "@/lib/layout";
 import { deleteProtocol } from "@/app/actions/protocols";
 import { compareStackGrouped } from "@/lib/stack-sort";
-import { startOfDay } from "@/lib/schedule/schedule";
+import { startOfDay, dateOnlyKey } from "@/lib/schedule/schedule";
 import { bucketOf, PROTOCOL_SECTIONS as SECTIONS, PROTOCOL_SECTION_ACCENT as SECTION_ACCENT } from "@/lib/protocol-bucket";
 import { SignedOutNotice } from "@/components/SignedOutNotice";
 import { cycleChip } from "@/lib/cycle/label";
@@ -19,9 +19,9 @@ import { viewerToday } from "@/lib/viewer-tz";
 
 export const dynamic = "force-dynamic";
 
+/** Date-only protocol field → "YYYY-MM-DD" for a date input (either stored form). */
 function toDateInput(d: Date | null): string | null {
-  if (!d) return null;
-  return new Date(d).toISOString().slice(0, 10);
+  return d ? dateOnlyKey(d) : null;
 }
 
 export default async function ProtocolsPage() {

@@ -3,6 +3,7 @@
 import { Save } from "lucide-react";
 import { useState } from "react";
 import { updateReminderSettings } from "@/app/actions/settings";
+import { SAVE_FAILED_MESSAGE } from "@/lib/save-failure";
 
 /**
  * Reminder anchor settings — applies to BOTH channels (Web Push and the HA
@@ -29,7 +30,7 @@ export function ReminderTimesForm(p: { untimedTime: string; nagTime: string; nag
       if (res.ok) setSaved(true);
       else setError(res.error ?? "Could not save.");
     } catch {
-      setError("Could not save.");
+      setError(SAVE_FAILED_MESSAGE);
     } finally {
       setBusy(false);
     }

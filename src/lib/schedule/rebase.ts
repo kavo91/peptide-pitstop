@@ -7,7 +7,7 @@
  * in [today, end-of-week]. Next week reverts to the grid (caller writes only
  * this week's overrides). daily / rolling / delta 0 → no occurrences.
  */
-import { startOfDay, addDays, WEEKDAYS, type WeekdayCode } from "./schedule";
+import { startOfDay, dateOnlyDay, addDays, WEEKDAYS, type WeekdayCode } from "./schedule";
 
 function dayIndexInWeek(weekStart: Date, date: Date): number {
   return Math.round((startOfDay(date).getTime() - startOfDay(weekStart).getTime()) / 86_400_000);
@@ -32,7 +32,7 @@ export function rebaseWeek(args: {
   const actual = startOfDay(args.actual.actualDate);
   const delta = Math.round((actual.getTime() - planned.getTime()) / 86_400_000);
   if (delta === 0) return [];
-  const endDate = args.endDate ? startOfDay(args.endDate) : null;
+  const endDate = args.endDate ? dateOnlyDay(args.endDate) : null;
 
   const gridDates = args.plannedDays
     .map((code) => addDays(start, WEEKDAYS.indexOf(code)))

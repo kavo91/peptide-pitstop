@@ -7,7 +7,7 @@ import { SignedOutNotice } from "@/components/SignedOutNotice";
 import { GanttRowEditor } from "@/components/GanttRowEditor";
 import { GanttScanMarkers, SCAN_MARKER_COPY, type GanttScanMarker } from "@/components/GanttScanMarkers";
 import { PAGE_MAIN } from "@/lib/layout";
-import { startOfDay } from "@/lib/schedule/schedule";
+import { startOfDay, dateOnlyKey } from "@/lib/schedule/schedule";
 import { fmtCycleDay } from "@/lib/cycle/format";
 import { cycleChip } from "@/lib/cycle/label";
 import { bucketOf, PROTOCOL_SECTIONS } from "@/lib/protocol-bucket";
@@ -48,16 +48,16 @@ const ROW_TONE: Record<GanttRow["status"], string> = {
   completed: "opacity-40 grayscale",
 };
 
+/** Date-only protocol field → "YYYY-MM-DD" for a date input (either stored form). */
 function toDateInput(d: Date | null): string | null {
-  if (!d) return null;
-  return new Date(d).toISOString().slice(0, 10);
+  return d ? dateOnlyKey(d) : null;
 }
 
 /**
  * Local-calendar yyyy-mm-dd for LIB-COMPUTED dates (segments, ticks). These
  * are local Dates from startOfDay/addDays — toISOString() would shift them a
- * day back for any TZ ahead of UTC. Stored Convention-1 columns (the editor
- * props above) keep the UTC slice, matching /protocols.
+ * day back for any TZ ahead of UTC. Stored protocol dates (the editor props
+ * above) go through `dateOnlyKey`, matching /protocols.
  */
 function localDay(d: Date): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");

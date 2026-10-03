@@ -4,20 +4,13 @@ import { X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { activityDisplay, fmtActivityDistance, fmtActivityDuration, type GarminActivity } from "@/lib/garmin-activity";
+import { activityDisplay, fmtActivityDistance, fmtActivityDuration, fmtSleepDuration, type GarminActivity } from "@/lib/garmin-activity";
 import type { TimelineEntry } from "@/lib/doses-timeline-core";
 import type { DayMetric } from "@/lib/month-metrics";
 import { STATUS_CHIP_CLASS, STATUS_DESCRIPTION, STATUS_LABEL } from "@/lib/timeline-status";
 import type { ManualDay } from "@/lib/wellness-log";
 import { WellnessDayPanel } from "@/components/wellness/WellnessDayPanel";
 import { DeleteLogButton } from "@/components/DeleteLogButton";
-
-/** Seconds → "7h 12m" (rounded to the nearest minute). */
-function fmtDuration(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.round((seconds % 3600) / 60);
-  return `${h}h ${m}m`;
-}
 
 function WellnessStat({ label, value }: { label: string; value: string }) {
   return (
@@ -54,7 +47,7 @@ function ActivitiesList({ activities }: { activities: GarminActivity[] }) {
 function WellnessSection({ metric }: { metric: DayMetric }) {
   const sleep =
     metric.sleepSeconds != null || metric.sleepScore != null
-      ? [metric.sleepSeconds != null ? fmtDuration(metric.sleepSeconds) : null, metric.sleepScore != null ? `score ${metric.sleepScore}` : null].filter(Boolean).join(" · ")
+      ? [metric.sleepSeconds != null ? fmtSleepDuration(metric.sleepSeconds) : null, metric.sleepScore != null ? `score ${metric.sleepScore}` : null].filter(Boolean).join(" · ")
       : null;
   const hasActivities = metric.activities.length > 0;
   const hasAny =

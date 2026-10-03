@@ -12,6 +12,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save } from "lucide-react";
 import { createBodyCompScan, type CreateScanInput, type RegionInput } from "@/app/actions/bodycomp";
+import { SAVE_FAILED_MESSAGE } from "@/lib/save-failure";
 import { LIMB_REGIONS, type ChecksumResult, type Region } from "@/lib/body-comp-core";
 import { PrepChecklist, SCAN_PREP_ITEMS, type PrepValue } from "@/components/PrepChecklist";
 import { BODY_COPY } from "@/lib/bodycomp-copy";
@@ -197,21 +198,26 @@ export function BodyCompScanForm({ prefill, initial, documentId }: BodyCompScanF
       documentId: documentId || undefined,
     };
 
-    const res = await createBodyCompScan(input);
-    setBusy(false);
-    if (!res.ok) {
-      setError(res.error ?? "Could not save the scan.");
-      return;
-    }
-    const failing = (res.checks ?? []).filter((c) => !c.pass);
-    if (failing.length > 0) {
-      // Show the pass/fail list; the user continues to /body when ready.
-      setChecks(res.checks ?? []);
+    try {
+      const res = await createBodyCompScan(input);
+      if (!res.ok) {
+        setError(res.error ?? "Could not save the scan.");
+        return;
+      }
+      const failing = (res.checks ?? []).filter((c) => !c.pass);
+      if (failing.length > 0) {
+        // Show the pass/fail list; the user continues to /body when ready.
+        setChecks(res.checks ?? []);
+        router.refresh();
+        return;
+      }
+      router.push("/body");
       router.refresh();
-      return;
+    } catch {
+      setError(SAVE_FAILED_MESSAGE);
+    } finally {
+      setBusy(false);
     }
-    router.push("/body");
-    router.refresh();
   }
 
   const field = (k: string, label: string, opts: { required?: boolean; placeholder?: string; text?: boolean } = {}) => (

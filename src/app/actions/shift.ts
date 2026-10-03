@@ -44,6 +44,7 @@ import {
 } from "@/lib/schedule/shift-suggest";
 import { snapStartToPattern, parseDayKey } from "@/lib/schedule/shift-transition";
 import { reviseProtocol, type ProtocolInput } from "@/app/actions/protocols";
+import { doseDayKey } from "@/lib/local-day";
 
 export type ApplyShiftResult =
   | { ok: true; newProtocolId: string; startDate: string }
@@ -247,9 +248,9 @@ async function applyOne(
       orderBy: { takenAt: "asc" },
       select: { takenAt: true, localDay: true },
     });
-    const deliveredDayKeys = deliveredRows.map(
-      (d) => d.localDay ?? new Date(d.takenAt).toISOString().slice(0, 10),
-    );
+    // Same day basis as the protocol edit page and the shift loader (`doseDayKey`):
+    // a legacy row buckets by its runtime-local day, not the UTC date.
+    const deliveredDayKeys = deliveredRows.map(doseDayKey);
 
     // The RAW startDate is only the earliest day the user will accept — it is
     // not necessarily a day the rotated pattern actually runs on. Snap it
