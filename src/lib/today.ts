@@ -3,7 +3,7 @@
  * peptides, with the data the log form needs. Server-side (reads DB).
  */
 import { prisma } from "@/lib/db";
-import { startOfDay, addDays } from "@/lib/schedule/schedule";
+import { startOfDay, addDays, rebaseWeekStart } from "@/lib/schedule/schedule";
 import { classifyOverrideDays, dueSlotsForDay, dayKey } from "@/lib/today-overrides";
 import { localeTimeLabel } from "@/lib/tz-day";
 import { resolveTitration } from "@/lib/titration/resolve";
@@ -19,7 +19,9 @@ import { mlToPumps } from "@/lib/dosing/nasal";
 import type { Prisma } from "@prisma/client";
 
 /** Monday (local) of the week containing `date` — matches the calendar's Monday-first weeks. */
-const weekStart = (d: Date) => addDays(startOfDay(d), -((startOfDay(d).getDay() + 6) % 7));
+// Rebase overrides live in confirmRebase's SUNDAY-start week — read the same
+// week, or next Sunday's routine row makes a real shift look stale.
+export const todayOverrideWeekStart = (d: Date) => rebaseWeekStart(d);
 
 export function buildTodayProtocolWhere(userId: string, day: Date, nextDay: Date): Prisma.ProtocolWhereInput {
   return {
@@ -251,7 +253,7 @@ export async function getTodayDoses(
   // count as an override — routine rows materialised by the rolling-dose cron
   // sit ON the live grid and must NOT hijack Today, or the live schedule
   // (including custom multi-time slots) would be ignored.
-  const ws = weekStart(day);
+  const ws = todayOverrideWeekStart(day);
   const overrides = await prisma.plannedDose.findMany({
     where: { userId, status: "planned", scheduledAt: { gte: ws, lt: addDays(ws, 7) } },
   });

@@ -987,3 +987,68 @@ describe("reviseProtocol close is compare-and-swap", () => {
     expect(protocolCreate).toHaveBeenCalledTimes(1);
   });
 });
+
+// Regression: courses closed from the protocol card / Gantt editor came out
+// `completed` with NO end date. With no end date the week view treats the course
+// as still running and marks every later day "missed". saveProtocol already
+// stamps the end date on close; updateProtocol must do the same (a closed
+// protocol has no open doses, and closing sets the end date).
+describe("updateProtocol — closing a course stamps its end date", () => {
+  const base = {
+    startDate: new Date("2026-09-14T00:00:00.000Z"),
+    endDate: null as Date | null,
+    stackId: null as string | null,
+    courseId: null,
+    cycleOnWeeks: null,
+    cycleOffWeeks: null,
+    cycleAnchor: null,
+    status: "active",
+  };
+  const todayUtc = () => {
+    const n = new Date();
+    const k = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+    return new Date(`${k}T00:00:00.000Z`);
+  };
+
+  it("an open-ended course gets today as its end date", async () => {
+    protocolFindFirst.mockResolvedValue({ ...base });
+    const res = await updateProtocol({ id: "p1", status: "completed" });
+    expect(res.ok).toBe(true);
+    const data = protocolUpdateMany.mock.calls[0][0].data;
+    expect(data.status).toBe("completed");
+    expect(data.endDate).toEqual(todayUtc());
+  });
+
+  it("a planned end date in the future is pulled back to today", async () => {
+    protocolFindFirst.mockResolvedValue({ ...base, endDate: new Date("2099-12-31T00:00:00.000Z") });
+    await updateProtocol({ id: "p1", status: "completed" });
+    expect(protocolUpdateMany.mock.calls[0][0].data.endDate).toEqual(todayUtc());
+  });
+
+  it("an end date already in the past is kept", async () => {
+    protocolFindFirst.mockResolvedValue({ ...base, endDate: new Date("2026-09-20T00:00:00.000Z") });
+    await updateProtocol({ id: "p1", status: "completed" });
+    expect(protocolUpdateMany.mock.calls[0][0].data.endDate).toBeUndefined();
+  });
+
+  it("an end date sent on the same save is kept", async () => {
+    protocolFindFirst.mockResolvedValue({ ...base });
+    await updateProtocol({ id: "p1", status: "completed", endDateISO: "2026-10-01T00:00:00.000Z" });
+    expect(protocolUpdateMany.mock.calls[0][0].data.endDate).toEqual(new Date("2026-10-01T00:00:00.000Z"));
+  });
+
+  it("pausing does not touch the end date", async () => {
+    protocolFindFirst.mockResolvedValue({ ...base });
+    await updateProtocol({ id: "p1", status: "paused" });
+    expect(protocolUpdateMany.mock.calls[0][0].data.endDate).toBeUndefined();
+  });
+
+  it("closing a stack course also ends its open-ended siblings", async () => {
+    protocolFindFirst.mockResolvedValue({ ...base, stackId: "s1" });
+    await updateProtocol({ id: "p1", status: "completed" });
+    const calls = protocolUpdateMany.mock.calls.map((c) => c[0]);
+    const siblingEnd = calls.find((c) => c.data.endDate !== undefined && c.where.stackId === "s1");
+    expect(siblingEnd?.data.endDate).toEqual(todayUtc());
+    expect(siblingEnd?.where.OR).toEqual([{ endDate: null }, { endDate: { gt: todayUtc() } }]);
+  });
+});

@@ -1,5 +1,5 @@
 import { parseSchedule, slotsInRange, weeklyDays, type DatedSlot } from "../schedule/entries";
-import { startOfDay, addDays } from "../schedule/schedule";
+import { startOfDay, addDays, rebaseWeekStart } from "../schedule/schedule";
 import { dayAnchor } from "../tz-day";
 import { perInjectionDose } from "./dose-basis";
 import { phaseTargets, activePhaseAt } from "./phase";
@@ -13,10 +13,7 @@ function slotStart(s: DatedSlot): Date {
   return new Date(startOfDay(s.date).getTime() + h * 3_600_000 + m * 60_000);
 }
 
-const weekKey = (dte: Date) => {
-  const ws = addDays(startOfDay(dte), -startOfDay(dte).getDay());
-  return ws.getTime();
-};
+const weekKey = (dte: Date) => rebaseWeekStart(dte).getTime();
 
 export function resolveTitration(inp: ResolveInput): ResolveResult {
   const schedule = parseSchedule(inp.scheduleRule);

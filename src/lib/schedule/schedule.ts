@@ -139,6 +139,21 @@ export function addDays(date: Date, n: number): Date {
   return result;
 }
 
+/**
+ * Sunday (local midnight) of the week containing `date` — THE week a
+ * fixed_anchor rebase works in. confirmRebase writes shifted rows for this
+ * week, rebaseWeek indexes WEEKDAYS from Sunday, and the resolver rebuilds this
+ * week. Every reader that asks "is this week rebased?" (materializer
+ * suppression, Today's override window) must bucket by this same week: a
+ * Monday-start week puts next Sunday's routine on-grid row beside this week's
+ * shifted rows, which reads as stale and silently undoes the shift. Display
+ * grids (doses-timeline, week-nav) may still start on Monday.
+ */
+export function rebaseWeekStart(date: Date): Date {
+  const s = startOfDay(date);
+  return addDays(s, -s.getDay());
+}
+
 /** Grid occurrence dates (local midnight) for a rule within [rangeStart, rangeEnd]. */
 export function occurrencesInRange(args: {
   rule: string;

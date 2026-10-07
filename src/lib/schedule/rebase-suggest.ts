@@ -10,7 +10,7 @@
  * same boundary concern the audit raised for getStacks).
  */
 import { prisma } from "@/lib/db";
-import { startOfDay, dateOnlyDay, addDays, WEEKDAYS } from "./schedule";
+import { startOfDay, dateOnlyDay, addDays, WEEKDAYS, rebaseWeekStart } from "./schedule";
 import { parseSchedule, weeklyDays, entryDueOn } from "./entries";
 import { rebaseWeek } from "./rebase";
 
@@ -90,7 +90,7 @@ export async function computeRebaseSuggestion(args: {
   if (wdays.length === 0 || mode !== "fixed_anchor") return undefined;
 
   const actual = startOfDay(takenAt);
-  const ws = startOfDay(addDays(actual, -actual.getDay()));
+  const ws = rebaseWeekStart(actual);
   const gridDates = wdays.map((c) => addDays(ws, WEEKDAYS.indexOf(c)));
   const nearest = gridDates.reduce(
     (best, dte) => (Math.abs(dte.getTime() - actual.getTime()) < Math.abs(best.getTime() - actual.getTime()) ? dte : best),
