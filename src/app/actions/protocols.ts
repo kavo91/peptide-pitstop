@@ -543,7 +543,7 @@ export async function updateProtocol(input: UpdateProtocolInput) {
   // the date alignment below.
   const target = await prisma.protocol.findFirst({
     where: { id: input.id, userId: user.id },
-    select: { startDate: true, endDate: true, stackId: true, courseId: true, cycleOnWeeks: true, cycleOffWeeks: true, cycleAnchor: true },
+    select: { startDate: true, endDate: true, stackId: true, courseId: true, cycleOnWeeks: true, cycleOffWeeks: true, cycleAnchor: true, status: true },
   });
   if (!target) return { ok: false as const, error: "Protocol not found." };
 
@@ -691,6 +691,25 @@ export async function updateProtocol(input: UpdateProtocolInput) {
           ? anchorFollow.anchor
           : undefined,
   };
+  // Closing a course must stamp an honest end date, exactly as saveProtocol
+  // does. Without it the course is "completed" yet open-ended, and the week
+  // view marks every later day "missed". A date sent on this save, or one
+  // already in the past, is kept.
+  let closedOn: Date | null = null;
+  if (input.status !== undefined) {
+    const nextEnd = data.endDate === undefined ? target.endDate : data.endDate;
+    const closeAt = endDateOnClose({
+      wasStatus: target.status,
+      nowStatus: input.status,
+      currentEndDate: nextEnd ? dateOnlyKey(nextEnd) : null,
+      todayKey: dayKey(new Date()),
+    });
+    if (closeAt) {
+      closedOn = new Date(`${closeAt}T00:00:00.000Z`);
+      data.endDate = closedOn;
+    }
+  }
+
   // The Gantt quick edit sends ONLY the fields the user actually changed, so a
   // Save with nothing dirty arrives as `{ id }` alone and every value here is
   // undefined. Prisma then issues no UPDATE and reports `count: 0` — the very
@@ -746,6 +765,18 @@ export async function updateProtocol(input: UpdateProtocolInput) {
         where: { stackId: target.stackId, userId: user.id, id: { notIn: [input.id, ...(await stackSupersededIds(user.id, target.stackId))] } },
         data: { status: input.status },
       });
+      // The siblings close too — give the open-ended ones the same end date.
+      if (closedOn) {
+        await prisma.protocol.updateMany({
+          where: {
+            stackId: target.stackId,
+            userId: user.id,
+            id: { notIn: [input.id, ...(await stackSupersededIds(user.id, target.stackId))] },
+            OR: [{ endDate: null }, { endDate: { gt: closedOn } }],
+          },
+          data: { endDate: closedOn },
+        });
+      }
     }
   } catch (e) {
     console.error("updateProtocol failed", e);

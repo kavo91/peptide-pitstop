@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/owner";
-import { startOfDay, addDays } from "@/lib/schedule/schedule";
+import { startOfDay, addDays, rebaseWeekStart } from "@/lib/schedule/schedule";
 import { parseSchedule, weeklyDays } from "@/lib/schedule/entries";
 import { rebaseWeek } from "@/lib/schedule/rebase";
 import { appendIntervalAnchor } from "@/lib/schedule/interval-anchor";
@@ -33,7 +33,7 @@ export async function confirmRebase(input: { protocolId: string; plannedDateISO:
   if (wdays.length === 0) return { ok: false as const, error: "Not a weekly schedule." };
 
   const actual = startOfDay(new Date(input.actualDateISO));
-  const ws = addDays(actual, -actual.getDay());
+  const ws = rebaseWeekStart(actual);
   const shifted = rebaseWeek({
     rebaseMode: "fixed_anchor", freq: "WEEKLY", weekStart: ws, plannedDays: wdays,
     actual: { plannedDate: startOfDay(new Date(input.plannedDateISO)), actualDate: actual }, today: actual,

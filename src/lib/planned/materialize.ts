@@ -9,7 +9,7 @@
  *   falling back to DAILY.
  */
 
-import { startOfDay, dateOnlyDay, addDays } from "../schedule/schedule";
+import { startOfDay, dateOnlyDay, addDays, rebaseWeekStart } from "../schedule/schedule";
 import { parseSchedule, slotsOn, slotsInRange } from "../schedule/entries";
 import { resolveTitration } from "../titration/resolve";
 import { buildResolveInput, type DeliveredLogInput } from "../titration/from-protocol";
@@ -87,11 +87,13 @@ export interface MaterializeResult {
 const KEY = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-/** Monday (local) of the week containing `date` — mirrors weekStartOf in doses-timeline.ts */
-function weekStartOf(date: Date): Date {
-  const s = startOfDay(date);
-  return addDays(s, -((s.getDay() + 6) % 7));
-}
+/**
+ * Week bucket for override suppression — the SUNDAY-start week confirmRebase
+ * writes in (rebaseWeekStart). NOT the Monday display week of doses-timeline:
+ * that put next Sunday's routine row beside this week's shifted rows, so the
+ * cron re-created the days a shift had removed.
+ */
+const weekStartOf = (date: Date): Date => rebaseWeekStart(date);
 
 // ─── main export ──────────────────────────────────────────────────────────
 
