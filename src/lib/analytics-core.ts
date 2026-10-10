@@ -192,3 +192,15 @@ export function buildExposureRollup(args: {
     derived,
   });
 }
+
+/**
+ * Order protocols so ACTIVE ones come first (stable otherwise). The plasma loop
+ * keeps the first protocol it meets per peptide, and only an active protocol
+ * carries a forward projection — so a finished older course listed before the
+ * current one would hide the forecast for that peptide.
+ */
+export function activeProtocolsFirst<T extends { status: string }>(protocols: T[]): T[] {
+  return [...protocols].sort(
+    (a, b) => Number(b.status === "active") - Number(a.status === "active"),
+  );
+}

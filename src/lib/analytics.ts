@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { startOfDay, dateOnlyFloor, addDays } from "@/lib/schedule/schedule";
 import { startsOnOrBefore, hasStartedBy } from "@/lib/protocol-day-bounds";
-import { adherenceOverWindow, heatmapBuckets, buildExposureRollup } from "@/lib/analytics-core";
+import { activeProtocolsFirst, adherenceOverWindow, heatmapBuckets, buildExposureRollup } from "@/lib/analytics-core";
 import { supersededFrom } from "@/lib/doses-timeline-core";
 import type { AdherenceResult, HeatmapBucket } from "@/lib/analytics-core";
 import type { PlasmaPoint, DosePoint } from "@/lib/plasma";
@@ -199,8 +199,10 @@ export async function getAnalyticsData(userId: string): Promise<AnalyticsData> {
   const adherenceProtocols = protocolRows.filter((p) => hasStartedBy(p.startDate, now));
   // Where each retired course hands over to its replacement (see supersededFrom).
   const supersededAt = supersededFrom(protocolRows);
-  const plasmaProtocols = protocolRows.filter(
-    (p) => p.status === "active" || hasStartedBy(p.startDate, now),
+  // Active first: the plasma loop keeps one protocol per peptide, and only an
+  // active one has a forward projection (see activeProtocolsFirst).
+  const plasmaProtocols = activeProtocolsFirst(
+    protocolRows.filter((p) => p.status === "active" || hasStartedBy(p.startDate, now)),
   );
 
   // Active prep concentration (mcg/mL) per peptide. Multiple vials per peptide →
