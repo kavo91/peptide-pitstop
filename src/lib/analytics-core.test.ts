@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { adherenceOverWindow, heatmapBuckets, buildExposureRollup } from "./analytics-core";
+import { activeProtocolsFirst, adherenceOverWindow, heatmapBuckets, buildExposureRollup } from "./analytics-core";
 
 // ── adherenceOverWindow ────────────────────────────────────────────────────
 
@@ -250,5 +250,21 @@ describe("buildExposureRollup — the 'all time' cumulative exposure table", () 
       ],
     });
     expect(rows.map((r) => r.peptideName)).toEqual(["Beta", "Alpha"]);
+  });
+});
+
+describe("activeProtocolsFirst", () => {
+  it("puts the active course ahead of older completed courses of the same peptide", () => {
+    const rows = [
+      { id: "old", status: "completed" },
+      { id: "new", status: "active" },
+      { id: "older", status: "completed" },
+    ];
+    expect(activeProtocolsFirst(rows).map((r) => r.id)).toEqual(["new", "old", "older"]);
+  });
+  it("does not mutate its input and keeps order among equals", () => {
+    const rows = [{ id: "a", status: "completed" }, { id: "b", status: "completed" }];
+    expect(activeProtocolsFirst(rows).map((r) => r.id)).toEqual(["a", "b"]);
+    expect(rows.map((r) => r.id)).toEqual(["a", "b"]);
   });
 });
