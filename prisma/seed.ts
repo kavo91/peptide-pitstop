@@ -7,7 +7,8 @@
  * fixed ones, two weekly protocols sharing Mon/Thu (so "Smooth your week" has a
  * suggestion), a nasal protocol dosed in pumps, a small illustrative bloodwork panel, two made-up DEXA scans with
  * an RMR test, an illness window, and four weeks of made-up Garmin wellness and
- * training rows (so the body figure, LSC deltas and the Training card render).
+ * training rows and three weeks of made-up Eight Sleep nights (so the body figure,
+ * LSC deltas, the Training card and the two-device sleep view render).
  * All values are made-up examples. The owner is created UNPROVISIONED so first run forces /setup
  * (password + TOTP).
  *
@@ -382,7 +383,35 @@ async function main() {
   }
   await prisma.wearableDaily.createMany({ data: wearRows });
 
-  console.log(`Seed complete: 5 demo peptides, 3 reconstitutions, ${logs.length} dose logs, 5 protocols, ${results.length} sample lab results, 2 demo DEXA scans + 1 RMR test, ${wearRows.length} demo wearable days.`);
+  // ── Demo Eight Sleep rows ──────────────────────────────────────────────────
+  // Three weeks of made-up nights on their own source, so the bed card, the
+  // two-device sleep view and the night temperature chart have something to draw.
+  // One night a week is left out so the two devices' coverage differs.
+  const sleepRows = [];
+  for (let d = 20; d >= 0; d--) {
+    if (d % 7 === 4) continue;
+    const day = new Date(today.getTime() - d * DAY);
+    const wave = Math.sin((27 - d) / 3.1);
+    const bedAvg = 29.4 + 0.7 * Math.sin(d / 2.3);
+    const roomAvg = 20.6 + 0.5 * Math.cos(d / 3.4);
+    const hours = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+    const at = (h: number) => new Date(day.getTime() + (h - 2) * 3600_000).toISOString();
+    const tempBedC = hours.map((h) => [at(h), +(bedAvg + 1.1 * Math.sin(h / 2.4 + d)).toFixed(2)]);
+    const tempRoomC = hours.map((h) => [at(h), +(roomAvg - 0.18 * h + 0.2 * Math.cos(h + d)).toFixed(2)]);
+    sleepRows.push({
+      userId: user.id, date: day, source: "eight_sleep",
+      sleepSeconds: Math.round((6.9 + 0.7 * wave) * 3600), sleepDeepSeconds: Math.round((1.3 + 0.2 * wave) * 3600),
+      sleepLightSeconds: Math.round((3.9 + 0.4 * wave) * 3600), sleepRemSeconds: Math.round((1.7 + 0.1 * wave) * 3600),
+      sleepAwakeSeconds: Math.round(0.4 * 3600), sleepScore: Math.round(78 + 9 * wave),
+      hrvMs: String(Math.round(57 + 8 * wave)), respirationAvg: (14.6 - 0.4 * wave).toFixed(1),
+      sleepHrAvg: Math.round(56 - 2 * wave), tossTurns: 14 + (d % 9),
+      bedTempC: bedAvg.toFixed(1), roomTempC: roomAvg.toFixed(1),
+      raw: enc(JSON.stringify({ sessions: [{ timeseries: { tempBedC, tempRoomC } }] })),
+    });
+  }
+  await prisma.wearableDaily.createMany({ data: sleepRows });
+
+  console.log(`Seed complete: 5 demo peptides, 3 reconstitutions, ${logs.length} dose logs, 5 protocols, ${results.length} sample lab results, 2 demo DEXA scans + 1 RMR test, ${wearRows.length} demo wearable days, ${sleepRows.length} demo Eight Sleep nights.`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

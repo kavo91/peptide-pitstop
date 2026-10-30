@@ -55,7 +55,7 @@ If you stop using Peptide Pitstop tomorrow, you walk away with a complete, reada
 
 ## 📸 Screenshots
 
-> Screenshots use demo seed data only (BPC-157, TB-500, Ipamorelin, Thymosin Alpha-1 and a nasal Oxytocin protocol, plus made-up DEXA, RMR and Garmin training values). The one exception is the ECG: those strips are the maintainer's own recording, imported from the Garmin PDF. The app never reads the printed name or date of birth, so neither appears.
+> Screenshots use demo seed data only (BPC-157, TB-500, Ipamorelin, Thymosin Alpha-1 and a nasal Oxytocin protocol, plus made-up DEXA, RMR, Garmin training and Eight Sleep values). The one exception is the ECG: those strips are the maintainer's own recording, imported from the Garmin PDF. The app never reads the printed name or date of birth, so neither appears.
 
 **Today** — what's due and what's been logged, with one-tap actions
 ![Today](docs/screenshots/today.png)
@@ -80,6 +80,11 @@ If you stop using Peptide Pitstop tomorrow, you walk away with a complete, reada
 
 **Training.** Garmin training readiness, load ratio, endurance and hill scores, fitness age and lactate threshold, charted beside the wellness series
 ![Training card with Garmin training metrics (demo data)](docs/screenshots/training-card.png)
+
+**Sleep.** Garmin and Eight Sleep side by side: two bars per night, a comparison card, and the bed and room temperature across each night
+![Sleep chart with a Garmin bar and an Eight Sleep bar for each night (demo data)](docs/screenshots/eight-sleep-compare-chart.png)
+![Garmin vs Eight Sleep card with averages over the nights both devices recorded (demo data)](docs/screenshots/eight-sleep-compare.png)
+![Eight Sleep night temperature chart with bed and room readings (demo data)](docs/screenshots/eight-sleep-night-temp.png)
 
 **ECG.** Three strips redrawn from the PDF the Garmin ECG app exports, with the classification and average heart rate above them
 ![Three ECG strips imported from a Garmin ECG PDF, the maintainer's own recording](docs/screenshots/ecg-strips.png)
@@ -139,7 +144,7 @@ The motorsport "pit-wall" dark theme ships alongside a clean light theme, and th
 ### Integrations
 - **Push dose reminders.** Native Web Push notifications from the installed PWA — per-slot reminders for multi-time schedules plus a configurable evening catch-up nag; tapping opens the app (iOS 16.4+). Optional Home Assistant webhook fallback for devices without a subscription. Free, no third-party notification service, and no dose amounts in the payload.
 - **Garmin wellness & training.** A bundled sync sidecar pulls daily Garmin wellness data (steps, sleep, resting HR, HRV) and, on watches that report them, the training metrics — readiness, acute:chronic load ratio, endurance and hill scores, fitness age, lactate threshold — into the app using your own credentials, on your own schedule. A Training card charts them beside the wellness series.
-- **Eight Sleep.** An optional bundled sidecar pulls your nights from your own Eight Sleep account and keeps them on their own rows beside Garmin. Sleep, HRV, bed and room temperature get their own cards, with a night temperature chart, and a side-by-side view when both devices have data. Eight Sleep has no public API: the sidecar uses the same endpoints as the open-source pyEight library.
+- **Eight Sleep.** An optional bundled sidecar pulls your nights from your own Eight Sleep account: sleep stages, score, HRV, sleeping heart rate, toss and turns and, on Pods that report them, bed and room temperature. They stay on their own rows, never merged into Garmin's. With both devices you get two bars per night and a comparison card that prints the average difference over the nights both recorded. Numbers the devices measure differently are labelled, not subtracted. A night temperature chart draws the bed and room readings across each night. Eight Sleep has no public API: the sidecar uses the same endpoints as the open-source pyEight library, so a change on their side can break it. Setup: [`eight-sleep-sync/README.md`](eight-sleep-sync/README.md).
 - **Garmin ECG import.** Drop the PDF that the Garmin ECG app exports onto the journal page and the app reads the classification, heart rate and the traced waveform, then draws the strips in the app. It deliberately skips the patient name and date of birth printed on the report; clinical fields are encrypted at rest.
 - **Curated peptide library + enrichment.** Built-in peptide reference data with an enrichment calculator.
 
@@ -292,6 +297,7 @@ Set `TZ` to your home timezone (e.g. `TZ=America/New_York`) — it anchors sched
 | `ENABLE_PRESCRIPTION_WIZARD` | Set to `1` to enable the guided prescription wizard (off by default) |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Your Cloudflare Tunnel token |
 | `GARMIN_EMAIL` / `GARMIN_PASSWORD` | Consumed only by the Garmin sync sidecar |
+| `EIGHT_SLEEP_EMAIL` / `EIGHT_SLEEP_PASSWORD` | Consumed only by the optional Eight Sleep sidecar (all-in-one image). Leave unset to keep it off |
 
 See `.env.example` for the full, commented list.
 
@@ -353,7 +359,7 @@ sqlite3 /path/to/peptides.db \
 
 - [Dose reminder notifications](docs/ha-reminder-automation.md) — Web Push setup (VAPID + device enrolment) and the optional Home Assistant fallback relay.
 - [Dose timestamps, tracking days, and timezones](docs/tracking-day-timezones.md) — authoritative instants, phone-local display, the 02:00 rollover, manual entries, and offline replay.
-- [Demo seed](prisma/seed.ts), what `npm run db:seed` loads: five example peptides (one of them a nasal spray on a pump device), four weeks of doses, two weekly protocols on the same days for Smooth your week, a lab panel, two made-up DEXA scans with an RMR test, an illness window, and four weeks of made-up Garmin wellness and training rows. The ECG import has no seed; drop your own Garmin PDF onto the journal page.
+- [Demo seed](prisma/seed.ts), what `npm run db:seed` loads: five example peptides (one of them a nasal spray on a pump device), four weeks of doses, two weekly protocols on the same days for Smooth your week, a lab panel, two made-up DEXA scans with an RMR test, an illness window, four weeks of made-up Garmin wellness and training rows, and three weeks of made-up Eight Sleep nights. The ECG import has no seed; drop your own Garmin PDF onto the journal page.
 
 > Apple Health is intentionally **not** a built-in integration: HealthKit is device-only and a self-hosted web app cannot write to it.
 
