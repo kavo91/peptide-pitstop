@@ -219,7 +219,9 @@ async function buildWearable(userId: string): Promise<CsvData> {
       "restingHr", "hrvMs", "hrvStatus", "bodyBatteryHigh", "bodyBatteryLow", "stressAvg",
       "weightKg", "bmi", "bodyFatPct",
       "steps", "caloriesActive", "vo2max", "intensityMinutes",
-      "spo2Avg", "respirationAvg", "syncedAt",
+      "spo2Avg", "respirationAvg",
+      "sleepHrAvg", "tossTurns", "bedTempC", "roomTempC",
+      "syncedAt",
     ],
     rows: days.map((w) => [
       iso(w.date),
@@ -229,7 +231,9 @@ async function buildWearable(userId: string): Promise<CsvData> {
       w.restingHr, dec(w.hrvMs), w.hrvStatus, w.bodyBatteryHigh, w.bodyBatteryLow, w.stressAvg,
       dec(w.weightKg), dec(w.bmi), dec(w.bodyFatPct),
       w.steps, w.caloriesActive, dec(w.vo2max), w.intensityMinutes,
-      w.spo2Avg, dec(w.respirationAvg), iso(w.syncedAt),
+      w.spo2Avg, dec(w.respirationAvg),
+      w.sleepHrAvg, w.tossTurns, dec(w.bedTempC), dec(w.roomTempC),
+      iso(w.syncedAt),
     ]),
   };
 }

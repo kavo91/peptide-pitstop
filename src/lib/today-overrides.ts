@@ -27,7 +27,7 @@
 // Relative (not "@/") imports: today-overrides.ts is imported by today.test.ts
 // under vitest, which does not resolve the "@/" path alias for value imports.
 import { startOfDay, dateOnlyDay } from "./schedule/schedule";
-import { parseSchedule, slotsOn } from "./schedule/entries";
+import { parseSchedule, slotsOn, weeklyDays } from "./schedule/entries";
 
 /** Local-calendar-day key "YYYY-MM-DD" (derived in the runtime TZ — see file header). */
 export const dayKey = (d: Date): string =>
@@ -46,6 +46,24 @@ export interface OverrideClassifierProtocol {
 export interface OverridePlannedRow {
   protocolId: string;
   scheduledAt: Date | string;
+  /** Absent reads as "planned". */
+  status?: string;
+}
+
+/**
+ * Does an OFF-grid row mark its week as shifted? A "planned" row always has. A
+ * taken or missed one is what confirmRebase's row becomes as the week plays out,
+ * so it counts too, or the shift ends the moment its last row stops being
+ * "planned" and the grid days it removed come back. confirmRebase only writes
+ * snap-back rows for weekly fixed_anchor protocols, so past rows count only there.
+ * Shared with the materializer: the two must agree on what a shifted week is.
+ */
+export function marksShiftedWeek(
+  status: string | undefined,
+  proto: Pick<OverrideClassifierProtocol, "scheduleRule" | "rebaseMode">,
+): boolean {
+  if ((status ?? "planned") === "planned") return true;
+  return proto.rebaseMode === "fixed_anchor" && weeklyDays(parseSchedule(proto.scheduleRule)).length > 0;
 }
 
 /**
@@ -60,9 +78,10 @@ export function classifyOverrideDays(
   plannedRows: OverridePlannedRow[],
 ): Map<string, Set<string>> {
   const protoById = new Map(protocols.map((p) => [p.id, p] as const));
-  // A genuine fixed_anchor rebase (confirmRebase) DELETES the week's on-grid rows
-  // and writes ONLY shifted off-grid ones — so a real rebase week has off-grid
-  // rows and NO on-grid rows. If an on-grid planned row is also present, any
+  // A genuine fixed_anchor rebase (confirmRebase) DELETES the week's on-grid
+  // "planned" rows and writes ONLY shifted off-grid ones — so a real rebase week
+  // has off-grid rows and NO on-grid planned rows (an on-grid taken or missed row
+  // is history from before the shift). If an on-grid planned row is present, any
   // off-grid rows are stale artefacts (an edited schedule, a partial/old rebase,
   // or a re-materialised grid) and must NOT suppress the live grid — otherwise a
   // genuinely-scheduled day (e.g. today) wrongly drops off Today while the
@@ -92,15 +111,18 @@ export function classifyOverrideDays(
     }
     const onGrid = slotsOn(parseSchedule(proto.scheduleRule), rowDay, proto.startDate, proto.endDate).length > 0;
     if (onGrid) {
-      hasOnGrid.add(o.protocolId); // routine materialised row — the live grid is active
+      // A routine materialised row means the live grid is active.
+      if ((o.status ?? "planned") === "planned") hasOnGrid.add(o.protocolId);
       continue;
     }
+    if (!marksShiftedWeek(o.status, proto)) continue;
     let set = offGridDays.get(o.protocolId);
     if (!set) {
       set = new Set<string>();
       offGridDays.set(o.protocolId, set);
     }
-    set.add(dayKey(rowDay));
+    // A missed or skipped shifted day still marks the week, but nothing is due on it.
+    if (o.status === undefined || o.status === "planned" || o.status === "taken") set.add(dayKey(rowDay));
   }
   // Only protocols whose week is PURELY off-grid are genuine rebases.
   const overrideDays = new Map<string, Set<string>>();
@@ -109,6 +131,15 @@ export function classifyOverrideDays(
     overrideDays.set(protocolId, days);
   }
   return overrideDays;
+}
+
+/**
+ * The grid slots a confirmed shift left alone on a day: grid days before it, and
+ * days with their own dose. Input is the resolver's slots for that day; a rebased
+ * slot is the shift's own, and the override rows already speak for those.
+ */
+export function keptGridSlots(daySlots: { time?: string | null; rebased?: boolean }[]): { time: string | null }[] {
+  return daySlots.filter((s) => !s.rebased).map((s) => ({ time: s.time ?? null }));
 }
 
 /**

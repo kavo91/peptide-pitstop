@@ -5,12 +5,14 @@ import { getCurrentUser } from "@/lib/auth/owner";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/wellness/sync-status?since=<ISO>
+ * GET /api/wellness/sync-status?since=<ISO>[&source=eight_sleep]
  *
  * Polled by the "Sync now" button after it kicks the sidecar. Returns the newest
  * Garmin `syncedAt` for the signed-in user and how many Garmin days were written
  * after `since` (the baseline /api/wellness/sync-now returned). Garmin rows only:
  * a native Apple Health import landing mid-poll must not read as "Garmin synced".
+ * With `source=eight_sleep` (sync-now's answer when only Eight Sleep started) it
+ * reads Eight Sleep rows instead; any other value is Garmin.
  *
  *   Returns: { ok: true, latestSyncedAt: ISO | null, updated: n }
  */
@@ -26,7 +28,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: "Bad since" }, { status: 400 });
   }
 
-  const where = { userId: user.id, source: "garmin" };
+  // Which device the button is waiting for (sync-now's `source`); Garmin by default.
+  const source = new URL(req.url).searchParams.get("source") === "eight_sleep" ? "eight_sleep" : "garmin";
+  const where = { userId: user.id, source };
   const [latest, updated] = await Promise.all([
     prisma.wearableDaily.aggregate({ where, _max: { syncedAt: true } }),
     prisma.wearableDaily.count({ where: since ? { ...where, syncedAt: { gt: since } } : where }),

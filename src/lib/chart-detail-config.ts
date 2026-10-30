@@ -3,6 +3,7 @@
  *  { date, value } points the client controls can filter/smooth. Pure. */
 import type { WearableSeries } from "@/lib/wearable-series";
 import type { AggPoint } from "@/lib/wearable-aggregate";
+import type { EightSleepSeries } from "@/lib/eight-sleep-series";
 
 export const CHART_IDS = ["sleep", "recovery", "body", "activity"] as const;
 export type ChartId = (typeof CHART_IDS)[number];
@@ -55,13 +56,34 @@ export function sleepHours(p: { deep: number | null; light: number | null; rem: 
   return ((p.deep ?? 0) + (p.light ?? 0) + (p.rem ?? 0)) / 3600;
 }
 
+/**
+ * Sleep focus options for whichever devices have nights. Garmin keeps its
+ * original keys; Eight Sleep gets its own keys — the two are never one line.
+ * With only Garmin the labels stay exactly as before.
+ */
+export function sleepSeriesOptions(has: { garmin: boolean; eightSleep: boolean }): SeriesOption[] {
+  if (!has.eightSleep) return CHART_CONFIG.sleep.series;
+  const eight = [
+    { key: "esScore", label: "Eight Sleep score" },
+    { key: "esHours", label: "Eight Sleep hours" },
+  ];
+  if (!has.garmin) return eight;
+  return [{ key: "score", label: "Garmin score" }, { key: "hours", label: "Garmin hours" }, ...eight];
+}
+
 /** Project the WearableSeries into { seriesKey → AggPoint[] } for one chart. */
-export function buildChartSeries(chart: ChartId, series: WearableSeries): Record<string, AggPoint[]> {
+export function buildChartSeries(
+  chart: ChartId,
+  series: WearableSeries,
+  eightSleep?: EightSleepSeries,
+): Record<string, AggPoint[]> {
   switch (chart) {
     case "sleep":
       return {
         score: series.sleep.map((p) => ({ date: p.date, value: p.score })),
         hours: series.sleep.map((p) => ({ date: p.date, value: sleepHours(p) })),
+        esScore: (eightSleep?.sleep ?? []).map((p) => ({ date: p.date, value: p.score })),
+        esHours: (eightSleep?.sleep ?? []).map((p) => ({ date: p.date, value: sleepHours(p) })),
       };
     case "recovery":
       return {

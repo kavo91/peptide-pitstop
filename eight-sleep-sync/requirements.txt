@@ -1,0 +1,2 @@
+# Eight Sleep → Peptide Tracker sidecar. Plain HTTPS + JSON; no Eight Sleep SDK.
+requests==2.32.3

@@ -59,4 +59,15 @@ describe("GET /api/wellness/sync-status", () => {
     const res = await call();
     expect(await res.json()).toEqual({ ok: true, latestSyncedAt: null, updated: 0 });
   });
+
+  it("source=eight_sleep reads Eight Sleep rows; anything else stays Garmin", async () => {
+    await call("?source=eight_sleep");
+    expect(m.aggregate.mock.calls[0][0].where).toEqual({ userId: "owner", source: "eight_sleep" });
+    vi.clearAllMocks();
+    m.currentUser.mockResolvedValue({ id: "owner" });
+    m.aggregate.mockResolvedValue({ _max: { syncedAt: null } });
+    m.count.mockResolvedValue(0);
+    await call("?source=healthkit");
+    expect(m.aggregate.mock.calls[0][0].where).toEqual({ userId: "owner", source: "garmin" });
+  });
 });

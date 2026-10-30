@@ -3,6 +3,7 @@ import { Footprints, Moon, Clock, ChevronRight } from "lucide-react";
 import { activityDisplay } from "@/lib/garmin-activity";
 import type { DoseStatus, TimelineEntry } from "@/lib/doses-timeline-core";
 import type { DayMetric } from "@/lib/month-metrics";
+import type { EightSleepDay } from "@/lib/eight-sleep-series";
 import { LEGEND_ORDER, STATUS_DESCRIPTION, STATUS_LABEL } from "@/lib/timeline-status";
 import type { ManualDay } from "@/lib/wellness-log";
 import { DayDetail } from "./DayDetail";
@@ -57,7 +58,7 @@ const STATUS_TEXT_CLASS: Record<DoseStatus, string> = {
   missed: "text-danger",
 };
 
-export function DosesMonth({ monthLabel, gridStart, gridEnd, entries, metrics, todayKey, wellnessByDay, hydrationTargetMl, symptoms, nav, design = "current", nextDose }: { monthLabel: string; gridStart: string; gridEnd: string; entries: TimelineEntry[]; metrics: Record<string, DayMetric>; todayKey: string; wellnessByDay: Record<string, ManualDay>; hydrationTargetMl?: number | null; symptoms?: readonly string[]; nav: { prev: string; next: string; current: string; isCurrent: boolean }; design?: "pitstop" | "current"; nextDose?: NextDose }) {
+export function DosesMonth({ monthLabel, gridStart, gridEnd, entries, metrics, eightSleepByDay, todayKey, wellnessByDay, hydrationTargetMl, symptoms, nav, design = "current", nextDose }: { monthLabel: string; gridStart: string; gridEnd: string; entries: TimelineEntry[]; metrics: Record<string, DayMetric>; eightSleepByDay?: Record<string, EightSleepDay>; todayKey: string; wellnessByDay: Record<string, ManualDay>; hydrationTargetMl?: number | null; symptoms?: readonly string[]; nav: { prev: string; next: string; current: string; isCurrent: boolean }; design?: "pitstop" | "current"; nextDose?: NextDose }) {
   const days = daysBetween(gridStart, gridEnd);
   const pit = design === "pitstop";
   // Honest "logged / total" ratio for the month sub-heading (pitstop only).
@@ -150,7 +151,7 @@ export function DosesMonth({ monthLabel, gridStart, gridEnd, entries, metrics, t
                   )}
                 </div>
               )}
-              <DayDetail date={d} entries={entries} metric={m} wellness={wellnessByDay[d]} editable={!future} hydrationTargetMl={hydrationTargetMl} symptoms={symptoms} />
+              <DayDetail date={d} entries={entries} metric={m} eightSleep={eightSleepByDay?.[d]} wellness={wellnessByDay[d]} editable={!future} hydrationTargetMl={hydrationTargetMl} symptoms={symptoms} />
             </div>
           );
         })}

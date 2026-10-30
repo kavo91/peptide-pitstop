@@ -4,7 +4,7 @@
  */
 import { prisma } from "@/lib/db";
 import { startOfDay, addDays, rebaseWeekStart } from "@/lib/schedule/schedule";
-import { classifyOverrideDays, dueSlotsForDay, dayKey } from "@/lib/today-overrides";
+import { classifyOverrideDays, dueSlotsForDay, dayKey, keptGridSlots } from "@/lib/today-overrides";
 import { localeTimeLabel } from "@/lib/tz-day";
 import { resolveTitration } from "@/lib/titration/resolve";
 import { buildResolveInput } from "@/lib/titration/from-protocol";
@@ -22,6 +22,12 @@ import type { Prisma } from "@prisma/client";
 // Rebase overrides live in confirmRebase's SUNDAY-start week — read the same
 // week, or next Sunday's routine row makes a real shift look stale.
 export const todayOverrideWeekStart = (d: Date) => rebaseWeekStart(d);
+
+// Every row of the week, whatever its status: a shift stays in force after its
+// last shifted row is taken or missed (marksShiftedWeek).
+export function buildTodayOverrideWhere(userId: string, weekStart: Date): Prisma.PlannedDoseWhereInput {
+  return { userId, scheduledAt: { gte: weekStart, lt: addDays(weekStart, 7) } };
+}
 
 export function buildTodayProtocolWhere(userId: string, day: Date, nextDay: Date): Prisma.ProtocolWhereInput {
   return {
@@ -254,9 +260,7 @@ export async function getTodayDoses(
   // sit ON the live grid and must NOT hijack Today, or the live schedule
   // (including custom multi-time slots) would be ignored.
   const ws = todayOverrideWeekStart(day);
-  const overrides = await prisma.plannedDose.findMany({
-    where: { userId, status: "planned", scheduledAt: { gte: ws, lt: addDays(ws, 7) } },
-  });
+  const overrides = await prisma.plannedDose.findMany({ where: buildTodayOverrideWhere(userId, ws) });
   // Override classification is pure (no I/O) and lives in today-overrides.ts so
   // it can be unit-tested. TZ ASSUMPTION (WS6): it derives each row's local
   // calendar day from `scheduledAt` (an instant standing for a LOCAL midnight)
@@ -286,20 +290,6 @@ export async function getTodayDoses(
       orderBy: { takenAt: "asc" },
     });
 
-    // Determine which slots are due today. Override days are always untimed;
-    // otherwise the live grid wins. Completed protocols with a same-day log get
-    // one read-only logged fallback row when the live grid has no slot, so Today
-    // still reflects a protocol that was logged before/around completion without
-    // adding any new "to go" work.
-    const slots = dueSlotsForDay(p.scheduleRule, overrideDays.get(p.id), day, p.startDate, p.endDate);
-    const completedLoggedFallback = shouldShowCompletedLoggedFallback(p.status, slots.length, todayLogs.length);
-    const shiftedOverrideToday = overrideDays.get(p.id)?.has(dayKey(day)) === true;
-    const effectiveSlots = completedLoggedFallback
-      ? [{ time: null }]
-      : slots;
-
-    if (effectiveSlots.length === 0) continue;
-
     // Resolve dose + live status via the single source of truth. The phase
     // cursor counts DELIVERED doses, so the resolver needs this protocol's FULL
     // log history (not just today's) — a raw step.dose/targetDose must never
@@ -328,6 +318,24 @@ export async function getTodayDoses(
     // the calendar clips the same over-expansion via clipSlotsToRange).
     const todayKey = dayKey(day);
     const daySlots = resolved.slots.filter((rs) => dayKey(rs.date) === todayKey);
+
+    // Determine which slots are due today. Override days are always untimed;
+    // otherwise the live grid wins, except that a shifted week keeps only the
+    // grid days the shift left alone. Completed protocols with a same-day log get
+    // one read-only logged fallback row when the live grid has no slot, so Today
+    // still reflects a protocol that was logged before/around completion without
+    // adding any new "to go" work.
+    const overrideSet = overrideDays.get(p.id);
+    const dueSlots = dueSlotsForDay(p.scheduleRule, overrideSet, day, p.startDate, p.endDate);
+    const slots = overrideSet && dueSlots.length === 0 ? keptGridSlots(daySlots) : dueSlots;
+    const completedLoggedFallback = shouldShowCompletedLoggedFallback(p.status, slots.length, todayLogs.length);
+    const shiftedOverrideToday = overrideSet?.has(todayKey) === true;
+    const effectiveSlots = completedLoggedFallback
+      ? [{ time: null }]
+      : slots;
+
+    if (effectiveSlots.length === 0) continue;
+
     const resolvedByTime = new Map<string | null, ResolvedSlot>();
     for (const rs of daySlots) if (!resolvedByTime.has(rs.time ?? null)) resolvedByTime.set(rs.time ?? null, rs);
     // Day-level fallback (override days are untimed and may not align to a grid slot).

@@ -4,8 +4,8 @@
  * Manual wellness log for a day inside the month calendar's DayDetail modal.
  * Collapsed by default — the form fields stay hidden behind an "Add log" /
  * "Edit log" button. An existing entry renders read-only (like the Garmin block)
- * until you choose to edit. Sleep/weight are omitted entirely when Garmin already
- * supplies them for the day (Garmin wins).
+ * until you choose to edit. Sleep is omitted entirely when a device (Garmin or
+ * Eight Sleep) already recorded the night; weight when Garmin supplies it.
  */
 import { useState } from "react";
 import type { ManualDay } from "@/lib/wellness-log";
@@ -39,7 +39,7 @@ function HydrationBar({ waterMl, targetMl }: { waterMl: number; targetMl: number
 export function WellnessDayPanel({
   day,
   existing,
-  garminHasSleep,
+  deviceHasSleep,
   garminHasWeight,
   hydrationTargetMl,
   symptoms,
@@ -47,7 +47,7 @@ export function WellnessDayPanel({
 }: {
   day: string;
   existing?: ManualDay;
-  garminHasSleep: boolean;
+  deviceHasSleep: boolean;
   garminHasWeight: boolean;
   hydrationTargetMl?: number | null;
   symptoms?: readonly string[];
@@ -64,7 +64,7 @@ export function WellnessDayPanel({
         <WellnessDayForm
           day={day}
           existing={existing}
-          hideSleep={garminHasSleep}
+          hideSleep={deviceHasSleep}
           hideWeight={garminHasWeight}
           symptoms={symptoms}
           onSaved={() => {
@@ -77,9 +77,9 @@ export function WellnessDayPanel({
     );
   }
 
-  // Manual values worth showing (sleep/weight suppressed when Garmin owns them).
+  // Manual values worth showing (sleep suppressed when a device owns it, weight when Garmin does).
   const showWeight = !garminHasWeight && existing?.weight != null;
-  const showSleep = !garminHasSleep && existing?.sleep != null;
+  const showSleep = !deviceHasSleep && existing?.sleep != null;
   const hasDisplayable =
     existing != null &&
     (showWeight || showSleep || existing.mood != null || existing.energy != null ||

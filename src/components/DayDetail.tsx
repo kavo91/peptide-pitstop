@@ -7,9 +7,11 @@ import { createPortal } from "react-dom";
 import { activityDisplay, fmtActivityDistance, fmtActivityDuration, fmtSleepDuration, type GarminActivity } from "@/lib/garmin-activity";
 import type { TimelineEntry } from "@/lib/doses-timeline-core";
 import type { DayMetric } from "@/lib/month-metrics";
+import { eightSleepHasSleep, type EightSleepDay } from "@/lib/eight-sleep-series";
 import { STATUS_CHIP_CLASS, STATUS_DESCRIPTION, STATUS_LABEL } from "@/lib/timeline-status";
 import type { ManualDay } from "@/lib/wellness-log";
 import { WellnessDayPanel } from "@/components/wellness/WellnessDayPanel";
+import { EightSleepBlock } from "@/components/wellness/WellnessLog";
 import { DeleteLogButton } from "@/components/DeleteLogButton";
 
 function WellnessStat({ label, value }: { label: string; value: string }) {
@@ -78,7 +80,22 @@ function WellnessSection({ metric }: { metric: DayMetric }) {
   );
 }
 
-export function DayDetail({ date, entries, metric, wellness, editable, hydrationTargetMl, symptoms }: { date: string; entries: TimelineEntry[]; metric?: DayMetric; wellness?: ManualDay; editable?: boolean; hydrationTargetMl?: number | null; symptoms?: readonly string[] }) {
+/** A device recorded the night (Garmin or Eight Sleep), so the manual sleep box is hidden. */
+export function dayDeviceHasSleep(metric: DayMetric | undefined, eightSleep: EightSleepDay | undefined): boolean {
+  return (!!metric && (metric.sleepSeconds != null || metric.sleepScore != null)) || eightSleepHasSleep(eightSleep);
+}
+
+/** The day's device data: Garmin's "Wellness" section, then Eight Sleep in its own block. Never mixed. */
+export function DayWellness({ metric, eightSleep }: { metric?: DayMetric; eightSleep?: EightSleepDay }) {
+  return (
+    <>
+      {metric && <WellnessSection metric={metric} />}
+      {eightSleep && <EightSleepBlock e={eightSleep} />}
+    </>
+  );
+}
+
+export function DayDetail({ date, entries, metric, eightSleep, wellness, editable, hydrationTargetMl, symptoms }: { date: string; entries: TimelineEntry[]; metric?: DayMetric; eightSleep?: EightSleepDay; wellness?: ManualDay; editable?: boolean; hydrationTargetMl?: number | null; symptoms?: readonly string[] }) {
   const [open, setOpen] = useState(false);
   const dayEntries = entries.filter((e) => e.date === date);
   return (
@@ -107,12 +124,12 @@ export function DayDetail({ date, entries, metric, wellness, editable, hydration
                 </li>
               ))}
             </ul>
-            {metric && <WellnessSection metric={metric} />}
+            <DayWellness metric={metric} eightSleep={eightSleep} />
             {editable && (
               <WellnessDayPanel
                 day={date}
                 existing={wellness}
-                garminHasSleep={!!metric && (metric.sleepSeconds != null || metric.sleepScore != null)}
+                deviceHasSleep={dayDeviceHasSleep(metric, eightSleep)}
                 garminHasWeight={!!metric && metric.weightKg != null}
                 hydrationTargetMl={hydrationTargetMl}
                 symptoms={symptoms}

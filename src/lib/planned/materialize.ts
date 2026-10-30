@@ -10,6 +10,7 @@
  */
 
 import { startOfDay, dateOnlyDay, addDays, rebaseWeekStart } from "../schedule/schedule";
+import { marksShiftedWeek } from "../today-overrides";
 import { parseSchedule, slotsOn, slotsInRange } from "../schedule/entries";
 import { resolveTitration } from "../titration/resolve";
 import { buildResolveInput, type DeliveredLogInput } from "../titration/from-protocol";
@@ -181,30 +182,30 @@ export function materializePlannedDoses(args: {
   }
 
   // ── 1. Compute override-suppressed week set per protocol ─────────────────
-  // A "rebase override" is an existing "planned" row whose scheduledAt falls
-  // OFF the protocol's schedule grid (written by confirmRebase with a shifted
-  // date). We detect these by checking whether the existing row's scheduledAt
-  // is NOT a due-date for the protocol's rule. If an off-grid "planned" row
-  // exists in a week, the generator skips grid expansion for that whole week.
+  // A "rebase override" is an existing row whose scheduledAt falls OFF the
+  // protocol's schedule grid (written by confirmRebase with a shifted date). We
+  // detect these by checking whether the existing row's scheduledAt is NOT a
+  // due-date for the protocol's rule. If an off-grid row exists in a week, the
+  // generator skips grid expansion for that whole week. It stays an override
+  // once taken or missed (marksShiftedWeek), or the days it removed come back.
   //
   // Existing "planned" rows that ARE on the grid (e.g. from a previous run of
   // this same generator) do NOT trigger suppression — this preserves idempotency.
-  // Existing rows with status != "planned" (taken/missed/skipped) are history
-  // and do not trigger suppression.
+  // Existing ON-grid rows with status != "planned" (taken/missed/skipped) are
+  // history and say nothing about the week.
 
   type ProtocolWeekKey = string; // `${protocolId}:${weekKey}`
   const suppressedWeeks = new Set<ProtocolWeekKey>();
 
-  // A genuine confirmRebase deletes the week's on-grid rows and writes ONLY
-  // shifted off-grid ones. So suppress a (protocol, week) only when it has
-  // off-grid "planned" rows AND NO on-grid one. A MIX (on-grid + off-grid) means
+  // A genuine confirmRebase deletes the week's on-grid planned rows and writes
+  // ONLY shifted off-grid ones. So suppress a (protocol, week) only when it has
+  // off-grid rows AND NO on-grid planned one. A MIX (on-grid + off-grid) means
   // the off-grid rows are stale artefacts (edited schedule / old rebase) — those
   // must not suppress and lose the live grid for that week (which would drop a
   // genuinely-scheduled day from Today).
   const onGridWeeks = new Set<ProtocolWeekKey>();
   const offGridWeeks = new Set<ProtocolWeekKey>();
   for (const row of existing) {
-    if (row.status !== "planned") continue;
     const p = protocolMap.get(row.protocolId);
     if (!p || !p.scheduleRule) continue;
     // Stranded rows are stale artefacts (deleted above), never genuine
@@ -213,7 +214,11 @@ export function materializePlannedDoses(args: {
     const onGrid =
       slotsOn(parseSchedule(p.scheduleRule), row.scheduledAt, p.startDate, p.endDate).length > 0;
     const key = `${row.protocolId}:${KEY(weekStartOf(row.scheduledAt))}`;
-    (onGrid ? onGridWeeks : offGridWeeks).add(key);
+    if (onGrid) {
+      if (row.status === "planned") onGridWeeks.add(key);
+    } else if (marksShiftedWeek(row.status, p)) {
+      offGridWeeks.add(key);
+    }
   }
   for (const key of offGridWeeks) {
     if (!onGridWeeks.has(key)) suppressedWeeks.add(key);

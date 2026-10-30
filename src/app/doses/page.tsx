@@ -126,7 +126,7 @@ export default async function DosesPage({ searchParams }: { searchParams: Promis
           relDay: relDayLabel(next.date, todayKey),
         }
       : undefined;
-    body = <DosesMonth monthLabel={m.monthLabel} gridStart={m.gridStart} gridEnd={m.gridEnd} entries={m.entries} metrics={m.metrics} todayKey={todayKey} wellnessByDay={wellnessByDay} hydrationTargetMl={user.hydrationTargetMl ?? null} symptoms={resolveSymptomList(user.symptomList)} nav={nav} design={design} nextDose={nextDose} />;
+    body = <DosesMonth monthLabel={m.monthLabel} gridStart={m.gridStart} gridEnd={m.gridEnd} entries={m.entries} metrics={m.metrics} eightSleepByDay={m.eightSleep} todayKey={todayKey} wellnessByDay={wellnessByDay} hydrationTargetMl={user.hydrationTargetMl ?? null} symptoms={resolveSymptomList(user.symptomList)} nav={nav} design={design} nextDose={nextDose} />;
   }
 
   return (

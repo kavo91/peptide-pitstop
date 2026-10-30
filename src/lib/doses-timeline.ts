@@ -8,6 +8,7 @@ import { startsOnOrBefore } from "./protocol-day-bounds";
 import { supersededFrom, type LoggedDose, type TimelineEntry } from "./doses-timeline-core";
 import { buildTimelineEntries, clipSlotsToRange, dropOpenSlotsIfClosed, type ResolvedOcc } from "./timeline-status";
 import { monthMetricsByDay } from "./month-metrics";
+import { buildEightSleepSeries, eightSleepDaysByKey } from "./eight-sleep-series";
 
 const KEY = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -173,11 +174,16 @@ export async function getMonth(userId: string, monthStart: Date) {
   const gridStart = addDays(first, -((first.getDay() + 6) % 7)); // back to Monday
   const last = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
   const gridEnd = addDays(last, (7 - last.getDay()) % 7); // forward to Sunday
-  const [entries, wearableRows] = await Promise.all([
+  const [entries, wearableRows, eightSleepRows] = await Promise.all([
     getTimeline(userId, gridStart, gridEnd),
     // Owner-scoped Garmin window over the full visible grid (local-midnight, inclusive).
     prisma.wearableDaily.findMany({
       where: { userId, source: "garmin", date: { gte: startOfDay(gridStart), lte: startOfDay(gridEnd) } },
+      orderBy: { date: "asc" },
+    }),
+    // Eight Sleep nights over the same grid — kept apart, shown as their own block in DayDetail.
+    prisma.wearableDaily.findMany({
+      where: { userId, source: "eight_sleep", date: { gte: startOfDay(gridStart), lte: startOfDay(gridEnd) } },
       orderBy: { date: "asc" },
     }),
   ]);
@@ -187,5 +193,6 @@ export async function getMonth(userId: string, monthStart: Date) {
     gridEnd: KEY(gridEnd),
     entries,
     metrics: monthMetricsByDay(wearableRows),
+    eightSleep: eightSleepDaysByKey(buildEightSleepSeries(eightSleepRows)),
   };
 }

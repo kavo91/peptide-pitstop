@@ -9,6 +9,9 @@
 import { activityDisplay, fmtActivityDistance, fmtActivityDuration, fmtSleepDuration } from "@/lib/garmin-activity";
 import type { WellnessLogDay, ManualDay, WellnessLogGarmin } from "@/lib/wellness-log";
 import { DeleteJournalButton } from "@/components/DeleteJournalButton";
+import type { EightSleepDay } from "@/lib/eight-sleep-series";
+
+export type { EightSleepDay };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -21,11 +24,13 @@ export function fmtDayKey(key: string): string {
   return `${d ?? ""} ${MONTHS[(m ?? 1) - 1] ?? ""} ${y ?? ""}`.trim();
 }
 
-function Tag({ label, tone }: { label: string; tone: "manual" | "garmin" }) {
+function Tag({ label, tone }: { label: string; tone: "manual" | "garmin" | "eight" }) {
   const cls =
     tone === "garmin"
       ? "bg-accent2/10 text-accent2Strong"
-      : "bg-accent/10 text-accentStrong";
+      : tone === "eight"
+        ? "bg-line/15 text-ink"
+        : "bg-accent/10 text-accentStrong";
   return (
     <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}>
       {label}
@@ -71,6 +76,26 @@ function ManualBlock({ m }: { m: ManualDay }) {
   );
 }
 
+export function EightSleepBlock({ e }: { e: EightSleepDay }) {
+  const sleep = [e.sleepSeconds != null ? fmtSleepDuration(e.sleepSeconds) : null, e.score != null ? `score ${e.score}` : null]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div className="mt-3 border-t border-line/10 pt-3">
+      <Tag label="Eight Sleep" tone="eight" />
+      <dl className="mt-2 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+        {sleep && <Metric label="Sleep" value={sleep} />}
+        {e.sleepHrAvg != null && <Metric label="Sleeping HR" value={`${e.sleepHrAvg} bpm`} />}
+        {e.hrvMs != null && <Metric label="HRV (bed sensor)" value={`${Math.round(e.hrvMs)} ms`} />}
+        {e.respirationAvg != null && <Metric label="Breath rate" value={`${e.respirationAvg.toFixed(1)} /min`} />}
+        {e.tossTurns != null && <Metric label="Toss & turns" value={`${e.tossTurns}`} />}
+        {e.bedTempC != null && <Metric label="Bed temp" value={`${e.bedTempC.toFixed(1)} °C`} />}
+        {e.roomTempC != null && <Metric label="Room temp" value={`${e.roomTempC.toFixed(1)} °C`} />}
+      </dl>
+    </div>
+  );
+}
+
 export function GarminBlock({ g }: { g: WellnessLogGarmin }) {
   const sleep =
     g.sleepSeconds != null || g.sleepScore != null
@@ -84,7 +109,7 @@ export function GarminBlock({ g }: { g: WellnessLogGarmin }) {
       <Tag label="Garmin" tone="garmin" />
       <dl className="mt-2 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         {sleep && <Metric label="Sleep" value={sleep} />}
-        {g.weightKg != null && <Metric label="Weight" value={`${g.weightKg} kg`} />}
+        {g.weightKg != null && <Metric label="Weight" value={`${g.weightKg.toFixed(1)} kg`} />}
         {g.steps != null && <Metric label="Steps" value={g.steps.toLocaleString()} />}
         {g.caloriesActive != null && <Metric label="Active cal" value={`${g.caloriesActive}`} />}
         {g.intensityMinutes != null && <Metric label="Intensity" value={`${g.intensityMinutes} min`} />}

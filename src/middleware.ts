@@ -4,14 +4,15 @@ import { verifySessionToken, SESSION_COOKIE } from "@/lib/auth/session";
 const PUBLIC = ["/login", "/setup"];
 
 // Bearer-token API routes that authenticate themselves (no session cookie).
-// The session gate must let these through to their OWN authentication. Garmin
-// and cron use scoped bearer secrets, native apps use revocable per-device
+// The session gate must let these through to their OWN authentication. Garmin,
+// Eight Sleep and cron use scoped bearer secrets, native apps use revocable per-device
 // credentials, and Stripe uses its signed raw-body webhook.
 // Session-authed routes (/api/wellness/sync-now, /api/export/*) stay gated below.
 const BEARER_API = [
   "/api/cron/planned",
   "/api/cron/reminders",
   "/api/wellness/garmin",
+  "/api/wellness/eight-sleep", // Eight Sleep sidecar — same WELLNESS_IMPORT_TOKEN bearer as Garmin
   "/api/wellness/native", // iOS HealthKit + Android Health Connect ingest (P0)
   "/api/enrichment/refresh",
   "/api/billing/webhook", // Stripe Managed Payments — signed raw-body webhook (P0)
