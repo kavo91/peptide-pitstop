@@ -8,7 +8,9 @@ import { getCurrentUser } from "@/lib/auth/owner";
 import { decryptField } from "@/lib/crypto/fieldEncryption";
 import { formatSideEffects, deserializeSideEffects, resolveSymptomList } from "@/lib/side-effects";
 import { mergeWellnessLog, type ManualDay } from "@/lib/wellness-log";
-import { getWearableWindow } from "@/lib/wearable";
+import { getEightSleepWindow, getSleepComparison, getWearableWindow } from "@/lib/wearable";
+import { eightSleepDaysByKey } from "@/lib/eight-sleep-series";
+import { SLEEP_COMPARE_DAYS } from "@/lib/sleep-compare";
 import { getEcgOverview } from "@/lib/ecg";
 import { startOfDay } from "@/lib/schedule/schedule";
 import { viewerToday } from "@/lib/viewer-tz";
@@ -20,6 +22,7 @@ import { PitstopHeading } from "@/components/PitstopHeading";
 import { activeDesign } from "@/lib/design";
 import Link from "next/link";
 import { PAGE_MAIN } from "@/lib/layout";
+
 
 export const dynamic = "force-dynamic";
 
@@ -54,13 +57,20 @@ export default async function JournalPage() {
   const wearFrom = startOfDay(viewer.date);
   wearFrom.setDate(wearFrom.getDate() - 7);
 
-  const [entries, wearable, ecg] = await Promise.all([
+  // Garmin vs Eight Sleep needs a longer window than the 7-day charts: its
+  // patterns need at least 5 nights in each of two groups.
+  const compareFrom = startOfDay(viewer.date);
+  compareFrom.setDate(compareFrom.getDate() - SLEEP_COMPARE_DAYS);
+
+  const [entries, wearable, eightSleep, sleepComparison, ecg] = await Promise.all([
     prisma.journalEntry.findMany({
       where: { userId: user.id },
       orderBy: { date: "desc" },
       take: 30,
     }),
     getWearableWindow(user.id, wearFrom, wearTo),
+    getEightSleepWindow(user.id, wearFrom, wearTo),
+    getSleepComparison(user.id, compareFrom, wearTo),
     // ECG is not on the 7-day window: recordings are occasional, so the section
     // always shows the latest one rather than "nothing this week".
     getEcgOverview(user.id),
@@ -92,6 +102,8 @@ export default async function JournalPage() {
   // "Today" is the VIEWER's day (v1.4.2).
   const todayKey = viewer.key;
   const todayLog = logDays.filter((d) => d.date === todayKey);
+  // Eight Sleep's night that ended today (its own block on the Today card).
+  const eightSleepToday = eightSleepDaysByKey(eightSleep)[todayKey] ?? null;
 
   return (
     <main className={PAGE_MAIN}>
@@ -121,6 +133,7 @@ export default async function JournalPage() {
 
         <TodayCard
           today={todayLog[0]}
+          eightSleep={eightSleepToday}
           todayKey={todayKey}
           hydrationTargetMl={user.hydrationTargetMl ?? null}
           symptoms={resolveSymptomList(user.symptomList)}
@@ -132,7 +145,7 @@ export default async function JournalPage() {
             mt-10 so it top-aligns with the text column. Below 1900px it's a plain
             block and WearableSection keeps its mt-10 gap below the text column. */}
         <div className="min-[1900px]:min-w-0 min-[1900px]:flex-1 min-[1900px]:-mt-10">
-          <WearableSection series={wearable} />
+          <WearableSection series={wearable} eightSleep={eightSleep} sleepComparison={sleepComparison} comparisonDays={SLEEP_COMPARE_DAYS} />
           <EcgSection latest={ecg.latest} history={ecg.history} total={ecg.total} />
         </div>
       </div>

@@ -1,20 +1,37 @@
 /**
  * "Wearable" section for the Wellness screen. Server component: takes
  * the precomputed WearableSeries and renders the sleep / recovery / body-comp /
- * activity charts (2-up on lg), or a tasteful empty state + Sync-now button when
+ * activity charts (2-up on lg); sleep reads Garmin and Eight Sleep together
+ * (SleepCards), or a tasteful empty state + Sync-now button when
  * no wearable data has synced yet. The Sync-now button lives in the header in
  * both states.
  */
 import type { WearableSeries } from "@/lib/wearable-series";
-import { SleepChart } from "./SleepChart";
+import type { EightSleepSeries } from "@/lib/eight-sleep-series";
+import type { SleepComparison } from "@/lib/sleep-compare";
 import { RecoveryChart } from "./RecoveryChart";
 import { BodyCompositionChart } from "./BodyCompositionChart";
 import { ActivityChart } from "./ActivityChart";
 import { TrainingChart } from "./TrainingChart";
 import { SyncNowButton } from "./SyncNowButton";
+import { SleepMainCard } from "./SleepCards";
+import { SleepExtraCards, showComparison } from "./SleepExtraCards";
 
-export function WearableSection({ series }: { series: WearableSeries }) {
-  const hasData = series.latestSnapshot != null;
+export function WearableSection({
+  series,
+  eightSleep,
+  sleepComparison,
+  comparisonDays = 90,
+}: {
+  series: WearableSeries;
+  eightSleep?: EightSleepSeries;
+  /** Garmin vs Eight Sleep over a longer window (patterns need many nights). */
+  sleepComparison?: SleepComparison;
+  comparisonDays?: number;
+}) {
+  // Sleep works with Garmin only, Eight Sleep only, or both (SleepCards picks the cards).
+  const hasEight = (eightSleep?.sleep.length ?? 0) > 0;
+  const hasData = series.latestSnapshot != null || hasEight || showComparison(sleepComparison);
 
   return (
     <section className="mt-10">
@@ -37,11 +54,12 @@ export function WearableSection({ series }: { series: WearableSeries }) {
         </div>
       ) : (
         <div className="grid items-start gap-4 lg:grid-cols-2 lg:items-stretch min-[1900px]:grid-cols-3">
-          <SleepChart sleep={series.sleep} detailHref="/journal/chart/sleep" />
+          <SleepMainCard watch={series} eightSleep={eightSleep} detailHref="/journal/chart/sleep" />
           <RecoveryChart recovery={series.recovery} detailHref="/journal/chart/recovery" />
           <BodyCompositionChart weight={series.weight} detailHref="/journal/chart/body" />
           <ActivityChart activity={series.activity} detailHref="/journal/chart/activity" />
           <TrainingChart training={series.training} />
+          <SleepExtraCards eightSleep={eightSleep} comparison={sleepComparison} comparisonDays={comparisonDays} />
         </div>
       )}
     </section>

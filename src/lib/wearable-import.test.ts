@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { localMidnight, buildWearableUpsertArgs, importWellnessDays } from "./wearable-import";
+import { localMidnight, buildWearableUpsertArgs, importEightSleepDays, importWellnessDays } from "./wearable-import";
 import { normaliseGarminDay } from "./wearable-normalise";
 import sample from "./__fixtures__/garmin-sample.json";
+import eightSample from "./__fixtures__/eight-sleep-sample.json";
 
 const id = (s: string | null | undefined) => (s == null ? null : `ENC(${s})`);
 
@@ -139,5 +140,62 @@ describe("buildWearableUpsertArgs — training metrics", () => {
     const args = buildWearableUpsertArgs("u1", normaliseGarminDay(sample), id);
     expect((args.update as Record<string, unknown>).trainingReadiness).toBeUndefined();
     expect((args.update as Record<string, unknown>).acwr).toBeUndefined();
+  });
+});
+
+describe("importEightSleepDays", () => {
+  const night = (presenceEnd: string, sleepDuration: number) => ({
+    ...eightSample,
+    presenceEnd,
+    sleepDuration,
+    presenceDuration: sleepDuration + 600,
+  });
+
+  it("upserts under source eight_sleep with the bed metrics, never a garmin key", async () => {
+    const upsert = vi.fn().mockResolvedValue({});
+    const res = await importEightSleepDays({ wearableDaily: { upsert } }, "user-1", [eightSample], id);
+    expect(res).toEqual({ upserted: 1 });
+    const args = upsert.mock.calls[0][0];
+    expect(args.where.userId_date_source).toEqual({
+      userId: "user-1",
+      date: localMidnight("2026-06-20"),
+      source: "eight_sleep",
+    });
+    expect(args.create.source).toBe("eight_sleep");
+    expect(args.create.sleepHrAvg).toBe(58);
+    expect(args.create.tossTurns).toBe(21);
+    expect(args.create.bedTempC).toBe(30.3);
+    expect(args.create.roomTempC).toBe(21.5);
+    expect(args.create.restingHr).toBeUndefined();
+    expect(args.create.raw).toBe(`ENC(${JSON.stringify(eightSample)})`);
+  });
+
+  it("skips processing nights and garbage entries", async () => {
+    const upsert = vi.fn().mockResolvedValue({});
+    const res = await importEightSleepDays(
+      { wearableDaily: { upsert } },
+      "user-1",
+      [{ ...eightSample, processing: true }, null, 7, "x", { day: "nope" }],
+      id,
+    );
+    expect(res).toEqual({ upserted: 0 });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("keeps the longest sleep when two trend days wake on the same date, whatever the order", async () => {
+    for (const order of [
+      [night("2026-06-19T20:00:00.000Z", 25000), night("2026-06-20T03:00:00.000Z", 1800)],
+      [night("2026-06-20T03:00:00.000Z", 1800), night("2026-06-19T20:00:00.000Z", 25000)],
+    ]) {
+      const upsert = vi.fn().mockResolvedValue({});
+      const res = await importEightSleepDays({ wearableDaily: { upsert } }, "user-1", order, id);
+      expect(res).toEqual({ upserted: 1 });
+      expect(upsert.mock.calls[0][0].create.sleepSeconds).toBe(25000);
+    }
+  });
+
+  it("returns 0 for a non-array", async () => {
+    const upsert = vi.fn();
+    expect(await importEightSleepDays({ wearableDaily: { upsert } }, "u", "x" as never, id)).toEqual({ upserted: 0 });
   });
 });

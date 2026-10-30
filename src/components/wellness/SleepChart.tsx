@@ -29,7 +29,16 @@ const STAGES = [
   { key: "awake", label: "Awake", color: "rgb(var(--muted))", opacity: 0.5 },
 ] as const;
 
-export function SleepChart({ sleep, detailHref }: { sleep: SleepPoint[]; detailHref?: string }) {
+export function SleepChart({
+  sleep,
+  detailHref,
+  title = "Sleep",
+}: {
+  sleep: SleepPoint[];
+  detailHref?: string;
+  /** Card title — the Eight Sleep card reuses this chart under its own name. */
+  title?: string;
+}) {
   const nights = sleep.map((p) => {
     const stages = {
       deep: secondsToHours(p.deep) ?? 0,
@@ -45,7 +54,7 @@ export function SleepChart({ sleep, detailHref }: { sleep: SleepPoint[]; detailH
   const hasScore = nights.some((n) => n.score != null);
 
   if (!hasStages && !hasScore) {
-    return <ChartCard title="Sleep"><ChartEmpty /></ChartCard>;
+    return <ChartCard title={title}><ChartEmpty /></ChartCard>;
   }
 
   // Sleep duration excludes the awake band (time awake in bed isn't "sleep").
@@ -73,7 +82,7 @@ export function SleepChart({ sleep, detailHref }: { sleep: SleepPoint[]; detailH
 
   return (
     <ChartCard
-      title="Sleep"
+      title={title}
       href={detailHref}
       sub={[
         avgSleep != null ? `avg ${avgSleep.toFixed(1)} h` : null,

@@ -15,6 +15,9 @@ const WIDTH = 600;
 const HEIGHT = 170;
 const PAD = { top: 14, right: 14, bottom: 28, left: 34 };
 
+/** Scales report grams; show weight to 0.1 kg everywhere on this card. */
+const kg = (v: number) => v.toFixed(1);
+
 export function BodyCompositionChart({ weight, detailHref }: { weight: WeightPoint[]; detailHref?: string }) {
   if (weight.length === 0) {
     return <ChartCard title="Body composition"><ChartEmpty /></ChartCard>;
@@ -22,17 +25,22 @@ export function BodyCompositionChart({ weight, detailHref }: { weight: WeightPoi
 
   const latest = weight[weight.length - 1].weightKg;
   const first = weight[0].weightKg;
-  const delta = weight.length >= 2 ? Math.round((latest - first) * 100) / 100 : null;
-  const deltaStr = delta == null ? null : `${delta > 0 ? "+" : ""}${delta} kg`;
+  const delta = weight.length >= 2 ? Math.round((latest - first) * 10) / 10 : null;
+  const deltaStr = delta == null ? null : `${delta > 0 ? "+" : ""}${delta.toFixed(1)} kg`;
 
   if (weight.length === 1) {
+    // One weigh-in in the window: show it with its date, and keep the link to the
+    // longer trend — the history is there, just not in this week.
     return (
-      <ChartCard title="Body composition" sub="weight">
+      <ChartCard title="Body composition" sub="weight" href={detailHref}>
         <p className="font-mono text-2xl font-semibold tabular-nums text-ink">
-          {latest}
+          {kg(latest)}
           <span className="ml-1 text-xs font-normal text-muted">kg</span>
         </p>
-        <p className="mt-1 text-xs text-muted">Only one reading in this window.</p>
+        <p className="mt-1 text-xs text-muted">
+          One weigh-in this week ({formatDayKeyShort(weight[0].date)}).
+          {detailHref ? " Open View for the longer trend." : ""}
+        </p>
       </ChartCard>
     );
   }
@@ -60,7 +68,7 @@ export function BodyCompositionChart({ weight, detailHref }: { weight: WeightPoi
     <ChartCard
       title="Body composition"
       href={detailHref}
-      sub={`${latest} kg${deltaStr ? ` · ${deltaStr}` : ""}`}
+      sub={`${kg(latest)} kg${deltaStr ? ` · ${deltaStr}` : ""}`}
     >
       <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} aria-label="Weight trend" className="w-full" style={{ height: "auto" }}>
         <defs>
@@ -71,8 +79,8 @@ export function BodyCompositionChart({ weight, detailHref }: { weight: WeightPoi
         </defs>
 
         {/* Y axis: min / max weight labels */}
-        <text x={PAD.left - 4} y={yFor(ex.max) + 3} fontSize="9" fill="rgb(var(--muted))" textAnchor="end">{ex.max}</text>
-        <text x={PAD.left - 4} y={yFor(ex.min) + 3} fontSize="9" fill="rgb(var(--muted))" textAnchor="end">{ex.min}</text>
+        <text x={PAD.left - 4} y={yFor(ex.max) + 3} fontSize="9" fill="rgb(var(--muted))" textAnchor="end">{kg(ex.max)}</text>
+        <text x={PAD.left - 4} y={yFor(ex.min) + 3} fontSize="9" fill="rgb(var(--muted))" textAnchor="end">{kg(ex.min)}</text>
 
         <path d={areaPath} fill="url(#weight-area-grad)" />
         <path d={linePath} fill="none" stroke="rgb(var(--accent))" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />

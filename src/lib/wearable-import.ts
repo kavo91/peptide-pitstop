@@ -6,8 +6,9 @@
  * directly (server-only throws when evaluated outside an RSC build).
  */
 import { normaliseGarminDay, type WellnessDay } from "./wearable-normalise";
+import { normaliseEightSleepDay } from "./eight-sleep-normalise";
 
-const SOURCES = new Set(["garmin", "healthkit", "health_connect"]);
+const SOURCES = new Set(["garmin", "healthkit", "health_connect", "eight_sleep"]);
 
 /** Parse "YYYY-MM-DD" to a local-midnight Date, or null if malformed. */
 export function localMidnight(dateStr: string): Date | null {
@@ -98,6 +99,11 @@ export function buildWearableUpsertArgs(
     ltSpeedMs: day.ltSpeedMs,
     floorsClimbed: day.floorsClimbed,
     restingHr7d: day.restingHr7d,
+    // Eight Sleep bed metrics (undefined on every other source → column untouched)
+    sleepHrAvg: day.sleepHrAvg,
+    tossTurns: day.tossTurns,
+    bedTempC: day.bedTempC,
+    roomTempC: day.roomTempC,
     // logged activities — PLAINTEXT (the month/wellness views never decrypt `raw`)
     activityCount: day.activityCount,
     activitiesJson: JSON.stringify(day.activities),
@@ -145,6 +151,38 @@ export async function importNativeWellnessDays(
   let upserted = 0;
   for (const day of days) {
     if ((day.source !== "healthkit" && day.source !== "health_connect") || !localMidnight(day.date)) continue;
+    await client.wearableDaily.upsert(buildWearableUpsertArgs(userId, day, encrypt));
+    upserted += 1;
+  }
+  return { upserted };
+}
+
+/**
+ * Normalise + upsert a batch of raw Eight Sleep trend days under source
+ * "eight_sleep". Its own source key means an upsert can never touch a Garmin or
+ * HealthKit row. Unscored nights (still processing, or no sleep) are skipped.
+ * Two trend days that wake on the same local date (a nap, a split night) keep
+ * the one with the most sleep, so the order the API lists them in can't decide.
+ */
+export async function importEightSleepDays(
+  client: WearableUpsertClient,
+  userId: string,
+  rawDays: unknown[],
+  encrypt: EncryptFn,
+): Promise<{ upserted: number }> {
+  if (!Array.isArray(rawDays)) return { upserted: 0 };
+
+  const byDate = new Map<string, WellnessDay>();
+  for (const raw of rawDays) {
+    if (raw == null || typeof raw !== "object") continue;
+    const day = normaliseEightSleepDay(raw);
+    if (!localMidnight(day.date)) continue;
+    const kept = byDate.get(day.date);
+    if (!kept || (day.sleepSeconds ?? 0) > (kept.sleepSeconds ?? 0)) byDate.set(day.date, day);
+  }
+
+  let upserted = 0;
+  for (const day of byDate.values()) {
     await client.wearableDaily.upsert(buildWearableUpsertArgs(userId, day, encrypt));
     upserted += 1;
   }

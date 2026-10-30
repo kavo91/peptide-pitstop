@@ -19,7 +19,9 @@ import {
 import { extent, buildLinePath, formatDayKeyShort, type XY } from "@/lib/wearable-chart";
 import type { ChartId, SeriesOption } from "@/lib/chart-detail-config";
 import { ChartEmpty } from "./chart-ui";
-import { SleepChart } from "./SleepChart";
+import type { EightSleepSeries } from "@/lib/eight-sleep-series";
+import { pairSleepNights } from "@/lib/sleep-pairs";
+import { SleepMainCard } from "./SleepCards";
 import { RecoveryChart } from "./RecoveryChart";
 import { BodyCompositionChart } from "./BodyCompositionChart";
 import { ActivityChart } from "./ActivityChart";
@@ -40,11 +42,44 @@ function Pill({ active, onClick, children }: { active: boolean; onClick: () => v
   );
 }
 
+const NO_EIGHT: EightSleepSeries = { sleep: [], nights: [] };
+
+/**
+ * Sleep overview for the range. Garmin-only keeps the original "last N days"
+ * filter. With Eight Sleep the range is the last N nights either device
+ * recorded, and both devices are cut at that same first date so the side-by-side
+ * bars cover the same nights.
+ */
+function SleepOverview({ series, eightSleep, range }: { series: WearableSeries; eightSleep: EightSleepSeries; range: Range }) {
+  if (eightSleep.sleep.length === 0) {
+    return <SleepMainCard watch={{ sleep: filterByRange(series.sleep, range), recovery: series.recovery }} />;
+  }
+  const kept = filterByRange(pairSleepNights(series, eightSleep), range);
+  const from = kept[0]?.date ?? "";
+  const cut = <T extends { date: string }>(xs: T[]) => xs.filter((x) => x.date >= from);
+  return (
+    <SleepMainCard
+      watch={{ sleep: cut(series.sleep), recovery: cut(series.recovery) }}
+      eightSleep={{ sleep: cut(eightSleep.sleep), nights: cut(eightSleep.nights) }}
+    />
+  );
+}
+
 /** The rich journal chart for `chart`, fed the range-filtered typed series. */
-function Overview({ chart, series, range }: { chart: ChartId; series: WearableSeries; range: Range }) {
+function Overview({
+  chart,
+  series,
+  eightSleep,
+  range,
+}: {
+  chart: ChartId;
+  series: WearableSeries;
+  eightSleep: EightSleepSeries;
+  range: Range;
+}) {
   switch (chart) {
     case "sleep":
-      return <SleepChart sleep={filterByRange(series.sleep, range)} />;
+      return <SleepOverview series={series} eightSleep={eightSleep} range={range} />;
     case "recovery":
       return <RecoveryChart recovery={filterByRange(series.recovery, range)} />;
     case "body":
@@ -99,11 +134,14 @@ export function ChartDetail({
   series,
   options,
   data,
+  eightSleep = NO_EIGHT,
 }: {
   chart: ChartId;
   series: WearableSeries;
   options: SeriesOption[];
   data: Record<string, AggPoint[]>;
+  /** Sleep chart only: Eight Sleep nights for the side-by-side view. */
+  eightSleep?: EightSleepSeries;
 }) {
   const [range, setRange] = useState<Range>(30);
   const [view, setView] = useState<"overview" | string>("overview");
@@ -152,7 +190,7 @@ export function ChartDetail({
           <FocusLine points={focusPoints} />
         </div>
       ) : (
-        <Overview chart={chart} series={series} range={range} />
+        <Overview chart={chart} series={series} eightSleep={eightSleep} range={range} />
       )}
     </div>
   );

@@ -531,7 +531,7 @@ model WearableDaily {
   userId String
   user   User     @relation(fields: [userId], references: [id])
   date   DateTime // local-midnight of the wellness day
-  source String   // "garmin"
+  source String   // garmin | eight_sleep
 
   // sleep
   sleepSeconds      Int?
@@ -580,6 +580,13 @@ model WearableDaily {
   ltSpeedMs              Decimal? // lactate-threshold running speed, m/s (pace derived at read time)
   floorsClimbed          Int?
   restingHr7d            Int? // Garmin's 7-day resting-HR average ending this day
+
+  // Eight Sleep bed metrics (source = "eight_sleep" only; added via ALTER TABLE ADD COLUMN — never a table rebuild).
+  // Eight Sleep sleep/HRV numbers live in the shared columns above but on their OWN row, never merged into Garmin's.
+  sleepHrAvg Int? // average heart rate while asleep, bpm (not resting HR)
+  tossTurns  Int? // toss & turns count for the night
+  bedTempC   Decimal? // average bed surface temperature, °C
+  roomTempC  Decimal? // average room temperature, °C
 
   // logged activities (deliberate workouts; distinct from passive steps/intensity) — plaintext (read on month/wellness paths)
   activityCount  Int?

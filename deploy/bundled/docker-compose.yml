@@ -1,13 +1,14 @@
 # All-in-one ("batteries-included") deployment — ONE container runs every service:
-#   Next.js app + Cloudflare Tunnel + Litestream backup + Garmin wellness sidecar.
+#   Next.js app + Cloudflare Tunnel + Litestream backup + Garmin wellness sidecar
+#   + the optional Eight Sleep sidecar.
 # A supervisor entrypoint starts them; the app is the critical process and the
-# optional services (tunnel, garmin) only start when their env is configured.
+# optional services (tunnel, garmin, eight sleep) only start when their env is configured.
 # This is an alternative to the simple root docker-compose.yml (app only).
 #
 # Key trick: `extra_hosts: app:127.0.0.1` makes the name "app" resolve to this
 # container, so a named Cloudflare Tunnel whose origin is http://app:3000 keeps
 # working with no dashboard change. In-container the app, garmin /sync (:8080),
-# and cloudflared all talk over localhost.
+# eight-sleep /sync (:8081) and cloudflared all talk over localhost.
 #
 # Set the secrets below in a .env file next to this compose.
 # The container runs as root, so the ./data, ./garmin-tokens and ./backup dirs
@@ -40,6 +41,13 @@ services:
       - BACKFILL_DAYS=3
       - SYNC_INTERVAL_SECONDS=21600
       - TOKENS_DIR=/tokens
+      # eight-sleep-sync (in-container, optional) — starts only when both creds are set.
+      # Extra source beside Garmin; rows land under source "eight_sleep".
+      - EIGHT_SLEEP_EMAIL=${EIGHT_SLEEP_EMAIL:-}
+      - EIGHT_SLEEP_PASSWORD=${EIGHT_SLEEP_PASSWORD:-}
+      - EIGHT_SLEEP_IMPORT_URL=http://localhost:3000/api/wellness/eight-sleep
+      - EIGHT_SLEEP_BACKFILL_DAYS=3
+      - EIGHT_SLEEP_SYNC_URL=http://localhost:8081/sync
     volumes:
       - ./data:/data                  # SQLite database + app data — back this up
       - ./garmin-tokens:/tokens       # saved Garmin auth tokens (only if using Garmin sync)

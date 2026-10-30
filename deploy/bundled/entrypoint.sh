@@ -1,6 +1,7 @@
 #!/bin/sh
 # Bundled supervisor — runs the services that are CONFIGURED, in one container:
-#   app (Next.js)  ·  cloudflared (tunnel)  ·  litestream (backup)  ·  garmin-sync (python)
+#   app (Next.js)  ·  cloudflared (tunnel)  ·  litestream (backup)  ·  garmin-sync (python, /sync :8080)
+#   ·  eight-sleep-sync (python, optional, /sync 127.0.0.1:8081)
 # POSIX sh (alpine ash). The APP is the CRITICAL process: if it dies the container
 # exits (restart policy recovers everything). cloudflared & garmin-sync only start
 # when their config is present (so a DEV instance with blank TUNNEL_TOKEN / Garmin
@@ -125,6 +126,18 @@ if [ -n "$GARMIN_EMAIL" ] || [ -f "${TOKENS_DIR:-/tokens}/garmin_tokens.json" ];
   echo "[start] garmin-sync started"
 else
   echo "[start] garmin-sync disabled (no GARMIN_EMAIL / saved token)"
+fi
+
+# 5b) eight-sleep-sync (auto-restart) — ONLY if Eight Sleep creds are present. An extra
+#     wellness source beside Garmin; its rows go to source "eight_sleep" only.
+if [ -n "$EIGHT_SLEEP_EMAIL" ] && [ -n "$EIGHT_SLEEP_PASSWORD" ]; then
+  ( while true; do
+      python3 /eight-sleep-sync/sync.py
+      echo "[start] eight-sleep-sync exited — restarting in 30s"; sleep 30
+    done ) &
+  echo "[start] eight-sleep-sync started"
+else
+  echo "[start] eight-sleep-sync disabled (no EIGHT_SLEEP_EMAIL / EIGHT_SLEEP_PASSWORD)"
 fi
 
 # 6) Supervise. Forward SIGTERM/SIGINT; tear everything down if the APP dies.

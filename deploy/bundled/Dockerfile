@@ -57,6 +57,8 @@ RUN apk add --no-cache python3 py3-pip
 COPY garmin-sync/requirements.txt /garmin-sync/requirements.txt
 RUN pip install --no-cache-dir --break-system-packages -r /garmin-sync/requirements.txt
 COPY garmin-sync/sync.py /garmin-sync/sync.py
+# Eight Sleep sidecar: plain requests (already installed above), no extra deps.
+COPY eight-sleep-sync/sync.py /eight-sleep-sync/sync.py
 # Litestream config baked in (single-container; replica path provided by volume).
 COPY litestream.yml /etc/litestream.yml
 
@@ -75,7 +77,7 @@ ENV PORT=3000 HOSTNAME=0.0.0.0
 # boot, which can be slow on low-powered ARM hardware.
 HEALTHCHECK --interval=60s --timeout=5s --start-period=120s --retries=3 \
   CMD wget -qO- "http://127.0.0.1:${PORT:-3000}/api/version" >/dev/null 2>&1 || exit 1
-# Supervisor: migrate → app (critical) + cloudflared + litestream + garmin-sync.
+# Supervisor: migrate → app (critical) + cloudflared + litestream + garmin-sync + eight-sleep-sync.
 # cloudflared reads TUNNEL_TOKEN; the named tunnel's "http://app:3000" origin
 # resolves to this container via compose `extra_hosts: app:127.0.0.1`.
 CMD ["/entrypoint.sh"]

@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { materializePlannedDoses, type PlannedDoseInput, type ProtocolInput } from "./materialize";
-import { classifyOverrideDays, dueSlotsForDay, dayKey } from "../today-overrides";
+import { classifyOverrideDays, dueSlotsForDay, dayKey, keptGridSlots } from "../today-overrides";
+import { resolveTitration } from "../titration/resolve";
+import { buildResolveInput } from "../titration/from-protocol";
 import { rebaseWeekStart, addDays } from "../schedule/schedule";
-import { todayOverrideWeekStart } from "../today";
+import { todayOverrideWeekStart, buildTodayOverrideWhere } from "../today";
 
 // Regression: a WE/FR/SU fixed_anchor protocol dosed on Sunday and then on
 // Tuesday (one day early). confirmRebase works in a SUNDAY-start week: it
@@ -76,5 +78,96 @@ describe("rebase week convention (Sunday-start, matching confirmRebase)", () => 
     expect(overrides ? [...overrides] : []).toEqual(["2030-03-07"]);
     expect(dueSlotsForDay(RULE, overrides, d("2030-03-06"), proto.startDate, proto.endDate)).toEqual([]);
     expect(dueSlotsForDay(RULE, overrides, d("2030-03-07"), proto.startDate, proto.endDate)).toHaveLength(1);
+  });
+});
+
+// Regression: the same WE/FR/SU protocol, a later week. A Tuesday dose and a
+// confirmed shift left one row, Thursday. Logging Thursday turned
+// that row "taken", so no "planned" off-grid row was left: Today fell back to the
+// grid and showed Friday as due, and the cron re-created Friday, which then aged
+// into a false "missed". The week view (resolver) stayed right, it reads the logs.
+describe("a confirmed shift outlives its last shifted dose", () => {
+  const onTue = { id: "tue", takenAt: new Date("2030-03-19T08:00:00"), localDay: "2030-03-19" };
+  const onThu = { id: "thu", takenAt: new Date("2030-03-21T08:00:00"), localDay: "2030-03-21" };
+  const wk = { ...proto, deliveredLogs: [onTue, onThu] };
+  const sunMissed: PlannedDoseInput = { id: "sun", protocolId: "p1", scheduledAt: d("2030-03-17"), status: "missed", hasDoseLog: false };
+  const thu = (status: string, hasDoseLog: boolean): PlannedDoseInput => ({ id: "thu", protocolId: "p1", scheduledAt: d("2030-03-21"), status, hasDoseLog });
+  const cronKeys = (p: ProtocolInput, existing: PlannedDoseInput[], today: Date) =>
+    materializePlannedDoses({ protocols: [p], horizonStart: today, horizonEnd: addDays(today, 13), existing, today }).upserts.map((u) => dayKey(u.scheduledAt));
+
+  it("Today: once the last shifted dose is taken, the grid Friday stays gone", () => {
+    const overrides = classifyOverrideDays([wk], [sunMissed, thu("taken", true)]).get("p1");
+    expect(dueSlotsForDay(RULE, overrides, d("2030-03-22"), wk.startDate, wk.endDate)).toEqual([]);
+  });
+
+  it("Today: the shifted day itself stays on Today after it is logged", () => {
+    const overrides = classifyOverrideDays([wk], [sunMissed, thu("taken", true)]).get("p1");
+    expect(dueSlotsForDay(RULE, overrides, d("2030-03-21"), wk.startDate, wk.endDate)).toHaveLength(1);
+  });
+
+  it("the cron does not re-create Friday after the last shifted dose is taken", () => {
+    const keys = cronKeys(wk, [sunMissed, thu("taken", true)], d("2030-03-21"));
+    expect(keys).not.toContain("2030-03-22");
+    expect(keys).toContain("2030-03-24"); // next week's grid is untouched
+  });
+
+  it("a shifted day that was missed keeps the week shifted, in Today and the cron", () => {
+    const rows = [sunMissed, thu("missed", false)];
+    const overrides = classifyOverrideDays([wk], rows).get("p1");
+    expect(dueSlotsForDay(RULE, overrides, d("2030-03-22"), wk.startDate, wk.endDate)).toEqual([]);
+    expect(cronKeys(wk, rows, d("2030-03-22"))).not.toContain("2030-03-22");
+  });
+
+  it("an on-grid taken or missed row is history, never a reason to drop the shift", () => {
+    const rows = [{ ...sunMissed, status: "taken", hasDoseLog: true }, thu("planned", false)];
+    expect([...classifyOverrideDays([wk], rows).get("p1")!]).toEqual(["2030-03-21"]);
+  });
+
+  it("an on-grid PLANNED row still wins: that week's grid is live", () => {
+    const fri: PlannedDoseInput = { id: "fri", protocolId: "p1", scheduledAt: d("2030-03-22"), status: "planned", hasDoseLog: false };
+    const rows = [thu("taken", true), fri];
+    expect(classifyOverrideDays([wk], rows).get("p1")).toBeUndefined();
+    expect(cronKeys(wk, rows, d("2030-03-21"))).toContain("2030-03-22");
+  });
+
+  it("past rows do not mark a week shifted for a rolling protocol", () => {
+    const rolling = { ...wk, rebaseMode: "rolling" };
+    expect(cronKeys(rolling, [thu("taken", true)], d("2030-03-21"))).toContain("2030-03-22");
+  });
+
+  it("past rows do not mark a week shifted for an interval protocol", () => {
+    const rule = JSON.stringify([{ dayPattern: { kind: "interval", everyDays: 3 }, times: ["08:00"] }]);
+    const every3 = { ...wk, scheduleRule: rule, startDate: d("2030-02-21"), deliveredLogs: [] };
+    const taken = { id: "off", protocolId: "p1", scheduledAt: d("2030-03-18"), status: "taken", hasDoseLog: true };
+    expect(classifyOverrideDays([every3], [taken]).get("p1")).toBeUndefined();
+    expect(cronKeys(every3, [taken], d("2030-03-18")).filter((k) => k < "2030-03-24")).toContain("2030-03-20");
+  });
+
+  // /today also opens past days, so the shift must not swallow the grid days it
+  // left alone: the same day-only resolve that getTodayDoses runs decides them.
+  const keptOn = (day: string) => {
+    const dayD = d(day);
+    const { slots } = resolveTitration(buildResolveInput({ protocol: wk, deliveredLogs: wk.deliveredLogs, range: { start: dayD, end: dayD }, now: d("2030-03-22") }));
+    return keptGridSlots(slots.filter((s) => dayKey(s.date) === day));
+  };
+
+  it("a grid day from before the shift stays on Today when opened later", () => {
+    expect(keptOn("2030-03-17")).toEqual([{ time: "08:00" }]);
+  });
+
+  it("the grid days the shift moved are not kept", () => {
+    expect(keptOn("2030-03-20")).toEqual([]);
+    expect(keptOn("2030-03-22")).toEqual([]);
+  });
+
+  it("a missed shifted day marks the week, but is not offered as due", () => {
+    const overrides = classifyOverrideDays([wk], [thu("missed", false)]).get("p1");
+    expect(overrides ? [...overrides] : null).toEqual([]);
+  });
+
+  it("Today reads every row of the week, not only the planned ones", () => {
+    const ws = d("2030-03-17");
+    const where = buildTodayOverrideWhere("u", ws);
+    expect(where).toEqual({ userId: "u", scheduledAt: { gte: ws, lt: addDays(ws, 7) } });
   });
 });

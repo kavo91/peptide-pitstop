@@ -2,6 +2,9 @@ import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
 export default defineConfig({
+  // tsconfig keeps jsx: "preserve" for Next; tests that render a component to
+  // static markup (eight-sleep-cards.test.ts) need the transformer to compile the JSX.
+  esbuild: { jsx: "automatic" },
   // Mirror tsconfig's `@/* -> ./src/*` path mapping so runtime (non-type) `@/`
   // imports resolve in tests. Without this, only `import type` `@/` imports work
   // (they're erased at transform); a value import like `@/lib/design` fails.

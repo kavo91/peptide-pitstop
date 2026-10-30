@@ -40,7 +40,7 @@ import { normaliseActivity, type GarminActivity } from "./garmin-activity";
 /** A normalised wellness day — matches WearableDaily columns (all metrics optional). */
 export interface WellnessDay {
   date: string; // "YYYY-MM-DD"
-  source: string; // "garmin"
+  source: string; // "garmin" | "healthkit" | "health_connect" | "eight_sleep"
   // sleep
   sleepSeconds?: number;
   sleepDeepSeconds?: number;
@@ -82,6 +82,11 @@ export interface WellnessDay {
   ltSpeedMs?: number;
   floorsClimbed?: number;
   restingHr7d?: number;
+  // Eight Sleep bed metrics (source "eight_sleep" only; see eight-sleep-normalise.ts)
+  sleepHrAvg?: number;
+  tossTurns?: number;
+  bedTempC?: number;
+  roomTempC?: number;
   // logged activities (deliberate workouts) — PLAINTEXT (not under encrypted `raw`)
   activities: GarminActivity[];
   activityCount: number;

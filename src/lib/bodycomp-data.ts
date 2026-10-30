@@ -472,12 +472,13 @@ const stat = (xs: (number | null)[]): MedianStat => {
 /**
  * Wearable aggregates for (from, to]. One row per day: when several sources
  * cover the same day the Garmin row is kept (the source the insights use), so a
- * day is never counted twice.
+ * day is never counted twice. Eight Sleep rows are left out entirely: they are an
+ * extra view beside Garmin, and their bed-sensor HRV must not stand in for it.
  */
 export async function wellnessWindow(userId: string, from: Date, to: Date, today: Date, events: LifeEventValues[] = []): Promise<WellnessWindow> {
   const todayStart = startOfDay(today);
   const rows = await prisma.wearableDaily.findMany({
-    where: { userId, date: { gt: startOfDay(from), lte: to } },
+    where: { userId, source: { not: "eight_sleep" }, date: { gt: startOfDay(from), lte: to } },
     select: {
       date: true, source: true, syncedAt: true, sleepSeconds: true, hrvMs: true, restingHr: true, steps: true,
       intensityMinutes: true, activityCount: true, weightKg: true, bodyFatPct: true,
